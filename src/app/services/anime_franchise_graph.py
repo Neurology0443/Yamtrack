@@ -17,13 +17,15 @@ YEAR_MONTH_DAY_CHUNKS = 3
 class AnimeFranchiseGraphBuilder:
     """Discover MAL anime entries and normalize graph relations."""
 
-    def __init__(self, metadata_fetcher=None):
+    def __init__(self, metadata_fetcher=None, *, refresh_cache=False):
         """Create a graph builder with an optional metadata fetcher."""
         self.metadata_fetcher = metadata_fetcher or mal.anime
+        self.refresh_cache = refresh_cache
         self._node_cache: dict[str, AnimeNode] = {}
 
     def build(self, root_media_id: str) -> dict[str, AnimeNode]:
         """Build the MAL anime graph around sequel/prequel continuity."""
+        self._node_cache = {}
         root_id = str(root_media_id)
         queue = deque([root_id])
 
@@ -52,7 +54,13 @@ class AnimeFranchiseGraphBuilder:
         if cached:
             return cached
 
-        metadata = self.metadata_fetcher(media_id)
+        try:
+            metadata = self.metadata_fetcher(
+                media_id,
+                refresh_cache=self.refresh_cache,
+            )
+        except TypeError:
+            metadata = self.metadata_fetcher(media_id)
         node = AnimeNode(
             media_id=str(metadata["media_id"]),
             title=metadata["title"],
