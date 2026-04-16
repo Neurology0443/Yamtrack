@@ -154,4 +154,9 @@ No special-case branch should be required in view/template.
 ## Known V1 constraints
 
 - `Related Series` is direct-only by product decision.
-- Badges are not displayed yet, but payload/rules are already prepared.
+- Compact badges are displayed on non-Series franchise sections:
+  - relation badge
+  - anime format badge
+- Relation badge highlight is enabled only when:
+  - `linked_series_line_media_id == media.media_id`
+- `Series` entries remain badge-free.
