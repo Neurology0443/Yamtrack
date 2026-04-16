@@ -38,6 +38,13 @@ from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 logger = logging.getLogger(__name__)
 
 
+def _format_franchise_badge_label(relation_type):
+    """Convert a relation_type value into a human-readable badge label."""
+    if not relation_type:
+        return None
+    return relation_type.replace("_", " ").title()
+
+
 @require_GET
 def home(request):
     """Home page with media items in progress and planning."""
@@ -264,7 +271,15 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 "title": section.title,
                 "entries": helpers.enrich_items_with_user_data(
                     request,
-                    section.entries,
+                    [
+                        {
+                            **entry,
+                            "badge_label": _format_franchise_badge_label(
+                                entry.get("relation_type"),
+                            ),
+                        }
+                        for entry in section.entries
+                    ],
                     section.key,
                 ),
                 "visible_in_ui": section.visible_in_ui,

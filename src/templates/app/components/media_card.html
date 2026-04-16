@@ -116,7 +116,9 @@
 
   <div class="p-3">
     {% if badge_label %}
-      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium mb-2 {% if badge_active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}">
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium mb-2 {% if badge_active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
+            data-franchise-badge="true"
+            data-franchise-badge-active="{% if badge_active %}true{% else %}false{% endif %}">
         {{ badge_label }}
       </span>
     {% endif %}
