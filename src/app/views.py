@@ -45,6 +45,22 @@ def _format_franchise_badge_label(relation_type: str | None) -> str | None:
     return relation_type.replace("_", " ").title()
 
 
+def _format_anime_media_type_badge_label(anime_media_type: str | None) -> str | None:
+    """Convert MAL anime format to a compact human-readable badge label."""
+    if not anime_media_type:
+        return None
+
+    format_map = {
+        "tv": "TV",
+        "ova": "OVA",
+        "ona": "ONA",
+        "tv_special": "TV Special",
+        "cm": "CM",
+        "pv": "PV",
+    }
+    return format_map.get(anime_media_type, anime_media_type.replace("_", " ").title())
+
+
 @require_GET
 def home(request):
     """Home page with media items in progress and planning."""
@@ -274,8 +290,11 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                     [
                         {
                             **entry,
-                            "badge_label": _format_franchise_badge_label(
+                            "relation_badge_label": _format_franchise_badge_label(
                                 entry.get("relation_type"),
+                            ),
+                            "format_badge_label": _format_anime_media_type_badge_label(
+                                entry.get("anime_media_type"),
                             ),
                         }
                         for entry in section.entries
