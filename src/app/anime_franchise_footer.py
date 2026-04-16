@@ -37,6 +37,13 @@ def _build_page_local_relation_map(media_metadata: dict) -> dict[str, str]:
     return relation_map
 
 
+def _format_footer_relation_label(relation_type: str | None) -> str | None:
+    """Convert normalized relation_type to footer-friendly display text."""
+    if not relation_type:
+        return None
+    return relation_type.replace("_", " ")
+
+
 def enrich_franchise_entries_for_footer(
     entries: list[dict],
     media_metadata: dict,
@@ -50,7 +57,14 @@ def enrich_franchise_entries_for_footer(
                 entry.get("anime_media_type"),
             ),
             "footer_format_value": entry.get("anime_media_type"),
-            "footer_relation_type": direct_relation_map.get(str(entry.get("media_id"))),
+            "footer_relation_value": (
+                direct_relation_map.get(str(entry.get("media_id")))
+                or mal.normalize_relation_type(entry.get("relation_type"))
+            ),
+            "footer_relation_label": _format_footer_relation_label(
+                direct_relation_map.get(str(entry.get("media_id")))
+                or mal.normalize_relation_type(entry.get("relation_type")),
+            ),
             "footer_relation_active": bool(
                 direct_relation_map.get(str(entry.get("media_id"))),
             ),
