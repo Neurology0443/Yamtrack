@@ -67,6 +67,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             direct_candidates=[],
             has_series_line=True,
             fallback_anchor_media_id="100",
+            canonical_root_media_id="100",
         )
         mock_anime_minimal.return_value = {
             "media_id": "100",
@@ -126,16 +127,26 @@ class ImportAnimeFranchiseCommandTests(TestCase):
         Anime.objects.create(user=self.user, item=seed_item, status=Status.IN_PROGRESS.value)
 
         node = AnimeNode("100", "Seed", "mal", "tv", "img", None, [])
+        canonical_node = AnimeNode("99", "Seed S0", "mal", "tv", "img0", None, [])
         mock_build.return_value = AnimeFranchiseSnapshot(
             root_node=node,
-            nodes_by_media_id={"100": node, "101": AnimeNode("101", "S2", "mal", "tv", "img2", None, [])},
+            nodes_by_media_id={
+                "99": canonical_node,
+                "100": node,
+                "101": AnimeNode("101", "S2", "mal", "tv", "img2", None, []),
+            },
             all_normalized_relations=[],
-            continuity_component=[node, AnimeNode("101", "S2", "mal", "tv", "img2", None, [])],
-            series_line=[node],
-            direct_anchors=[node],
+            continuity_component=[
+                canonical_node,
+                node,
+                AnimeNode("101", "S2", "mal", "tv", "img2", None, []),
+            ],
+            series_line=[canonical_node, node],
+            direct_anchors=[canonical_node, node],
             direct_candidates=[],
             has_series_line=True,
             fallback_anchor_media_id="100",
+            canonical_root_media_id="99",
         )
         mock_anime_minimal.return_value = {
             "media_id": "101",
@@ -166,3 +177,9 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             mock_build.call_args_list[0].kwargs["refresh_cache"],
             True,
         )
+        continuity_state = AnimeImportScanState.objects.get(
+            user=self.user,
+            seed_mal_id="100",
+            profile_key="continuity",
+        )
+        self.assertEqual(continuity_state.component_root_mal_id, "99")

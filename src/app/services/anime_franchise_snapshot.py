@@ -21,6 +21,7 @@ class AnimeFranchiseSnapshot:
     direct_candidates: list[AnimeRelation]
     has_series_line: bool
     fallback_anchor_media_id: str
+    canonical_root_media_id: str
 
 
 class AnimeFranchiseSnapshotService:
@@ -46,6 +47,10 @@ class AnimeFranchiseSnapshotService:
 
         direct_anchors = series_line if has_series_line else [root_node]
         fallback_anchor_media_id = root_node.media_id
+        canonical_root_media_id = self._derive_canonical_root_media_id(
+            series_line,
+            continuity_component,
+        )
 
         series_line_ids = {node.media_id for node in series_line}
         direct_candidates: list[AnimeRelation] = []
@@ -83,6 +88,7 @@ class AnimeFranchiseSnapshotService:
             direct_candidates=direct_candidates,
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
+            canonical_root_media_id=canonical_root_media_id,
         )
 
     def _derive_series_line(self, graph: dict[str, AnimeNode]) -> list[AnimeNode]:
@@ -166,3 +172,17 @@ class AnimeFranchiseSnapshotService:
         if relation_type == "prequel":
             return target_id, source_id
         return source_id, target_id
+
+    def _derive_canonical_root_media_id(
+        self,
+        series_line: list[AnimeNode],
+        continuity_component: list[AnimeNode],
+    ) -> str:
+        if series_line:
+            return series_line[0].media_id
+
+        ordered_nodes = sorted(
+            continuity_component,
+            key=self._date_sort_tuple,
+        )
+        return ordered_nodes[0].media_id

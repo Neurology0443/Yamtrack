@@ -17,13 +17,20 @@ class ProfileSelection:
 
 class BaseImportProfile:
     key = "base"
+    continuity_mode = "none"
+    satellites_mode = "none"
+    component_root_mode = "canonical_component_root"
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:  # pragma: no cover
         raise NotImplementedError
 
+    def component_root_media_id(self, snapshot: AnimeFranchiseSnapshot) -> str:
+        return snapshot.canonical_root_media_id
+
 
 class ContinuityImportProfile(BaseImportProfile):
     key = "continuity"
+    continuity_mode = "transitive"
     ignored_media_types = {"cm", "pv"}
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
@@ -46,6 +53,7 @@ class ContinuityImportProfile(BaseImportProfile):
 
 class SatellitesImportProfile(BaseImportProfile):
     key = "satellites"
+    satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
@@ -83,6 +91,8 @@ class SatellitesImportProfile(BaseImportProfile):
 
 class CompleteImportProfile(BaseImportProfile):
     key = "complete"
+    continuity_mode = "transitive"
+    satellites_mode = "direct_only"
 
     def __init__(self):
         self.continuity = ContinuityImportProfile()

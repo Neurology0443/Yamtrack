@@ -115,7 +115,7 @@ class AnimeFranchiseImportService:
                     seed_mal_id=due_seed.seed_mal_id,
                     profile_key=profile_key,
                     fingerprint=fingerprint,
-                    component_root_mal_id=snapshot.root_node.media_id,
+                    component_root_mal_id=profile.component_root_media_id(snapshot),
                     component_size=len(snapshot.continuity_component),
                 )
                 if state_created:

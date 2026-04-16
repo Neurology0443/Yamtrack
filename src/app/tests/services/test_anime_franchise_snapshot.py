@@ -35,6 +35,7 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         }
         snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("20")
         self.assertEqual([node.media_id for node in snapshot.series_line], ["10", "20"])
+        self.assertEqual(snapshot.canonical_root_media_id, "10")
 
     def test_direct_anchors_and_fallback(self):
         movie_root = AnimeNode(
@@ -54,6 +55,46 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         self.assertEqual(snapshot.fallback_anchor_media_id, "500")
         self.assertEqual([node.media_id for node in snapshot.direct_anchors], ["500"])
         self.assertEqual([rel.target_media_id for rel in snapshot.direct_candidates], ["501"])
+        self.assertEqual(snapshot.canonical_root_media_id, "500")
+
+    def test_continuity_from_intermediate_seed_is_transitive(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "S1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "S2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("200", "100", "prequel"), AnimeRelation("200", "300", "sequel")],
+            ),
+            "300": AnimeNode(
+                "300",
+                "S3",
+                "mal",
+                "tv",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
+        }
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes),
+        ).build("200")
+        self.assertEqual(
+            {node.media_id for node in snapshot.continuity_component},
+            {"100", "200", "300"},
+        )
+        self.assertEqual(snapshot.canonical_root_media_id, "100")
 
     def test_graph_cache_isolation_between_seeds(self):
         metadata_map = {
