@@ -1,7 +1,12 @@
 services:
   yamtrack:
     container_name: yamtrack
-    image: ghcr.io/fuzzygrim/yamtrack
+    image: ghcr.io/neurology0443/yamtrack:latest
+    # image: ghcr.io/fuzzygrim/yamtrack
+    # build:
+      # context: .
+      # dockerfile: Dockerfile
+    image: yamtrack-local:dev
     restart: unless-stopped
     depends_on:
       - db
