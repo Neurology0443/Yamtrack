@@ -61,6 +61,37 @@ def _format_anime_media_type_badge_label(anime_media_type: str | None) -> str | 
     return format_map.get(anime_media_type, anime_media_type.replace("_", " ").title())
 
 
+def _build_franchise_badges(entry: dict, current_media_id: str) -> list[dict]:
+    """Build presentation-only franchise badges for non-series franchise entries."""
+    badges = []
+
+    relation_value = entry.get("relation_type")
+    relation_label = _format_franchise_badge_label(relation_value)
+    if relation_label and relation_value:
+        badges.append(
+            {
+                "type": "relation",
+                "label": relation_label,
+                "value": relation_value,
+                "active": entry.get("linked_series_line_media_id") == current_media_id,
+            },
+        )
+
+    format_value = entry.get("anime_media_type")
+    format_label = _format_anime_media_type_badge_label(format_value)
+    if format_label and format_value:
+        badges.append(
+            {
+                "type": "format",
+                "label": format_label,
+                "value": format_value,
+                "active": False,
+            },
+        )
+
+    return badges
+
+
 @require_GET
 def home(request):
     """Home page with media items in progress and planning."""
@@ -290,14 +321,10 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                     [
                         {
                             **entry,
-                            "relation_badge_label": _format_franchise_badge_label(
-                                entry.get("relation_type"),
+                            "franchise_badges": _build_franchise_badges(
+                                entry,
+                                media_id,
                             ),
-                            "relation_badge_value": entry.get("relation_type"),
-                            "format_badge_label": _format_anime_media_type_badge_label(
-                                entry.get("anime_media_type"),
-                            ),
-                            "format_badge_value": entry.get("anime_media_type"),
                         }
                         for entry in section.entries
                     ],

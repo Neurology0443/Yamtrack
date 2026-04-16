@@ -118,26 +118,17 @@
     <a href="{{ item|media_url }}"
        class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
        title="{{ title }}">{{ title }}</a>
-    {% if relation_badge_label or format_badge_label %}
+    {% if franchise_badges %}
       <div class="mt-1.5 flex flex-wrap gap-1">
-        {% if relation_badge_label %}
-          <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none {% if relation_badge_active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
+        {% for badge in franchise_badges %}
+          <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none {% if badge.type == 'relation' and badge.active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
                 data-franchise-badge="true"
-                data-franchise-badge-type="relation"
-                data-franchise-badge-value="{{ relation_badge_value }}"
-                data-franchise-badge-active="{% if relation_badge_active %}true{% else %}false{% endif %}">
-            {{ relation_badge_label }}
+                data-franchise-badge-type="{{ badge.type }}"
+                data-franchise-badge-value="{{ badge.value }}"
+                data-franchise-badge-active="{% if badge.active %}true{% else %}false{% endif %}">
+            {{ badge.label }}
           </span>
-        {% endif %}
-        {% if format_badge_label %}
-          <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none bg-slate-700/70 text-slate-300 border border-slate-500/40"
-                data-franchise-badge="true"
-                data-franchise-badge-type="format"
-                data-franchise-badge-value="{{ format_badge_value }}"
-                data-franchise-badge-active="false">
-            {{ format_badge_label }}
-          </span>
-        {% endif %}
+        {% endfor %}
       </div>
     {% endif %}
   </div>
