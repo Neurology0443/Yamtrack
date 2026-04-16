@@ -7,6 +7,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import Anime, AnimeImportScanState, Item, MediaTypes, Sources, Status
+from app.services.anime_franchise_import_profiles import (
+    ContinuityImportProfile,
+    SatellitesImportProfile,
+)
 from app.services.anime_import_state import AnimeImportStateService
 
 
@@ -33,6 +37,7 @@ class AnimeImportStateServiceTests(TestCase):
         )
         Anime.objects.create(user=self.user, item=self.item, status=Status.IN_PROGRESS.value)
         self.service = AnimeImportStateService()
+        self.continuity_profile = ContinuityImportProfile()
 
     def test_due_selection_respects_due_only_and_limit(self):
         future = timezone.now() + timedelta(days=1)
@@ -43,11 +48,20 @@ class AnimeImportStateServiceTests(TestCase):
         )
         continuity_state.next_scan_at = future
         continuity_state.save(update_fields=["next_scan_at", "updated_at"])
-        due, skipped = self.service.select_due_seeds(profile_key="continuity", limit=10)
+        due, skipped = self.service.select_due_seeds(
+            profile=self.continuity_profile,
+            profile_key="continuity",
+            limit=10,
+        )
         self.assertEqual(due, [])
         self.assertEqual(skipped, 1)
 
-        due_full, _ = self.service.select_due_seeds(profile_key="continuity", full_rescan=True, limit=1)
+        due_full, _ = self.service.select_due_seeds(
+            profile=self.continuity_profile,
+            profile_key="continuity",
+            full_rescan=True,
+            limit=1,
+        )
         self.assertEqual(len(due_full), 1)
 
     def test_due_selection_deduplicates_same_user_seed(self):
@@ -56,7 +70,10 @@ class AnimeImportStateServiceTests(TestCase):
             item=self.item,
             status=Status.PLANNING.value,
         )
-        due, skipped = self.service.select_due_seeds(profile_key="continuity")
+        due, skipped = self.service.select_due_seeds(
+            profile=self.continuity_profile,
+            profile_key="continuity",
+        )
         self.assertEqual(skipped, 0)
         self.assertEqual(len(due), 1)
         self.assertEqual(due[0].user_id, self.user.id)
@@ -106,3 +123,36 @@ class AnimeImportStateServiceTests(TestCase):
             profile_key="continuity",
         )
         self.assertLess(refreshed_continuity_state.next_scan_at, future)
+
+    def test_satellites_profile_selects_only_canonical_roots_as_seeds(self):
+        satellite_item = Item.objects.create(
+            media_id="200",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Satellite",
+            image="https://example.com/200.jpg",
+        )
+        Anime.objects.create(
+            user=self.user,
+            item=satellite_item,
+            status=Status.PLANNING.value,
+        )
+        AnimeImportScanState.objects.update_or_create(
+            user=self.user,
+            seed_mal_id="100",
+            profile_key="continuity",
+            defaults={"component_root_mal_id": "100", "next_scan_at": timezone.now()},
+        )
+        AnimeImportScanState.objects.update_or_create(
+            user=self.user,
+            seed_mal_id="200",
+            profile_key="continuity",
+            defaults={"component_root_mal_id": "100", "next_scan_at": timezone.now()},
+        )
+
+        due, skipped = self.service.select_due_seeds(
+            profile=SatellitesImportProfile(),
+            profile_key="satellites",
+        )
+        self.assertEqual(skipped, 0)
+        self.assertEqual([(seed.user_id, seed.seed_mal_id) for seed in due], [(self.user.id, "100")])

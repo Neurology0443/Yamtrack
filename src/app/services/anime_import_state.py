@@ -10,6 +10,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from app.models import Anime, AnimeImportScanState, MediaTypes, Sources, Status
+from app.services.anime_franchise_import_profiles import BaseImportProfile
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class AnimeImportStateService:
     def select_due_seeds(
         self,
         *,
+        profile: BaseImportProfile,
         profile_key: str,
         user_ids: list[int] | None = None,
         full_rescan: bool = False,
@@ -54,6 +56,15 @@ class AnimeImportStateService:
         now = timezone.now()
         for user_id, seed_mal_id in seed_rows:
             seed = DueSeed(user_id=user_id, seed_mal_id=seed_mal_id)
+            known_component_root = self._known_component_root_media_id(
+                user_id=user_id,
+                seed_mal_id=seed.seed_mal_id,
+            )
+            if not profile.is_seed_eligible(
+                seed_mal_id=seed.seed_mal_id,
+                known_component_root=known_component_root,
+            ):
+                continue
             if full_rescan:
                 seeds.append(seed)
                 continue
@@ -72,6 +83,25 @@ class AnimeImportStateService:
         if limit:
             seeds = seeds[:limit]
         return seeds, skipped_not_due
+
+    def _known_component_root_media_id(
+        self,
+        *,
+        user_id: int,
+        seed_mal_id: str,
+    ) -> str | None:
+        prioritized_state = (
+            AnimeImportScanState.objects.filter(
+                user_id=user_id,
+                seed_mal_id=seed_mal_id,
+            )
+            .exclude(component_root_mal_id="")
+            .order_by("-last_success_at", "profile_key")
+            .first()
+        )
+        if prioritized_state is None:
+            return None
+        return prioritized_state.component_root_mal_id
 
     def record_success(
         self,

@@ -17,15 +17,29 @@ class ProfileSelection:
 
 class BaseImportProfile:
     key = "base"
+    seed_mode = "all_library"
     continuity_mode = "none"
     satellites_mode = "none"
     component_root_mode = "canonical_component_root"
+    include_relation_types: frozenset[str] = frozenset()
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:  # pragma: no cover
         raise NotImplementedError
 
     def component_root_media_id(self, snapshot: AnimeFranchiseSnapshot) -> str:
         return snapshot.canonical_root_media_id
+
+    def is_seed_eligible(
+        self,
+        *,
+        seed_mal_id: str,
+        known_component_root: str | None,
+    ) -> bool:
+        if self.seed_mode == "all_library":
+            return True
+        if self.seed_mode == "canonical_only":
+            return known_component_root == seed_mal_id
+        return False
 
 
 class ContinuityImportProfile(BaseImportProfile):
@@ -53,8 +67,10 @@ class ContinuityImportProfile(BaseImportProfile):
 
 class SatellitesImportProfile(BaseImportProfile):
     key = "satellites"
+    seed_mode = "canonical_only"
     satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
+    include_relation_types = frozenset({"spin_off", "alternative_version"})
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
@@ -63,6 +79,11 @@ class SatellitesImportProfile(BaseImportProfile):
         }
         selected = []
         for relation in snapshot.direct_candidates:
+            if (
+                self.include_relation_types
+                and relation.relation_type not in self.include_relation_types
+            ):
+                continue
             target_node = snapshot.nodes_by_media_id[relation.target_media_id]
             if target_node.media_type in self.ignored_media_types:
                 continue

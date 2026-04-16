@@ -56,6 +56,7 @@ class AnimeFranchiseImportService:
         profile = get_import_profile(profile_key)
 
         due_seeds, skipped_not_due = self.state_service.select_due_seeds(
+            profile=profile,
             profile_key=profile_key,
             user_ids=user_ids,
             full_rescan=full_rescan,

@@ -41,6 +41,34 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = SatellitesImportProfile().select(self.snapshot)
         self.assertEqual(selection.media_ids, {"3"})
 
+    def test_satellites_profile_filters_relation_types(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), []),
+            "20": AnimeNode("20", "Spin-off", "mal", "movie", "img", date(2021, 1, 1), []),
+            "21": AnimeNode("21", "Alt", "mal", "movie", "img", date(2021, 6, 1), []),
+            "22": AnimeNode("22", "Character", "mal", "movie", "img", date(2022, 1, 1), []),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[
+                AnimeRelation("10", "20", "spin_off"),
+                AnimeRelation("10", "21", "alternative_version"),
+                AnimeRelation("10", "22", "character"),
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"20", "21"})
+        self.assertNotIn("22", selection.media_ids)
+
     def test_satellites_profile_is_direct_only(self):
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), []),
