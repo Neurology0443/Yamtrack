@@ -41,7 +41,7 @@ def _format_footer_relation_label(relation_type: str | None) -> str | None:
     """Convert normalized relation_type to footer-friendly display text."""
     if not relation_type:
         return None
-    return relation_type.replace("_", " ")
+    return relation_type.replace("_", " ").title()
 
 
 def enrich_franchise_entries_for_footer(
