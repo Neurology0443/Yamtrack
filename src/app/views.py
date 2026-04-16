@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Literal, TypedDict
 
 from django.apps import apps
 from django.conf import settings
@@ -20,6 +19,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from app import config, helpers, history_processor
 from app import statistics as stats
+from app.anime_franchise_footer import enrich_franchise_entries_for_footer
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
     TV,
@@ -31,103 +31,12 @@ from app.models import (
     Status,
     UserMessage,
 )
-from app.providers import mal, manual, services, tmdb
+from app.providers import manual, services, tmdb
 from app.services.anime_franchise import AnimeFranchiseService
 from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 
 logger = logging.getLogger(__name__)
-
-
-class FranchiseBadge(TypedDict):
-    """Presentation payload for a single franchise badge."""
-
-    type: Literal["relation", "format"]
-    label: str
-    value: str
-    active: bool
-
-
-class FranchiseBadgeEntry(TypedDict, total=False):
-    """Minimal entry keys needed to derive franchise badges."""
-
-    relation_type: str
-    anime_media_type: str
-    linked_series_line_media_id: str
-
-
-def _format_franchise_badge_label(relation_type: str | None) -> str | None:
-    """Convert a relation_type value into a human-readable badge label."""
-    if not relation_type:
-        return None
-    return relation_type.replace("_", " ").title()
-
-
-def _format_anime_media_type_badge_label(anime_media_type: str | None) -> str | None:
-    """Convert MAL anime format to a compact human-readable badge label."""
-    if not anime_media_type:
-        return None
-
-    format_map = {
-        "tv": "TV",
-        "ova": "OVA",
-        "ona": "ONA",
-        "tv_special": "TV Special",
-        "cm": "CM",
-        "pv": "PV",
-    }
-    return format_map.get(anime_media_type, anime_media_type.replace("_", " ").title())
-
-
-def _build_franchise_badges(
-    entry: FranchiseBadgeEntry,
-    current_media_id: str,
-) -> list[FranchiseBadge]:
-    """Build presentation-only franchise badges for non-series franchise entries."""
-    badges = []
-
-    relation_value = entry.get("relation_type")
-    relation_label = _format_franchise_badge_label(relation_value)
-    if relation_label and relation_value:
-        badges.append(
-            {
-                "type": "relation",
-                "label": relation_label,
-                "value": relation_value,
-                "active": entry.get("linked_series_line_media_id") == current_media_id,
-            },
-        )
-
-    format_value = entry.get("anime_media_type")
-    format_label = _format_anime_media_type_badge_label(format_value)
-    if format_label and format_value:
-        badges.append(
-            {
-                "type": "format",
-                "label": format_label,
-                "value": format_value,
-                "active": False,
-            },
-        )
-
-    return badges
-
-
-def _build_page_local_relation_map(media_metadata: dict) -> dict[str, str]:
-    """Map related media IDs to direct normalized relation_type for current page."""
-    related = media_metadata.get("related") or {}
-    direct_relations = related.get("related_anime") or []
-    relation_map = {}
-    for related_item in direct_relations:
-        related_media_id = related_item.get("media_id")
-        if related_media_id is None:
-            continue
-        relation_type = mal.normalize_relation_type(
-            related_item.get("relation_type"),
-        )
-        if relation_type:
-            relation_map[str(related_media_id)] = relation_type
-    return relation_map
 
 
 @require_GET
@@ -340,7 +249,6 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_view_model = AnimeFranchiseService().build(media_id)
-        direct_relation_map = _build_page_local_relation_map(media_metadata)
         prepared_series_entries = [
             {
                 **entry,
@@ -357,26 +265,10 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 "title": section.title,
                 "entries": helpers.enrich_items_with_user_data(
                     request,
-                    [
-                        {
-                            **entry,
-                            "franchise_badges": _build_franchise_badges(
-                                entry,
-                                media_id,
-                            ),
-                            "footer_format": _format_anime_media_type_badge_label(
-                                entry.get("anime_media_type"),
-                            ),
-                            "footer_format_value": entry.get("anime_media_type"),
-                            "footer_relation_type": direct_relation_map.get(
-                                str(entry.get("media_id")),
-                            ),
-                            "footer_relation_active": bool(
-                                direct_relation_map.get(str(entry.get("media_id"))),
-                            ),
-                        }
-                        for entry in section.entries
-                    ],
+                    enrich_franchise_entries_for_footer(
+                        section.entries,
+                        media_metadata,
+                    ),
                     section.key,
                 ),
                 "visible_in_ui": section.visible_in_ui,
