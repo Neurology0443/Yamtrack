@@ -128,6 +128,7 @@ def anime(media_id):
             "score_count": get_score_count(response),
             "details": {
                 "format": get_format(response),
+                "raw_media_type": response.get("media_type"),
                 "start_date": response.get("start_date"),
                 "end_date": response.get("end_date"),
                 "status": get_readable_status(response),
@@ -390,8 +391,18 @@ def get_related(related_medias, media_type):
                 "source": Sources.MAL.value,
                 "title": media["node"]["title"],
                 "media_type": media_type,
+                "relation_type": normalize_relation_type(
+                    media.get("relation_type"),
+                ),
                 "image": get_image_url(media["node"]),
             }
             for media in related_medias
         ]
     return []
+
+
+def normalize_relation_type(relation_type):
+    """Normalize MAL relation types to lower snake_case."""
+    if not relation_type:
+        return ""
+    return relation_type.strip().lower().replace("-", "_").replace(" ", "_")

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 
 from app.models import (
@@ -55,6 +56,127 @@ class MediaDetailsViewTests(TestCase):
             "238",
             Sources.TMDB.value,
         )
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_anime_franchise_not_enabled_for_non_mal_or_non_anime(
+        self,
+        mock_get_metadata,
+        mock_anime_franchise_service,
+    ):
+        """Anime franchise grouping should only run for MAL anime details."""
+        mock_get_metadata.return_value = {
+            "media_id": "238",
+            "title": "Test Movie",
+            "media_type": MediaTypes.MOVIE.value,
+            "source": Sources.TMDB.value,
+            "image": "http://example.com/image.jpg",
+            "related": {},
+        }
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.TMDB.value,
+                    "media_type": MediaTypes.MOVIE.value,
+                    "media_id": "238",
+                    "title": "test-movie",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["anime_franchise"])
+        mock_anime_franchise_service.assert_not_called()
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_anime_franchise_enabled_for_mal_anime(
+        self,
+        mock_get_metadata,
+        mock_anime_franchise_service,
+    ):
+        """Anime franchise grouping should be injected for MAL anime details."""
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "related": {
+                "related_anime": [
+                    {"media_id": "101", "media_type": "anime", "source": "mal"}
+                ],
+                "recommendations": [
+                    {"media_id": "102", "media_type": "anime", "source": "mal"}
+                ],
+            },
+        }
+        mock_anime_franchise_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "100",
+                "display_title": "Test Anime",
+                "series_line_entries": [],
+                "sections": [],
+            },
+        )()
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context["anime_franchise"])
+        mock_anime_franchise_service.return_value.build.assert_called_once_with("100")
+        self.assertNotIn("related_anime", response.context["media"]["related"])
+        self.assertIn("recommendations", response.context["media"]["related"])
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=False)
+    def test_anime_franchise_disabled_by_setting(
+        self,
+        mock_get_metadata,
+        mock_anime_franchise_service,
+    ):
+        """Feature should remain disabled when the setting is false."""
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "related": {"related_anime": []},
+        }
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["anime_franchise"])
+        mock_anime_franchise_service.assert_not_called()
 
     @patch("app.providers.services.get_media_metadata")
     @patch("app.providers.tmdb.process_episodes")
