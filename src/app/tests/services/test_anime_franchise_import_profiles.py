@@ -47,7 +47,9 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), []),
             "20": AnimeNode("20", "Spin-off", "mal", "movie", "img", date(2021, 1, 1), []),
             "21": AnimeNode("21", "Alt", "mal", "movie", "img", date(2021, 6, 1), []),
-            "22": AnimeNode("22", "Character", "mal", "movie", "img", date(2022, 1, 1), []),
+            "22": AnimeNode("22", "Side Story", "mal", "movie", "img", date(2022, 1, 1), []),
+            "23": AnimeNode("23", "Parent Story", "mal", "movie", "img", date(2022, 6, 1), []),
+            "24": AnimeNode("24", "Summary", "mal", "movie", "img", date(2022, 8, 1), []),
         }
         snapshot = AnimeFranchiseSnapshot(
             root_node=nodes["10"],
@@ -59,7 +61,9 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             direct_candidates=[
                 AnimeRelation("10", "20", "spin_off"),
                 AnimeRelation("10", "21", "alternative_version"),
-                AnimeRelation("10", "22", "character"),
+                AnimeRelation("10", "22", "side_story"),
+                AnimeRelation("10", "23", "parent_story"),
+                AnimeRelation("10", "24", "summary"),
             ],
             has_series_line=True,
             fallback_anchor_media_id="10",
@@ -67,8 +71,8 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
 
         selection = SatellitesImportProfile().select(snapshot)
-        self.assertEqual(selection.media_ids, {"20", "21"})
-        self.assertNotIn("22", selection.media_ids)
+        self.assertEqual(selection.media_ids, {"20", "21", "22", "23"})
+        self.assertNotIn("24", selection.media_ids)
 
     def test_satellites_profile_is_direct_only(self):
         nodes = {

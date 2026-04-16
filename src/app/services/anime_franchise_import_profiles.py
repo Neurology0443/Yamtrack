@@ -83,7 +83,9 @@ class SatellitesImportProfile(BaseImportProfile):
     seed_mode = SeedMode.CANONICAL_ONLY
     satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
-    include_relation_types = frozenset({"spin_off", "alternative_version"})
+    include_relation_types = frozenset(
+        {"spin_off", "alternative_version", "side_story", "parent_story"}
+    )
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
