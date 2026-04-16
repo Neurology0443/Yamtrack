@@ -121,7 +121,15 @@ class MediaDetailsViewTests(TestCase):
                         "source": "mal",
                         "title": "Legacy Related",
                         "image": "http://example.com/legacy.jpg",
-                    }
+                    },
+                    {
+                        "media_id": "150",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Spin Off Alpha",
+                        "image": "http://example.com/spinoff.jpg",
+                        "relation_type": "spin_off",
+                    },
                 ],
                 "recommendations": [
                     {

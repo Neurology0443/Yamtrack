@@ -31,7 +31,7 @@ from app.models import (
     Status,
     UserMessage,
 )
-from app.providers import manual, services, tmdb
+from app.providers import mal, manual, services, tmdb
 from app.services.anime_franchise import AnimeFranchiseService
 from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
@@ -111,6 +111,23 @@ def _build_franchise_badges(
         )
 
     return badges
+
+
+def _build_page_local_relation_map(media_metadata: dict) -> dict[str, str]:
+    """Map related media IDs to direct normalized relation_type for current page."""
+    related = media_metadata.get("related") or {}
+    direct_relations = related.get("related_anime") or []
+    relation_map = {}
+    for related_item in direct_relations:
+        related_media_id = related_item.get("media_id")
+        if related_media_id is None:
+            continue
+        relation_type = mal.normalize_relation_type(
+            related_item.get("relation_type"),
+        )
+        if relation_type:
+            relation_map[str(related_media_id)] = relation_type
+    return relation_map
 
 
 @require_GET
@@ -323,6 +340,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_view_model = AnimeFranchiseService().build(media_id)
+        direct_relation_map = _build_page_local_relation_map(media_metadata)
         prepared_series_entries = [
             {
                 **entry,
@@ -345,6 +363,16 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                             "franchise_badges": _build_franchise_badges(
                                 entry,
                                 media_id,
+                            ),
+                            "footer_format": _format_anime_media_type_badge_label(
+                                entry.get("anime_media_type"),
+                            ),
+                            "footer_format_value": entry.get("anime_media_type"),
+                            "footer_relation_type": direct_relation_map.get(
+                                str(entry.get("media_id")),
+                            ),
+                            "footer_relation_active": bool(
+                                direct_relation_map.get(str(entry.get("media_id"))),
                             ),
                         }
                         for entry in section.entries

@@ -538,28 +538,24 @@
                 {% for result in section.entries %}
                   <div>
                     {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
-                    {% if result.item.franchise_badges %}
+                    {% if result.item.footer_format or result.item.footer_relation_type %}
                       <div class="mt-2 flex items-center justify-between text-xs text-gray-400 px-1">
                         <span>
-                          {% for badge in result.item.franchise_badges %}
-                            {% if badge.type == "format" %}
-                              <span data-franchise-badge="true"
-                                    data-franchise-badge-type="format"
-                                    data-franchise-badge-value="{{ badge.value }}"
-                                    data-franchise-badge-active="false">{{ badge.label }}</span>
-                            {% endif %}
-                          {% endfor %}
+                          {% if result.item.footer_format %}
+                            <span data-franchise-badge="true"
+                                  data-franchise-badge-type="format"
+                                  data-franchise-badge-value="{{ result.item.footer_format_value }}"
+                                  data-franchise-badge-active="false">{{ result.item.footer_format }}</span>
+                          {% endif %}
                         </span>
                         <span>
-                          {% for badge in result.item.franchise_badges %}
-                            {% if badge.type == "relation" %}
-                              <span class="px-2 py-0.5 rounded-full {% if badge.active %}bg-indigo-500/20 text-indigo-200{% else %}bg-gray-700 text-gray-300{% endif %}"
-                                    data-franchise-badge="true"
-                                    data-franchise-badge-type="relation"
-                                    data-franchise-badge-value="{{ badge.value }}"
-                                    data-franchise-badge-active="{% if badge.active %}true{% else %}false{% endif %}">{{ badge.value|no_underscore }}</span>
-                            {% endif %}
-                          {% endfor %}
+                          {% if result.item.footer_relation_type %}
+                            <span class="px-2 py-0.5 rounded-full {% if result.item.footer_relation_active %}bg-indigo-500/20 text-indigo-200{% else %}bg-gray-700 text-gray-300{% endif %}"
+                                  data-franchise-badge="true"
+                                  data-franchise-badge-type="relation"
+                                  data-franchise-badge-value="{{ result.item.footer_relation_type }}"
+                                  data-franchise-badge-active="{% if result.item.footer_relation_active %}true{% else %}false{% endif %}">{{ result.item.footer_relation_type|no_underscore }}</span>
+                          {% endif %}
                         </span>
                       </div>
                     {% endif %}
