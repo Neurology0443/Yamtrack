@@ -6,7 +6,6 @@ services:
     # build:
       # context: .
       # dockerfile: Dockerfile
-    image: yamtrack-local:dev
     restart: unless-stopped
     depends_on:
       - db
