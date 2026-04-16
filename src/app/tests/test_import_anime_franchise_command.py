@@ -14,6 +14,17 @@ from app.services.anime_franchise_types import AnimeNode
 
 class ImportAnimeFranchiseCommandTests(TestCase):
     def setUp(self):
+        self.mock_metadata = {
+            "max_progress": 12,
+            "details": {"episodes": 12},
+        }
+        self.metadata_patcher = patch(
+            "app.providers.services.get_media_metadata",
+            return_value=self.mock_metadata,
+        )
+        self.metadata_patcher.start()
+        self.addCleanup(self.metadata_patcher.stop)
+
         self.user = get_user_model().objects.create_user(username="importer", password="pwd")
 
     @patch("app.management.commands.import_anime_franchise.AnimeFranchiseImportService.run")

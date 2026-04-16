@@ -1,5 +1,6 @@
 # ruff: noqa: D101,D102,D107
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -11,6 +12,17 @@ from app.services.anime_import_state import AnimeImportStateService
 
 class AnimeImportStateServiceTests(TestCase):
     def setUp(self):
+        self.mock_metadata = {
+            "max_progress": 12,
+            "details": {"episodes": 12},
+        }
+        self.metadata_patcher = patch(
+            "app.providers.services.get_media_metadata",
+            return_value=self.mock_metadata,
+        )
+        self.metadata_patcher.start()
+        self.addCleanup(self.metadata_patcher.stop)
+
         self.user = get_user_model().objects.create_user(username="state", password="pwd")
         self.item = Item.objects.create(
             media_id="100",

@@ -21,6 +21,17 @@ class MediaModel(TestCase):
 
     def setUp(self):
         """Create a user."""
+        self.mock_metadata = {
+            "max_progress": 26,
+            "details": {"episodes": 26},
+        }
+        self.metadata_patcher = patch(
+            "app.providers.services.get_media_metadata",
+            return_value=self.mock_metadata,
+        )
+        self.metadata_patcher.start()
+        self.addCleanup(self.metadata_patcher.stop)
+
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_user(**self.credentials)
 
