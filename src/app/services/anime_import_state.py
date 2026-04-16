@@ -56,13 +56,13 @@ class AnimeImportStateService:
         now = timezone.now()
         for user_id, seed_mal_id in seed_rows:
             seed = DueSeed(user_id=user_id, seed_mal_id=seed_mal_id)
-            known_component_root = self._known_component_root_media_id(
+            known_canonical_root = self._known_component_root_media_id(
                 user_id=user_id,
                 seed_mal_id=seed.seed_mal_id,
             )
             if not profile.is_seed_eligible(
                 seed_mal_id=seed.seed_mal_id,
-                known_component_root=known_component_root,
+                known_component_root=known_canonical_root,
             ):
                 continue
             if full_rescan:
@@ -90,6 +90,11 @@ class AnimeImportStateService:
         user_id: int,
         seed_mal_id: str,
     ) -> str | None:
+        """Return known canonical continuity root for the seed's component.
+
+        This value comes from ``AnimeImportScanState.component_root_mal_id`` and
+        is treated as a global continuity-component root, not a profile-specific root.
+        """
         prioritized_state = (
             AnimeImportScanState.objects.filter(
                 user_id=user_id,

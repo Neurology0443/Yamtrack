@@ -6,6 +6,7 @@ from django.test import SimpleTestCase
 from app.services.anime_franchise_import_profiles import (
     CompleteImportProfile,
     ContinuityImportProfile,
+    SeedMode,
     SatellitesImportProfile,
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
@@ -98,3 +99,21 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
     def test_complete_profile_unions_with_dedup(self):
         selection = CompleteImportProfile().select(self.snapshot)
         self.assertEqual(selection.media_ids, {"1", "2", "3"})
+
+    def test_seed_mode_values_are_typed(self):
+        self.assertEqual(ContinuityImportProfile.seed_mode, SeedMode.ALL_LIBRARY)
+        self.assertEqual(SatellitesImportProfile.seed_mode, SeedMode.CANONICAL_ONLY)
+
+    def test_invalid_seed_mode_raises_explicit_error(self):
+        class InvalidSeedProfile(ContinuityImportProfile):
+            seed_mode = "unexpected_mode"
+            key = "invalid"
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Unsupported seed_mode 'unexpected_mode' for profile 'invalid'.",
+        ):
+            InvalidSeedProfile().is_seed_eligible(
+                seed_mal_id="1",
+                known_component_root="1",
+            )

@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from dataclasses import dataclass
 
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+
+
+class SeedMode(StrEnum):
+    """Seed selection modes available for import profiles."""
+
+    ALL_LIBRARY = "all_library"
+    CANONICAL_ONLY = "canonical_only"
 
 
 @dataclass(frozen=True)
@@ -17,7 +25,7 @@ class ProfileSelection:
 
 class BaseImportProfile:
     key = "base"
-    seed_mode = "all_library"
+    seed_mode = SeedMode.ALL_LIBRARY
     continuity_mode = "none"
     satellites_mode = "none"
     component_root_mode = "canonical_component_root"
@@ -27,6 +35,10 @@ class BaseImportProfile:
         raise NotImplementedError
 
     def component_root_media_id(self, snapshot: AnimeFranchiseSnapshot) -> str:
+        """Return canonical continuity component root for persisted scan state.
+
+        This root is global to the continuity component and profile-independent.
+        """
         return snapshot.canonical_root_media_id
 
     def is_seed_eligible(
@@ -35,11 +47,12 @@ class BaseImportProfile:
         seed_mal_id: str,
         known_component_root: str | None,
     ) -> bool:
-        if self.seed_mode == "all_library":
+        if self.seed_mode == SeedMode.ALL_LIBRARY:
             return True
-        if self.seed_mode == "canonical_only":
+        if self.seed_mode == SeedMode.CANONICAL_ONLY:
             return known_component_root == seed_mal_id
-        return False
+        msg = f"Unsupported seed_mode '{self.seed_mode}' for profile '{self.key}'."
+        raise ValueError(msg)
 
 
 class ContinuityImportProfile(BaseImportProfile):
@@ -67,7 +80,7 @@ class ContinuityImportProfile(BaseImportProfile):
 
 class SatellitesImportProfile(BaseImportProfile):
     key = "satellites"
-    seed_mode = "canonical_only"
+    seed_mode = SeedMode.CANONICAL_ONLY
     satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
     include_relation_types = frozenset({"spin_off", "alternative_version"})
