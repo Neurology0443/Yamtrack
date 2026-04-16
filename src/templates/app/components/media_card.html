@@ -1,7 +1,7 @@
 {% load app_tags %}
 
-<div x-data="{ trackOpen: false, listsOpen: false, historyOpen: false }">
-  <div class="{% if secondary_color %}bg-[#39404b]{% else %}bg-[#2a2f35]{% endif %} rounded-lg overflow-hidden shadow-lg relative {% if active %}ring-[1.5px] ring-slate-400{% endif %}">
+<div class="{% if secondary_color %}bg-[#39404b]{% else %}bg-[#2a2f35]{% endif %} rounded-lg overflow-hidden shadow-lg relative {% if active %}ring-[1.5px] ring-slate-400{% endif %}"
+     x-data="{ trackOpen: false, listsOpen: false, historyOpen: false }">
   <div class="relative">
     <a href="{{ item|media_url }}">
       <img alt="{{ title }}"
@@ -154,5 +154,4 @@
     </div>
   </div>
   {% include "app/components/progress_bar.html" with media=media user=user only %}
-</div>
 </div>
