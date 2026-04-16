@@ -155,18 +155,4 @@
   </div>
   {% include "app/components/progress_bar.html" with media=media user=user only %}
 </div>
-
-{% if franchise_badges %}
-  <div class="mt-2 flex flex-wrap gap-1">
-    {% for badge in franchise_badges %}
-      <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-normal leading-none {% if badge.type == 'relation' and badge.active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
-            data-franchise-badge="true"
-            data-franchise-badge-type="{{ badge.type }}"
-            data-franchise-badge-value="{{ badge.value }}"
-            data-franchise-badge-active="{% if badge.active %}true{% else %}false{% endif %}">
-        {{ badge.label }}
-      </span>
-    {% endfor %}
-  </div>
-{% endif %}
 </div>
