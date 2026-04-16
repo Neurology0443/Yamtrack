@@ -115,5 +115,5 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         ):
             InvalidSeedProfile().is_seed_eligible(
                 seed_mal_id="1",
-                known_component_root="1",
+                known_canonical_root="1",
             )

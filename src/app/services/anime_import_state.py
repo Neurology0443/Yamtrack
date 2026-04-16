@@ -62,7 +62,7 @@ class AnimeImportStateService:
             )
             if not profile.is_seed_eligible(
                 seed_mal_id=seed.seed_mal_id,
-                known_component_root=known_canonical_root,
+                known_canonical_root=known_canonical_root,
             ):
                 continue
             if full_rescan:
@@ -94,6 +94,9 @@ class AnimeImportStateService:
 
         This value comes from ``AnimeImportScanState.component_root_mal_id`` and
         is treated as a global continuity-component root, not a profile-specific root.
+
+        Invariant: ``component_root_mal_id`` represents the same canonical root for
+        the continuity component regardless of which profile row recorded it.
         """
         prioritized_state = (
             AnimeImportScanState.objects.filter(

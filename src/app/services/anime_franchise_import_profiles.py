@@ -45,12 +45,12 @@ class BaseImportProfile:
         self,
         *,
         seed_mal_id: str,
-        known_component_root: str | None,
+        known_canonical_root: str | None,
     ) -> bool:
         if self.seed_mode == SeedMode.ALL_LIBRARY:
             return True
         if self.seed_mode == SeedMode.CANONICAL_ONLY:
-            return known_component_root == seed_mal_id
+            return known_canonical_root == seed_mal_id
         msg = f"Unsupported seed_mode '{self.seed_mode}' for profile '{self.key}'."
         raise ValueError(msg)
 

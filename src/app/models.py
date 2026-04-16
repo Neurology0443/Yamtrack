@@ -795,7 +795,8 @@ class AnimeImportScanState(models.Model):
     consecutive_stable_scans = models.PositiveIntegerField(default=0)
     consecutive_error_count = models.PositiveIntegerField(default=0)
     # Canonical continuity-component root MAL id for this seed.
-    # This root is global to the component and intentionally profile-independent.
+    # Invariant: this is the same global root for the component regardless
+    # of which profile row stores/updates it.
     component_root_mal_id = models.CharField(max_length=36, blank=True, default="")
     last_component_size = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
