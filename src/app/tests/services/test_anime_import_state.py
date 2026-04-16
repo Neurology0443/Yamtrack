@@ -36,12 +36,13 @@ class AnimeImportStateServiceTests(TestCase):
 
     def test_due_selection_respects_due_only_and_limit(self):
         future = timezone.now() + timedelta(days=1)
-        AnimeImportScanState.objects.create(
+        continuity_state = AnimeImportScanState.objects.get(
             user=self.user,
             seed_mal_id="100",
             profile_key="continuity",
-            next_scan_at=future,
         )
+        continuity_state.next_scan_at = future
+        continuity_state.save(update_fields=["next_scan_at", "updated_at"])
         due, skipped = self.service.select_due_seeds(profile_key="continuity", limit=10)
         self.assertEqual(due, [])
         self.assertEqual(skipped, 1)
@@ -83,12 +84,13 @@ class AnimeImportStateServiceTests(TestCase):
 
     def test_hot_priority_due_now(self):
         future = timezone.now() + timedelta(days=10)
-        AnimeImportScanState.objects.create(
+        continuity_state = AnimeImportScanState.objects.get(
             user=self.user,
             seed_mal_id="100",
             profile_key="continuity",
-            next_scan_at=future,
         )
+        continuity_state.next_scan_at = future
+        continuity_state.save(update_fields=["next_scan_at", "updated_at"])
         updated = self.service.mark_due_now(user_id=self.user.id, seed_mal_id="100")
         self.assertEqual(updated, 3)
         self.assertEqual(
@@ -98,9 +100,9 @@ class AnimeImportStateServiceTests(TestCase):
             ).count(),
             3,
         )
-        continuity_state = AnimeImportScanState.objects.get(
+        refreshed_continuity_state = AnimeImportScanState.objects.get(
             user=self.user,
             seed_mal_id="100",
             profile_key="continuity",
         )
-        self.assertLess(continuity_state.next_scan_at, future)
+        self.assertLess(refreshed_continuity_state.next_scan_at, future)

@@ -49,11 +49,13 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             title="Seed",
             image="https://example.com/100.jpg",
         )
-        Anime.objects.create(
+        anime = Anime(
             user=self.user,
             item=seed_item,
             status=Status.IN_PROGRESS.value,
         )
+        anime._skip_hot_priority = True
+        anime.save()
         node = AnimeNode("100", "Seed", "mal", "tv", "img", None, [])
         mock_build.return_value = AnimeFranchiseSnapshot(
             root_node=node,
