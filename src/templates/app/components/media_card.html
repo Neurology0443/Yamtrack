@@ -159,7 +159,7 @@
 {% if franchise_badges %}
   <div class="mt-1.5 flex flex-wrap gap-1">
     {% for badge in franchise_badges %}
-      <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none {% if badge.type == 'relation' and badge.active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
+      <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-medium leading-none {% if badge.type == 'relation' and badge.active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
             data-franchise-badge="true"
             data-franchise-badge-type="{{ badge.type }}"
             data-franchise-badge-value="{{ badge.value }}"
