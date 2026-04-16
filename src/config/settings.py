@@ -365,6 +365,11 @@ MAL_API = config(
     ),
 )
 MAL_NSFW = config("MAL_NSFW", default=False, cast=bool)
+ANIME_FRANCHISE_GROUPING_ENABLED = config(
+    "ANIME_FRANCHISE_GROUPING_ENABLED",
+    default=True,
+    cast=bool,
+)
 
 MU_NSFW = config("MU_NSFW", default=False, cast=bool)
 

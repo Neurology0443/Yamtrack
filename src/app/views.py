@@ -19,6 +19,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from app import config, helpers, history_processor
 from app import statistics as stats
+from app.anime_franchise_footer import enrich_franchise_entries_for_footer
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
     TV,
@@ -31,6 +32,7 @@ from app.models import (
     UserMessage,
 )
 from app.providers import manual, services, tmdb
+from app.services.anime_franchise import AnimeFranchiseService
 from app.templatetags import app_tags
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 
@@ -239,6 +241,59 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     current_instance = user_medias[0] if user_medias else None
 
+    anime_franchise = None
+    is_anime_franchise_enabled = (
+        settings.ANIME_FRANCHISE_GROUPING_ENABLED
+        and source == Sources.MAL.value
+        and media_type == MediaTypes.ANIME.value
+    )
+    if is_anime_franchise_enabled:
+        franchise_view_model = AnimeFranchiseService().build(media_id)
+        prepared_series_entries = [
+            {
+                **entry,
+                "series_label": f"Season {index}",
+            }
+            for index, entry in enumerate(
+                franchise_view_model.series_line_entries,
+                start=1,
+            )
+        ]
+        franchise_sections = [
+            {
+                "key": section.key,
+                "title": section.title,
+                "entries": helpers.enrich_items_with_user_data(
+                    request,
+                    enrich_franchise_entries_for_footer(
+                        section.entries,
+                        media_metadata,
+                    ),
+                    section.key,
+                ),
+                "visible_in_ui": section.visible_in_ui,
+                "hidden_if_empty": section.hidden_if_empty,
+            }
+            for section in franchise_view_model.sections
+        ]
+
+        anime_franchise = {
+            "root_media_id": franchise_view_model.root_media_id,
+            "display_title": franchise_view_model.display_title,
+            "series": {
+                "key": AnimeFranchiseService.SERIES_LINE_KEY,
+                "title": "Series",
+                "entries": helpers.enrich_items_with_user_data(
+                    request,
+                    prepared_series_entries,
+                    AnimeFranchiseService.SERIES_LINE_KEY,
+                ),
+            },
+            "sections": franchise_sections,
+        }
+        if media_metadata.get("related"):
+            media_metadata["related"].pop("related_anime", None)
+
     # Enrich related items with user tracking data
     if media_metadata.get("related"):
         for section_name, related_items in media_metadata["related"].items():
@@ -263,6 +318,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "current_instance": current_instance,
         "watch_providers": watch_providers,
         "watch_provider_region": request.user.watch_provider_region,
+        "anime_franchise": anime_franchise,
     }
     return render(request, "app/media_details.html", context)
 
