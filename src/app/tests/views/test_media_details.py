@@ -287,6 +287,8 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, "Season 1")
         self.assertContains(response, "Season 2")
         self.assertContains(response, "Spin Off Alpha")
+        self.assertContains(response, "Spin Off")
+        self.assertContains(response, "border-indigo-400/70")
         self.assertContains(response, "Legacy Recommendation")
 
     @patch("app.views.AnimeFranchiseService")
