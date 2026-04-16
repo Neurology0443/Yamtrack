@@ -248,6 +248,16 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_view_model = AnimeFranchiseService().build(media_id)
+        prepared_series_entries = [
+            {
+                **entry,
+                "series_label": f"Season {index}",
+            }
+            for index, entry in enumerate(
+                franchise_view_model.series_line_entries,
+                start=1,
+            )
+        ]
         franchise_sections = [
             {
                 "key": section.key,
@@ -271,17 +281,12 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 "title": "Series",
                 "entries": helpers.enrich_items_with_user_data(
                     request,
-                    franchise_view_model.series_line_entries,
+                    prepared_series_entries,
                     AnimeFranchiseService.SERIES_LINE_KEY,
                 ),
             },
             "sections": franchise_sections,
         }
-        for index, series_entry in enumerate(
-            anime_franchise["series"]["entries"],
-            start=1,
-        ):
-            series_entry["item"]["series_label"] = f"Season {index}"
         if media_metadata.get("related"):
             media_metadata["related"].pop("related_anime", None)
 

@@ -401,7 +401,7 @@ def get_related(related_medias, media_type):
     return []
 
 
-def normalize_relation_type(relation_type):
+def normalize_relation_type(relation_type: str | None) -> str:
     """Normalize MAL relation types to lower snake_case."""
     if not relation_type:
         return ""
