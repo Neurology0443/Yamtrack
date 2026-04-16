@@ -144,7 +144,7 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         series_ids = {entry["media_id"] for entry in view_model.series_line_entries}
         self.assertFalse(series_ids.intersection(set(all_section_ids)))
 
-    def test_no_series_line_fallback_keeps_series_empty(self):
+    def test_no_series_line_fallback_uses_seed_anchor_for_direct_only_rules(self):
         movie_root = AnimeNode(
             media_id="500",
             title="Movie Root",
@@ -171,6 +171,12 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         self.assertEqual(view_model.series_line_entries, [])
         related = next(section for section in view_model.sections if section.key == "related_series")
         self.assertEqual([entry["media_id"] for entry in related.entries], ["501"])
+        self.assertEqual(related.entries[0]["linked_series_line_media_id"], "500")
+        self.assertEqual(related.entries[0]["linked_series_line_index"], 0)
+        self.assertNotIn(
+            "500",
+            [entry["media_id"] for section in view_model.sections for entry in section.entries],
+        )
 
     def test_payload_exposes_anime_media_type_for_future_badges(self):
         view_model = self._build()
