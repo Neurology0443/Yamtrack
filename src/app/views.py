@@ -277,6 +277,11 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
             },
             "sections": franchise_sections,
         }
+        for index, series_entry in enumerate(
+            anime_franchise["series"]["entries"],
+            start=1,
+        ):
+            series_entry["item"]["series_label"] = f"Season {index}"
         if media_metadata.get("related"):
             media_metadata["related"].pop("related_anime", None)
 

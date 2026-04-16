@@ -224,6 +224,18 @@ class MediaDetailsViewTests(TestCase):
                         "linked_series_line_media_id": None,
                         "linked_series_line_index": None,
                         "is_current": True,
+                    },
+                    {
+                        "media_id": "101",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "tv",
+                        "title": "Test Anime Season 2",
+                        "image": "http://example.com/image-2.jpg",
+                        "relation_type": None,
+                        "linked_series_line_media_id": None,
+                        "linked_series_line_index": None,
+                        "is_current": False,
                     }
                 ],
                 "sections": [
@@ -273,7 +285,9 @@ class MediaDetailsViewTests(TestCase):
         self.assertIn("recommendations", response.context["media"]["related"])
         mock_anime_franchise_service.return_value.build.assert_called_once_with("100")
         self.assertContains(response, "Season 1")
+        self.assertContains(response, "Season 2")
         self.assertContains(response, "Spin Off Alpha")
+        self.assertContains(response, "Legacy Recommendation")
 
     @patch("app.views.AnimeFranchiseService")
     @patch("app.providers.services.get_media_metadata")
