@@ -805,13 +805,13 @@ class AnimeImportScanState(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "seed_mal_id", "profile_key"],
-                name="app_animeimportscanstate_unique_seed_profile",
+                name="app_animpstate_scope_uniq",
             ),
         ]
         indexes = [
             models.Index(
                 fields=["profile_key", "next_scan_at"],
-                name="app_animeimportscanstate_due_idx",
+                name="app_animpstate_due_idx",
             ),
         ]
 
