@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Literal, TypedDict
 
 from django.apps import apps
 from django.conf import settings
@@ -38,6 +39,23 @@ from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 logger = logging.getLogger(__name__)
 
 
+class FranchiseBadge(TypedDict):
+    """Presentation payload for a single franchise badge."""
+
+    type: Literal["relation", "format"]
+    label: str
+    value: str
+    active: bool
+
+
+class FranchiseBadgeEntry(TypedDict, total=False):
+    """Minimal entry keys needed to derive franchise badges."""
+
+    relation_type: str
+    anime_media_type: str
+    linked_series_line_media_id: str
+
+
 def _format_franchise_badge_label(relation_type: str | None) -> str | None:
     """Convert a relation_type value into a human-readable badge label."""
     if not relation_type:
@@ -61,7 +79,10 @@ def _format_anime_media_type_badge_label(anime_media_type: str | None) -> str | 
     return format_map.get(anime_media_type, anime_media_type.replace("_", " ").title())
 
 
-def _build_franchise_badges(entry: dict, current_media_id: str) -> list[dict]:
+def _build_franchise_badges(
+    entry: FranchiseBadgeEntry,
+    current_media_id: str,
+) -> list[FranchiseBadge]:
     """Build presentation-only franchise badges for non-series franchise entries."""
     badges = []
 
