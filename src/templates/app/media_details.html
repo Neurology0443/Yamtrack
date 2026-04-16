@@ -550,11 +550,18 @@
                         </span>
                         <span>
                           {% if result.item.footer_relation_value %}
-                            <span class="px-2 py-0.5 rounded-full bg-gray-700 {% if result.item.footer_relation_active %}text-indigo-200 border border-indigo-400/70{% else %}text-gray-300{% endif %}"
-                                  data-franchise-badge="true"
-                                  data-franchise-badge-type="relation"
-                                  data-franchise-badge-value="{{ result.item.footer_relation_value }}"
-                                  data-franchise-badge-active="{% if result.item.footer_relation_active %}true{% else %}false{% endif %}">{{ result.item.footer_relation_label }}</span>
+                            {% if result.item.footer_relation_active %}
+                              <span class="px-2 py-0.5 rounded-full bg-gray-700 text-indigo-200 border border-indigo-400/70"
+                                    data-franchise-badge="true"
+                                    data-franchise-badge-type="relation"
+                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
+                                    data-franchise-badge-active="true">{{ result.item.footer_relation_label }}</span>
+                            {% else %}
+                              <span data-franchise-badge="true"
+                                    data-franchise-badge-type="relation"
+                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
+                                    data-franchise-badge-active="false">{{ result.item.footer_relation_label }}</span>
+                            {% endif %}
                           {% endif %}
                         </span>
                       </div>
