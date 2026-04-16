@@ -38,7 +38,7 @@ from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 logger = logging.getLogger(__name__)
 
 
-def _format_franchise_badge_label(relation_type):
+def _format_franchise_badge_label(relation_type: str | None) -> str | None:
     """Convert a relation_type value into a human-readable badge label."""
     if not relation_type:
         return None
