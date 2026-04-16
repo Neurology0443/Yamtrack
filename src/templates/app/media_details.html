@@ -553,11 +553,11 @@
                         <span>
                           {% for badge in result.item.franchise_badges %}
                             {% if badge.type == "relation" %}
-                              <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[8px] font-normal leading-none {% if badge.active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
+                              <span class="px-2 py-0.5 rounded-full {% if badge.active %}bg-indigo-500/20 text-indigo-200{% else %}bg-gray-700 text-gray-300{% endif %}"
                                     data-franchise-badge="true"
                                     data-franchise-badge-type="relation"
                                     data-franchise-badge-value="{{ badge.value }}"
-                                    data-franchise-badge-active="{% if badge.active %}true{% else %}false{% endif %}">{{ badge.label }}</span>
+                                    data-franchise-badge-active="{% if badge.active %}true{% else %}false{% endif %}">{{ badge.value|no_underscore }}</span>
                             {% endif %}
                           {% endfor %}
                         </span>
