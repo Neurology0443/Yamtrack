@@ -293,9 +293,11 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                             "relation_badge_label": _format_franchise_badge_label(
                                 entry.get("relation_type"),
                             ),
+                            "relation_badge_value": entry.get("relation_type"),
                             "format_badge_label": _format_anime_media_type_badge_label(
                                 entry.get("anime_media_type"),
                             ),
+                            "format_badge_value": entry.get("anime_media_type"),
                         }
                         for entry in section.entries
                     ],

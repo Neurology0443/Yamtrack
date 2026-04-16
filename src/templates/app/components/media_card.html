@@ -124,6 +124,7 @@
           <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none {% if relation_badge_active %}bg-indigo-500/20 text-indigo-200 border border-indigo-400/70{% else %}bg-slate-700/70 text-slate-300 border border-slate-500/40{% endif %}"
                 data-franchise-badge="true"
                 data-franchise-badge-type="relation"
+                data-franchise-badge-value="{{ relation_badge_value }}"
                 data-franchise-badge-active="{% if relation_badge_active %}true{% else %}false{% endif %}">
             {{ relation_badge_label }}
           </span>
@@ -132,6 +133,7 @@
           <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none bg-slate-700/70 text-slate-300 border border-slate-500/40"
                 data-franchise-badge="true"
                 data-franchise-badge-type="format"
+                data-franchise-badge-value="{{ format_badge_value }}"
                 data-franchise-badge-active="false">
             {{ format_badge_label }}
           </span>
