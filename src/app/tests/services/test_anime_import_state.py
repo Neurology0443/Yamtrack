@@ -156,3 +156,33 @@ class AnimeImportStateServiceTests(TestCase):
         )
         self.assertEqual(skipped, 0)
         self.assertEqual([(seed.user_id, seed.seed_mal_id) for seed in due], [(self.user.id, "100")])
+
+    def test_continuity_profile_remains_all_library_seedable(self):
+        satellite_item = Item.objects.create(
+            media_id="200",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Satellite",
+            image="https://example.com/200.jpg",
+        )
+        Anime.objects.create(
+            user=self.user,
+            item=satellite_item,
+            status=Status.PLANNING.value,
+        )
+        AnimeImportScanState.objects.update_or_create(
+            user=self.user,
+            seed_mal_id="200",
+            profile_key="continuity",
+            defaults={"component_root_mal_id": "100", "next_scan_at": timezone.now()},
+        )
+
+        due, skipped = self.service.select_due_seeds(
+            profile=self.continuity_profile,
+            profile_key="continuity",
+        )
+        self.assertEqual(skipped, 0)
+        self.assertEqual(
+            [(seed.user_id, seed.seed_mal_id) for seed in due],
+            [(self.user.id, "100"), (self.user.id, "200")],
+        )

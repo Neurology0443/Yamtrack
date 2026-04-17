@@ -86,6 +86,7 @@ class SatellitesImportProfile(BaseImportProfile):
     include_relation_types = frozenset(
         {"spin_off", "alternative_version", "side_story", "parent_story"}
     )
+    min_runtime_minutes = 15
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
@@ -103,6 +104,11 @@ class SatellitesImportProfile(BaseImportProfile):
             if target_node.media_type in self.ignored_media_types:
                 continue
             if relation.target_media_id in continuity_ids:
+                continue
+            if (
+                target_node.runtime_minutes is not None
+                and target_node.runtime_minutes < self.min_runtime_minutes
+            ):
                 continue
             selected.append(relation)
 

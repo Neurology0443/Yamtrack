@@ -72,6 +72,9 @@ class AnimeFranchiseGraphBuilder:
                 str(metadata["media_id"]),
                 metadata,
             ),
+            runtime_minutes=self._parse_runtime_minutes(
+                metadata["details"].get("runtime"),
+            ),
         )
         self._node_cache[node.media_id] = node
         return node
@@ -118,3 +121,27 @@ class AnimeFranchiseGraphBuilder:
         except (TypeError, ValueError):
             return None
         return None
+
+    @staticmethod
+    def _parse_runtime_minutes(raw_runtime: str | None) -> int | None:
+        if not raw_runtime:
+            return None
+
+        raw_value = raw_runtime.strip().lower()
+        hours = 0
+        minutes = 0
+        if "h" in raw_value:
+            try:
+                hours_chunk, remainder = raw_value.split("h", maxsplit=1)
+                hours = int(hours_chunk.strip())
+                raw_value = remainder.strip()
+            except ValueError:
+                return None
+
+        raw_value = raw_value.replace("min", "").replace("m", "").strip()
+        if raw_value:
+            try:
+                minutes = int(raw_value)
+            except ValueError:
+                return None
+        return (hours * 60) + minutes if (hours or minutes) else None

@@ -44,12 +44,12 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
 
     def test_satellites_profile_filters_relation_types(self):
         nodes = {
-            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), []),
-            "20": AnimeNode("20", "Spin-off", "mal", "movie", "img", date(2021, 1, 1), []),
-            "21": AnimeNode("21", "Alt", "mal", "movie", "img", date(2021, 6, 1), []),
-            "22": AnimeNode("22", "Side Story", "mal", "movie", "img", date(2022, 1, 1), []),
-            "23": AnimeNode("23", "Parent Story", "mal", "movie", "img", date(2022, 6, 1), []),
-            "24": AnimeNode("24", "Summary", "mal", "movie", "img", date(2022, 8, 1), []),
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Spin-off", "mal", "movie", "img", date(2021, 1, 1), [], 24),
+            "21": AnimeNode("21", "Alt", "mal", "movie", "img", date(2021, 6, 1), [], 24),
+            "22": AnimeNode("22", "Side Story", "mal", "movie", "img", date(2022, 1, 1), [], 24),
+            "23": AnimeNode("23", "Parent Story", "mal", "movie", "img", date(2022, 6, 1), [], 24),
+            "24": AnimeNode("24", "Summary", "mal", "movie", "img", date(2022, 8, 1), [], 24),
         }
         snapshot = AnimeFranchiseSnapshot(
             root_node=nodes["10"],
@@ -73,6 +73,69 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = SatellitesImportProfile().select(snapshot)
         self.assertEqual(selection.media_ids, {"20", "21", "22", "23"})
         self.assertNotIn("24", selection.media_ids)
+
+    def test_satellites_profile_excludes_runtime_below_15_minutes(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Short", "mal", "movie", "img", date(2021, 1, 1), [], 10),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "spin_off")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, set())
+
+    def test_satellites_profile_keeps_runtime_15_or_more(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Edge", "mal", "movie", "img", date(2021, 1, 1), [], 15),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "side_story")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"20"})
+
+    def test_satellites_profile_keeps_unknown_runtime(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Unknown Runtime", "mal", "movie", "img", date(2021, 1, 1), [], None),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "parent_story")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"20"})
 
     def test_satellites_profile_is_direct_only(self):
         nodes = {
