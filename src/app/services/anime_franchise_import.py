@@ -11,6 +11,7 @@ from app.providers import mal
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
+from events.notifications import notify_entry_added_after_commit
 
 
 @dataclass
@@ -157,3 +158,7 @@ class AnimeFranchiseImportService:
         )
         anime._skip_hot_priority = True
         anime.save()
+        notify_entry_added_after_commit(
+            user_id=user_id,
+            media_label=str(anime),
+        )
