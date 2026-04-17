@@ -4,6 +4,7 @@ from datetime import UTC
 import apprise
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -481,3 +482,37 @@ def send_user_notification(user, urls, title, body):
             )
     except Exception:
         logger.exception("Error sending notification to %s", user.username)
+
+
+def send_entry_added_notification(user, media_label):
+    """Send a notification when a new tracking entry is added."""
+    if not user.entry_added_notifications_enabled:
+        return
+
+    if not user.notification_urls.strip():
+        return
+
+    urls = [url.strip() for url in user.notification_urls.splitlines() if url.strip()]
+    if not urls:
+        return
+
+    send_user_notification(
+        user,
+        urls,
+        "➕ YamTrack: New Entry Added",
+        f"{media_label} was added to your tracking.",
+    )
+
+
+def notify_entry_added_after_commit(user_id, media_label):
+    """Queue entry-added notification asynchronously after commit."""
+
+    def queue_notification():
+        from events.tasks import send_entry_added_notification_task
+
+        send_entry_added_notification_task.delay(
+            user_id=user_id,
+            media_label=media_label,
+        )
+
+    transaction.on_commit(queue_notification)

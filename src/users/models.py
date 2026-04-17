@@ -380,6 +380,10 @@ class User(AbstractUser):
         default=True,
         help_text="Receive a daily digest of upcoming releases",
     )
+    entry_added_notifications_enabled = models.BooleanField(
+        default=False,
+        help_text="Receive notifications when a new entry is added",
+    )
 
     # Integration settings
     token = models.CharField(

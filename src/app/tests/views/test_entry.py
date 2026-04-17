@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.test import TestCase
@@ -63,6 +65,26 @@ class CreateEntryViewTests(TestCase):
         self.assertEqual(movie.score, 8)
         self.assertEqual(movie.progress, 1)
         self.assertEqual(movie.user, self.user)
+
+    @patch("app.views.notify_entry_added_after_commit")
+    def test_create_entry_notifies_on_successful_creation(self, mock_notify):
+        form_data = {
+            "title": "Notify Movie",
+            "media_type": MediaTypes.MOVIE.value,
+            "status": Status.COMPLETED.value,
+            "score": 8,
+            "progress": 1,
+            "start_date": "2023-01-01T00:00",
+            "end_date": "2023-01-02T00:00",
+        }
+
+        self.client.post(reverse("create_entry"), form_data, follow=True)
+
+        movie = Movie.objects.get(item__title="Notify Movie", user=self.user)
+        mock_notify.assert_called_once_with(
+            user_id=self.user.id,
+            media_label=str(movie),
+        )
 
     def test_create_entry_post_tv(self):
         """Test creating a TV show entry."""
@@ -229,3 +251,15 @@ class CreateEntryViewTests(TestCase):
             self.client.post(reverse("create_entry"), form_data)
 
         self.assertEqual(Item.objects.count(), initial_count)
+
+    @patch("app.views.notify_entry_added_after_commit")
+    def test_create_entry_invalid_submission_does_not_notify(self, mock_notify):
+        form_data = {
+            "title": "",
+            "media_type": MediaTypes.MOVIE.value,
+            "status": Status.COMPLETED.value,
+        }
+
+        self.client.post(reverse("create_entry"), form_data, follow=True)
+
+        mock_notify.assert_not_called()
