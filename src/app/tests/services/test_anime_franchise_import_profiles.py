@@ -38,6 +38,73 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = ContinuityImportProfile().select(self.snapshot)
         self.assertEqual(selection.media_ids, {"1", "2"})
 
+    def test_continuity_profile_excludes_summary_targets(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Recap Target", "mal", "tv", "img", date(2021, 1, 1), [], 24),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[AnimeRelation("10", "20", "summary")],
+            continuity_component=[nodes["10"], nodes["20"]],
+            series_line=[nodes["10"], nodes["20"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = ContinuityImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"10"})
+
+    def test_continuity_profile_keeps_non_summary_node(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Normal Continuity", "mal", "tv", "img", date(2021, 1, 1), [], 24),
+            "30": AnimeNode("30", "Other Relation Target", "mal", "movie", "img", date(2022, 1, 1), [], 24),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[AnimeRelation("10", "30", "spin_off")],
+            continuity_component=[nodes["10"], nodes["20"]],
+            series_line=[nodes["10"], nodes["20"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = ContinuityImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"10", "20"})
+
+    def test_continuity_profile_excludes_summary_target_even_if_on_continuity_path(self):
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            "20": AnimeNode("20", "Sequel + Summary Target", "mal", "tv", "img", date(2021, 1, 1), [], 24),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[
+                AnimeRelation("10", "20", "sequel"),
+                AnimeRelation("10", "20", "summary"),
+            ],
+            continuity_component=[nodes["10"], nodes["20"]],
+            series_line=[nodes["10"], nodes["20"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = ContinuityImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"10"})
+
     def _continuity_snapshot_for_runtime(self, target_node: AnimeNode) -> AnimeFranchiseSnapshot:
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),

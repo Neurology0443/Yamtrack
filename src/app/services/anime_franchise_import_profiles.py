@@ -68,12 +68,21 @@ class ContinuityImportProfile(BaseImportProfile):
             return True
         return runtime_minutes > self.min_runtime_minutes
 
+    def _summary_target_ids(self, snapshot: AnimeFranchiseSnapshot) -> set[str]:
+        return {
+            relation.target_media_id
+            for relation in snapshot.all_normalized_relations
+            if relation.relation_type == "summary"
+        }
+
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
+        summary_target_ids = self._summary_target_ids(snapshot)
         ids = {
             node.media_id
             for node in snapshot.continuity_component
             if node.media_type not in self.ignored_media_types
             and self.is_runtime_eligible(node)
+            and node.media_id not in summary_target_ids
         }
         payload = {
             "continuity_ids": sorted(ids),
