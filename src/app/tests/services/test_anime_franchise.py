@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from app.providers import mal
 from app.services.anime_franchise import AnimeFranchiseService
+from app.services.anime_franchise_ui_profile import AnimeFranchiseUiProfile
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
@@ -228,3 +229,123 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
 
         self.assertIn("300", [entry["media_id"] for entry in continuity.entries])
+
+    def test_series_line_display_label_parser_patterns(self):
+        profile = AnimeFranchiseUiProfile()
+        cases = [
+            ("One Punch Man 3rd Season", "Season 3"),
+            ("Re:ZERO kara Hajimeru Isekai Seikatsu 2nd Season Part 2", "Season 2 Part 2"),
+            ("Season 3 Part 2", "Season 3 Part 2"),
+            ("4th Season 2nd Cour", "Season 4 Part 2"),
+            ("Season 2 Cour 2", "Season 2 Part 2"),
+            ("Season 3 - Part 2", "Season 3 Part 2"),
+            ("Season 3 Part II", "Season 3 Part 2"),
+            ("Second Season Part 2", "Season 2 Part 2"),
+            ("Third Season", "Season 3"),
+            ("Generic Side Story", None),
+        ]
+
+        for title, expected in cases:
+            self.assertEqual(profile._derive_series_line_display_label(title), expected)
+
+    def test_series_line_display_labels_are_display_only_and_order_is_unchanged(self):
+        nodes = {
+            "100": AnimeNode(
+                media_id="100",
+                title="Series Title",
+                source="mal",
+                media_type="tv",
+                image="img-100",
+                start_date=date(2010, 1, 1),
+                relations=[AnimeRelation("100", "101", "sequel")],
+            ),
+            "101": AnimeNode(
+                media_id="101",
+                title="Series Title 2nd Season",
+                source="mal",
+                media_type="tv",
+                image="img-101",
+                start_date=date(2011, 1, 1),
+                relations=[
+                    AnimeRelation("101", "100", "prequel"),
+                    AnimeRelation("101", "102", "sequel"),
+                ],
+            ),
+            "102": AnimeNode(
+                media_id="102",
+                title="Series Title 2nd Season Part 2",
+                source="mal",
+                media_type="tv",
+                image="img-102",
+                start_date=date(2012, 1, 1),
+                relations=[AnimeRelation("102", "101", "prequel")],
+            ),
+        }
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
+
+        view_model = service.build("101")
+        self.assertEqual(
+            [entry["media_id"] for entry in view_model.series_line_entries],
+            ["100", "101", "102"],
+        )
+        self.assertEqual(
+            [entry["display_series_line_label"] for entry in view_model.series_line_entries],
+            [None, "Season 2", "Season 2 Part 2"],
+        )
+
+    def test_series_line_display_labels_support_split_part_for_later_season(self):
+        nodes = {
+            "100": AnimeNode(
+                media_id="100",
+                title="One Punch Man",
+                source="mal",
+                media_type="tv",
+                image="img-100",
+                start_date=date(2015, 1, 1),
+                relations=[AnimeRelation("100", "101", "sequel")],
+            ),
+            "101": AnimeNode(
+                media_id="101",
+                title="One Punch Man 2nd Season",
+                source="mal",
+                media_type="tv",
+                image="img-101",
+                start_date=date(2019, 1, 1),
+                relations=[
+                    AnimeRelation("101", "100", "prequel"),
+                    AnimeRelation("101", "102", "sequel"),
+                ],
+            ),
+            "102": AnimeNode(
+                media_id="102",
+                title="One Punch Man 3rd Season",
+                source="mal",
+                media_type="tv",
+                image="img-102",
+                start_date=date(2025, 1, 1),
+                relations=[
+                    AnimeRelation("102", "101", "prequel"),
+                    AnimeRelation("102", "103", "sequel"),
+                ],
+            ),
+            "103": AnimeNode(
+                media_id="103",
+                title="One Punch Man 3rd Season Part 2",
+                source="mal",
+                media_type="tv",
+                image="img-103",
+                start_date=date(2026, 1, 1),
+                relations=[AnimeRelation("103", "102", "prequel")],
+            ),
+        }
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
+
+        view_model = service.build("102")
+        self.assertEqual(
+            [entry["media_id"] for entry in view_model.series_line_entries],
+            ["100", "101", "102", "103"],
+        )
+        self.assertEqual(
+            [entry["display_series_line_label"] for entry in view_model.series_line_entries],
+            [None, "Season 2", "Season 3", "Season 3 Part 2"],
+        )

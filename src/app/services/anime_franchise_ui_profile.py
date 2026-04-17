@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 
 from app.services.anime_franchise_rules import get_section_rules
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
@@ -18,6 +19,32 @@ class AnimeFranchiseUiProfile:
     """Render UI grouping from the canonical snapshot."""
 
     SERIES_LINE_KEY = "series_line"
+    _SEPARATOR_PATTERN = re.compile(r"[-:/]+")
+    _WHITESPACE_PATTERN = re.compile(r"\s+")
+    _SEASON_PATTERNS = (
+        re.compile(r"\bseason\s+([a-z0-9]+)\b"),
+        re.compile(r"\b([a-z0-9]+)\s+season\b"),
+    )
+    _PART_PATTERNS = (
+        re.compile(r"\bpart\s+([a-z0-9]+)\b"),
+        re.compile(r"\b([a-z0-9]+)\s+part\b"),
+        re.compile(r"\bcour\s+([a-z0-9]+)\b"),
+        re.compile(r"\b([a-z0-9]+)\s+cour\b"),
+    )
+    _ORDINAL_DIGIT_PATTERN = re.compile(r"^(\d+)(st|nd|rd|th)$")
+    _ROMAN_PATTERN = re.compile(r"[ivxlcdm]+")
+    _TEXT_NUMBERS = {
+        "first": 1,
+        "second": 2,
+        "third": 3,
+        "fourth": 4,
+        "fifth": 5,
+        "sixth": 6,
+        "seventh": 7,
+        "eighth": 8,
+        "ninth": 9,
+        "tenth": 10,
+    }
 
     def build_view_model(self, snapshot: AnimeFranchiseSnapshot) -> AnimeFranchiseViewModel:
         series_line_ids = {node.media_id for node in snapshot.series_line}
@@ -43,10 +70,7 @@ class AnimeFranchiseUiProfile:
                 )
             )
 
-        series_entries = [
-            self._node_to_entry_from_node(node, is_current=node.media_id == snapshot.root_node.media_id)
-            for node in snapshot.series_line
-        ]
+        series_entries = self._build_series_line_entries(snapshot)
 
         return AnimeFranchiseViewModel(
             root_media_id=snapshot.root_node.media_id,
@@ -54,6 +78,15 @@ class AnimeFranchiseUiProfile:
             series_line_entries=series_entries,
             sections=ordered_sections,
         )
+
+    def _build_series_line_entries(self, snapshot: AnimeFranchiseSnapshot) -> list[dict]:
+        return [
+            self._node_to_series_line_entry(
+                node,
+                is_current=node.media_id == snapshot.root_node.media_id,
+            )
+            for node in snapshot.series_line
+        ]
 
     def _build_candidates(
         self,
@@ -132,6 +165,11 @@ class AnimeFranchiseUiProfile:
         )
         return entry
 
+    def _node_to_series_line_entry(self, node, *, is_current: bool) -> dict:
+        entry = self._node_to_entry_from_node(node, is_current=is_current)
+        entry["display_series_line_label"] = self._derive_series_line_display_label(node.title)
+        return entry
+
     @staticmethod
     def _node_to_entry_from_node(node, *, is_current: bool) -> dict:
         return {
@@ -145,7 +183,80 @@ class AnimeFranchiseUiProfile:
             "linked_series_line_media_id": None,
             "linked_series_line_index": None,
             "is_current": is_current,
+            "display_series_line_label": None,
         }
+
+    def _derive_series_line_display_label(self, title: str) -> str | None:
+        parsed = self._parse_series_line_title(title)
+        if parsed is None:
+            return None
+        season_number, part_number = parsed
+        if part_number is None:
+            return f"Season {season_number}"
+        return f"Season {season_number} Part {part_number}"
+
+    def _parse_series_line_title(self, title: str) -> tuple[int, int | None] | None:
+        normalized_title = self._normalize_series_title(title)
+        season_number = self._extract_season_number(normalized_title)
+        if season_number is None:
+            return None
+        part_number = self._extract_part_number(normalized_title)
+        return season_number, part_number
+
+    @staticmethod
+    def _normalize_series_title(title: str) -> str:
+        normalized = AnimeFranchiseUiProfile._SEPARATOR_PATTERN.sub(" ", title.lower())
+        return AnimeFranchiseUiProfile._WHITESPACE_PATTERN.sub(" ", normalized).strip()
+
+    def _extract_season_number(self, normalized_title: str) -> int | None:
+        for pattern in self._SEASON_PATTERNS:
+            match = pattern.search(normalized_title)
+            if not match:
+                continue
+            return self._token_to_int(match.group(1))
+        return None
+
+    def _extract_part_number(self, normalized_title: str) -> int | None:
+        for pattern in self._PART_PATTERNS:
+            match = pattern.search(normalized_title)
+            if not match:
+                continue
+            parsed = self._token_to_int(match.group(1))
+            if parsed is not None:
+                return parsed
+        return None
+
+    def _token_to_int(self, token: str) -> int | None:
+        token = token.strip().lower()
+        if token.isdigit():
+            return int(token)
+
+        ordinal_match = self._ORDINAL_DIGIT_PATTERN.match(token)
+        if ordinal_match:
+            return int(ordinal_match.group(1))
+
+        roman = self._roman_to_int(token)
+        if roman is not None:
+            return roman
+
+        return self._TEXT_NUMBERS.get(token)
+
+    @staticmethod
+    def _roman_to_int(token: str) -> int | None:
+        if not token or not AnimeFranchiseUiProfile._ROMAN_PATTERN.fullmatch(token):
+            return None
+
+        values = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+        total = 0
+        previous = 0
+        for char in reversed(token):
+            value = values[char]
+            if value < previous:
+                total -= value
+            else:
+                total += value
+                previous = value
+        return total if total > 0 else None
 
     def _candidate_sort_key(self, candidate: AnimeFranchiseCandidate, sort_mode: str) -> tuple:
         linked_index = candidate.linked_series_line_index if candidate.linked_series_line_index is not None else 10_000

@@ -175,6 +175,86 @@ class MediaDetailsViewTests(TestCase):
     @patch("app.views.helpers.enrich_items_with_user_data")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_anime_franchise_series_label_prefers_display_label_with_fallback(
+        self,
+        mock_get_metadata,
+        mock_enrich_items,
+        mock_anime_franchise_service,
+    ):
+        """Template should prefer display_series_line_label and fallback to series_label."""
+        mock_enrich_items.side_effect = (
+            lambda request, items, section_name: [  # noqa: ARG005
+                {"item": item, "media": None} for item in items
+            ]
+        )
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "related": {},
+        }
+        mock_anime_franchise_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "100",
+                "display_title": "Test Anime",
+                "series_line_entries": [
+                    {
+                        "media_id": "100",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "tv",
+                        "title": "Test Anime 3rd Season Part 2",
+                        "display_series_line_label": "Season 3 Part 2",
+                        "image": "http://example.com/image.jpg",
+                        "relation_type": None,
+                        "linked_series_line_media_id": None,
+                        "linked_series_line_index": None,
+                        "is_current": True,
+                    },
+                    {
+                        "media_id": "101",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "tv",
+                        "title": "Test Anime 4th Season",
+                        "display_series_line_label": None,
+                        "image": "http://example.com/image-2.jpg",
+                        "relation_type": None,
+                        "linked_series_line_media_id": None,
+                        "linked_series_line_index": None,
+                        "is_current": False,
+                    },
+                ],
+                "sections": [],
+            },
+        )()
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Season 3 Part 2")
+        self.assertContains(response, "Season 2")
+        self.assertNotContains(response, ">Season 1<")
+        self.assertNotContains(response, "Test Anime 3rd Season Part 2")
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.views.helpers.enrich_items_with_user_data")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
     def test_mal_anime_grouping_removes_legacy_related_anime_only(
         self,
         mock_get_metadata,
