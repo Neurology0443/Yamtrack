@@ -60,12 +60,20 @@ class ContinuityImportProfile(BaseImportProfile):
     key = "continuity"
     continuity_mode = "transitive"
     ignored_media_types = {"cm", "pv"}
+    min_runtime_minutes = 15
+
+    def is_runtime_eligible(self, node: AnimeNode) -> bool:
+        runtime_minutes = node.runtime_minutes
+        if runtime_minutes is None:
+            return True
+        return runtime_minutes > self.min_runtime_minutes
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         ids = {
             node.media_id
             for node in snapshot.continuity_component
             if node.media_type not in self.ignored_media_types
+            and self.is_runtime_eligible(node)
         }
         payload = {
             "continuity_ids": sorted(ids),
