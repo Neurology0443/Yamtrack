@@ -181,6 +181,40 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
         self.assertEqual(selection.media_ids, set())
 
+    def test_satellites_profile_excludes_single_episode_30_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Boundary One-Shot",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=30,
+            episode_count=1,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, set())
+
+    def test_satellites_profile_keeps_two_episodes_30_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Boundary Two Episodes",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=30,
+            episode_count=2,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, {"20"})
+
     def test_satellites_profile_keeps_unknown_runtime(self):
         target = AnimeNode(
             "20",
