@@ -19,6 +19,8 @@ from decouple import (
 )
 from django.core.cache import CacheKeyWarning
 
+from app.schedules import build_anime_franchise_import_schedule
+
 BASE_URL = config("BASE_URL", default=None)
 if BASE_URL:
     FORCE_SCRIPT_NAME = BASE_URL
@@ -371,6 +373,37 @@ ANIME_FRANCHISE_GROUPING_ENABLED = config(
     cast=bool,
 )
 
+ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED",
+    default=False,
+    cast=bool,
+)
+ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES",
+    default=24 * 60,
+    cast=int,
+)
+ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE",
+    default="satellites",
+)
+ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE",
+    default=False,
+    cast=bool,
+)
+ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN",
+    default=False,
+    cast=bool,
+)
+ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT = config(
+    "ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT",
+    default=None,
+    cast=lambda value: int(value) if value not in ("", None) else None,
+)
+
+
 MU_NSFW = config("MU_NSFW", default=False, cast=bool)
 
 IGDB_ID = config(
@@ -565,6 +598,17 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
 }
+
+CELERY_BEAT_SCHEDULE.update(
+    build_anime_franchise_import_schedule(
+        enabled=ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED,
+        interval_minutes=ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES,
+        profile=ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE,
+        refresh_cache=ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE,
+        full_rescan=ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN,
+        limit=ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT,
+    )
+)
 
 IS_PROD = not any(cmd in sys.argv for cmd in ("runserver", "test"))
 if IS_PROD:
