@@ -525,8 +525,10 @@
             <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
               {% for result in anime_franchise.series.entries %}
                 <div>
-                  <div class="mb-2 min-h-[2rem] pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words line-clamp-2">
-                    {{ result.item.title }}
+                  <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
+                    <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
+                      {{ result.item.title }}
+                    </div>
                   </div>
                   {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
                 </div>
@@ -542,8 +544,10 @@
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in section.entries %}
                   <div>
-                    <div class="mb-2 min-h-[2rem] pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words line-clamp-2">
-                      {{ result.item.title }}
+                    <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
+                      <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
+                        {{ result.item.title }}
+                      </div>
                     </div>
                     {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
                     {% if result.item.footer_format or result.item.footer_relation_value %}
@@ -599,8 +603,10 @@
                   {% if media_type == MediaTypes.MOVIE.value %}
                     {% if name == "recommendations" %}
                       <div>
-                        <div class="mb-2 min-h-[2rem] pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words line-clamp-2">
-                          {{ result.item.season_title|default:result.item.title }}
+                        <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
+                          <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
+                            {{ result.item.season_title|default:result.item.title }}
+                          </div>
                         </div>
                         {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
                       </div>
@@ -610,8 +616,10 @@
                   {% else %}
                     {% if name == "recommendations" %}
                       <div>
-                        <div class="mb-2 min-h-[2rem] pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words line-clamp-2">
-                          {{ result.item.season_title|default:result.item.title }}
+                        <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
+                          <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
+                            {{ result.item.season_title|default:result.item.title }}
+                          </div>
                         </div>
                         {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media hide_title=True %}
                       </div>
