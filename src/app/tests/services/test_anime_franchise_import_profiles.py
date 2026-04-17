@@ -95,6 +95,126 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = SatellitesImportProfile().select(snapshot)
         self.assertEqual(selection.media_ids, set())
 
+    def _snapshot_with_single_satellite_node(self, target_node: AnimeNode) -> AnimeFranchiseSnapshot:
+        nodes = {
+            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
+            target_node.media_id: target_node,
+        }
+        return AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", target_node.media_id, "spin_off")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+    def test_satellites_profile_keeps_13_episodes_24_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Standard Season",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=24,
+            episode_count=13,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, {"20"})
+
+    def test_satellites_profile_keeps_single_episode_76_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Long Special",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=76,
+            episode_count=1,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, {"20"})
+
+    def test_satellites_profile_excludes_12_episodes_3_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Shorts",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=3,
+            episode_count=12,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, set())
+
+    def test_satellites_profile_excludes_single_episode_24_minutes(self):
+        target = AnimeNode(
+            "20",
+            "Short One-Shot",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=24,
+            episode_count=1,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, set())
+
+    def test_satellites_profile_keeps_unknown_runtime(self):
+        target = AnimeNode(
+            "20",
+            "Unknown Runtime",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=None,
+            episode_count=1,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, {"20"})
+
+    def test_satellites_profile_keeps_unknown_episode_count_with_24_runtime(self):
+        target = AnimeNode(
+            "20",
+            "Unknown Episodes",
+            "mal",
+            "movie",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=24,
+            episode_count=None,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, {"20"})
+
     def test_satellites_profile_keeps_runtime_15_or_more(self):
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
@@ -108,27 +228,6 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             series_line=[nodes["10"]],
             direct_anchors=[nodes["10"]],
             direct_candidates=[AnimeRelation("10", "20", "side_story")],
-            has_series_line=True,
-            fallback_anchor_media_id="10",
-            canonical_root_media_id="10",
-        )
-
-        selection = SatellitesImportProfile().select(snapshot)
-        self.assertEqual(selection.media_ids, {"20"})
-
-    def test_satellites_profile_keeps_unknown_runtime(self):
-        nodes = {
-            "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
-            "20": AnimeNode("20", "Unknown Runtime", "mal", "movie", "img", date(2021, 1, 1), [], None),
-        }
-        snapshot = AnimeFranchiseSnapshot(
-            root_node=nodes["10"],
-            nodes_by_media_id=nodes,
-            all_normalized_relations=[],
-            continuity_component=[nodes["10"]],
-            series_line=[nodes["10"]],
-            direct_anchors=[nodes["10"]],
-            direct_candidates=[AnimeRelation("10", "20", "parent_story")],
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",

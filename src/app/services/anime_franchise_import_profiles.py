@@ -6,6 +6,7 @@ from enum import StrEnum
 from dataclasses import dataclass
 
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+from app.services.anime_franchise_types import AnimeNode
 
 
 class SeedMode(StrEnum):
@@ -88,6 +89,16 @@ class SatellitesImportProfile(BaseImportProfile):
     )
     min_runtime_minutes = 15
 
+    def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
+        runtime_minutes = target_node.runtime_minutes
+        if runtime_minutes is None:
+            return True
+        if runtime_minutes < self.min_runtime_minutes:
+            return False
+        if target_node.episode_count == 1 and runtime_minutes <= 30:
+            return False
+        return True
+
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
             node.media_id
@@ -105,10 +116,7 @@ class SatellitesImportProfile(BaseImportProfile):
                 continue
             if relation.target_media_id in continuity_ids:
                 continue
-            if (
-                target_node.runtime_minutes is not None
-                and target_node.runtime_minutes < self.min_runtime_minutes
-            ):
+            if not self.is_runtime_episode_eligible(target_node):
                 continue
             selected.append(relation)
 

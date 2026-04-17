@@ -147,6 +147,21 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         service.build("30", refresh_cache=True)
         self.assertEqual(calls, [True])
 
+    def test_graph_builder_maps_episode_count_from_metadata_details(self):
+        metadata = {
+            "media_id": "40",
+            "title": "Episodes",
+            "source": "mal",
+            "details": {"raw_media_type": "tv", "start_date": "2022-01-01", "episodes": "13"},
+            "image": "e",
+            "related": {"related_anime": []},
+        }
+
+        builder = AnimeFranchiseGraphBuilder(metadata_fetcher=lambda media_id, refresh_cache=False: metadata)  # noqa: ARG005
+        node = builder.ensure_node("40")
+
+        self.assertEqual(node.episode_count, 13)
+
 
 class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_parse_runtime_minutes_variants(self):

@@ -31,6 +31,7 @@ class AnimeNode:
     start_date: date | None
     relations: list[AnimeRelation] = field(default_factory=list)
     runtime_minutes: int | None = None
+    episode_count: int | None = None
 
 
 @dataclass

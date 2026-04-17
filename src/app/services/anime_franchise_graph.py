@@ -76,6 +76,9 @@ class AnimeFranchiseGraphBuilder:
             runtime_minutes=self._parse_runtime_minutes(
                 metadata["details"].get("runtime"),
             ),
+            episode_count=self._parse_episode_count(
+                metadata["details"].get("episodes"),
+            ),
         )
         self._node_cache[node.media_id] = node
         return node
@@ -145,3 +148,13 @@ class AnimeFranchiseGraphBuilder:
         hours = int(hours_match.group("hours")) if hours_match else 0
         minutes = int(minutes_match.group("minutes")) if minutes_match else 0
         return (hours * 60) + minutes
+
+    @staticmethod
+    def _parse_episode_count(raw_episode_count: int | str | None) -> int | None:
+        if raw_episode_count in (None, ""):
+            return None
+
+        try:
+            return int(raw_episode_count)
+        except (TypeError, ValueError):
+            return None
