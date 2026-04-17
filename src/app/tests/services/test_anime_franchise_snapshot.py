@@ -146,3 +146,22 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         )
         service.build("30", refresh_cache=True)
         self.assertEqual(calls, [True])
+
+
+class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
+    def test_parse_runtime_minutes_variants(self):
+        parser = AnimeFranchiseGraphBuilder._parse_runtime_minutes
+
+        self.assertEqual(parser("1h 16m"), 76)
+        self.assertEqual(parser("1 hr. 16 min."), 76)
+        self.assertEqual(parser("24 min"), 24)
+        self.assertEqual(parser("24 min. per ep."), 24)
+        self.assertEqual(parser("3 min"), 3)
+        self.assertEqual(parser("3 min. per ep."), 3)
+
+    def test_parse_runtime_minutes_returns_none_for_non_parsable_values(self):
+        parser = AnimeFranchiseGraphBuilder._parse_runtime_minutes
+
+        self.assertIsNone(parser(None))
+        self.assertIsNone(parser(""))
+        self.assertIsNone(parser("unknown"))

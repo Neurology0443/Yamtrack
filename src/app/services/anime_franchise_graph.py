@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from datetime import date
 
@@ -127,21 +128,20 @@ class AnimeFranchiseGraphBuilder:
         if not raw_runtime:
             return None
 
-        raw_value = raw_runtime.strip().lower()
-        hours = 0
-        minutes = 0
-        if "h" in raw_value:
-            try:
-                hours_chunk, remainder = raw_value.split("h", maxsplit=1)
-                hours = int(hours_chunk.strip())
-                raw_value = remainder.strip()
-            except ValueError:
-                return None
+        normalized = raw_runtime.strip().lower()
 
-        raw_value = raw_value.replace("min", "").replace("m", "").strip()
-        if raw_value:
-            try:
-                minutes = int(raw_value)
-            except ValueError:
-                return None
-        return (hours * 60) + minutes if (hours or minutes) else None
+        hours_match = re.search(
+            r"(?P<hours>\d+)\s*(?:h|hr|hrs|hour|hours)\.?",
+            normalized,
+        )
+        minutes_match = re.search(
+            r"(?P<minutes>\d+)\s*(?:m|min|mins|minute|minutes)\.?",
+            normalized,
+        )
+
+        if not hours_match and not minutes_match:
+            return None
+
+        hours = int(hours_match.group("hours")) if hours_match else 0
+        minutes = int(minutes_match.group("minutes")) if minutes_match else 0
+        return (hours * 60) + minutes
