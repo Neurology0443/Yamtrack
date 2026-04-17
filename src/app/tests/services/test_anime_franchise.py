@@ -191,3 +191,40 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
     def test_relation_type_normalization_helper(self):
         self.assertEqual(mal.normalize_relation_type("Side Story"), "side_story")
         self.assertEqual(mal.normalize_relation_type("full-story"), "full_story")
+
+    def test_existing_section_classification_still_works_for_root_outside_series_line(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "TV",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Special",
+                "mal",
+                "special",
+                "img",
+                date(2011, 2, 1),
+                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+            ),
+            "300": AnimeNode(
+                "300",
+                "Movie",
+                "mal",
+                "movie",
+                "img",
+                date(2011, 3, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
+        }
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
+
+        view_model = service.build("200")
+        continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
+
+        self.assertIn("300", [entry["media_id"] for entry in continuity.entries])

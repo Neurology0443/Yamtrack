@@ -45,7 +45,7 @@ class AnimeFranchiseSnapshotService:
         series_line = self._derive_series_line(nodes_by_media_id)
         has_series_line = bool(series_line)
 
-        direct_anchors = series_line if has_series_line else [root_node]
+        direct_anchors = self._derive_direct_anchors(series_line, root_node)
         fallback_anchor_media_id = root_node.media_id
         canonical_root_media_id = self._derive_canonical_root_media_id(
             series_line,
@@ -102,6 +102,20 @@ class AnimeFranchiseSnapshotService:
 
         order = self._topological_series_order(graph, tv_nodes)
         return [tv_nodes[node_id] for node_id in order if node_id in tv_nodes]
+
+    @staticmethod
+    def _derive_direct_anchors(
+        series_line: list[AnimeNode],
+        root_node: AnimeNode,
+    ) -> list[AnimeNode]:
+        if not series_line:
+            return [root_node]
+
+        series_line_ids = {node.media_id for node in series_line}
+        if root_node.media_id in series_line_ids:
+            return series_line
+
+        return [*series_line, root_node]
 
     def _topological_series_order(
         self,
