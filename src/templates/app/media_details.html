@@ -524,14 +524,7 @@
             <h2 class="text-xl font-bold mb-4">{{ anime_franchise.series.title }}</h2>
             <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
               {% for result in anime_franchise.series.entries %}
-                <div>
-                  <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
-                    <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
-                      {{ result.item.title }}
-                    </div>
-                  </div>
-                  {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
-                </div>
+                {% include "app/components/media_card.html" with item=result.item title=result.item.series_label media=result.media active=media.media_id|str_equals:result.item.media_id %}
               {% endfor %}
             </div>
           </section>
@@ -543,42 +536,7 @@
               <h2 class="text-xl font-bold mb-4">{{ section.title }}</h2>
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in section.entries %}
-                  <div>
-                    <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
-                      <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
-                        {{ result.item.title }}
-                      </div>
-                    </div>
-                    {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
-                    {% if result.item.footer_format or result.item.footer_relation_value %}
-                      <div class="mt-2 flex items-center justify-between text-xs text-gray-400 px-1">
-                        <span>
-                          {% if result.item.footer_format %}
-                            <span data-franchise-badge="true"
-                                  data-franchise-badge-type="format"
-                                  data-franchise-badge-value="{{ result.item.footer_format_value }}"
-                                  data-franchise-badge-active="false">{{ result.item.footer_format }}</span>
-                          {% endif %}
-                        </span>
-                        <span>
-                          {% if result.item.footer_relation_value %}
-                            {% if result.item.footer_relation_active %}
-                              <span class="px-2 py-0.5 rounded-full bg-gray-700 text-indigo-200 border border-indigo-400/70"
-                                    data-franchise-badge="true"
-                                    data-franchise-badge-type="relation"
-                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
-                                    data-franchise-badge-active="true">{{ result.item.footer_relation_label }}</span>
-                            {% else %}
-                              <span data-franchise-badge="true"
-                                    data-franchise-badge-type="relation"
-                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
-                                    data-franchise-badge-active="false">{{ result.item.footer_relation_label }}</span>
-                            {% endif %}
-                          {% endif %}
-                        </span>
-                      </div>
-                    {% endif %}
-                  </div>
+                  {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
                 {% endfor %}
               </div>
             </section>
@@ -602,27 +560,13 @@
                   {# Set active to highlight the current movie in a collection. Avoid TV media, since seasons have same ID as the parent show #}
                   {% if media_type == MediaTypes.MOVIE.value %}
                     {% if name == "recommendations" %}
-                      <div>
-                        <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
-                          <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
-                            {{ result.item.season_title|default:result.item.title }}
-                          </div>
-                        </div>
-                        {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
-                      </div>
+                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
                     {% else %}
                       {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
                     {% endif %}
                   {% else %}
                     {% if name == "recommendations" %}
-                      <div>
-                        <div class="mb-2 h-[2rem] pl-3 border-l border-gray-500/50">
-                          <div class="text-xs leading-4 font-medium text-gray-300/90 break-words line-clamp-2">
-                            {{ result.item.season_title|default:result.item.title }}
-                          </div>
-                        </div>
-                        {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media hide_title=True %}
-                      </div>
+                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
                     {% else %}
                       {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
                     {% endif %}
