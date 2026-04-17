@@ -525,10 +525,10 @@
             <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
               {% for result in anime_franchise.series.entries %}
                 <div>
-                  <div class="mb-2 pl-2.5 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
+                  <div class="mb-2 pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
                     {{ result.item.title }}
                   </div>
-                  {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                  {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
                 </div>
               {% endfor %}
             </div>
@@ -542,12 +542,10 @@
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in section.entries %}
                   <div>
-                    {% if section.key == "continuity_extras" %}
-                      <div class="mb-2 pl-2.5 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
-                        {{ result.item.title }}
-                      </div>
-                    {% endif %}
-                    {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                    <div class="mb-2 pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
+                      {{ result.item.title }}
+                    </div>
+                    {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
                     {% if result.item.footer_format or result.item.footer_relation_value %}
                       <div class="mt-2 flex items-center justify-between text-xs text-gray-400 px-1">
                         <span>
@@ -599,9 +597,27 @@
                 {% for result in related_items %}
                   {# Set active to highlight the current movie in a collection. Avoid TV media, since seasons have same ID as the parent show #}
                   {% if media_type == MediaTypes.MOVIE.value %}
-                    {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                    {% if name == "recommendations" %}
+                      <div>
+                        <div class="mb-2 pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
+                          {{ result.item.season_title|default:result.item.title }}
+                        </div>
+                        {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id hide_title=True %}
+                      </div>
+                    {% else %}
+                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                    {% endif %}
                   {% else %}
-                    {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
+                    {% if name == "recommendations" %}
+                      <div>
+                        <div class="mb-2 pl-3 text-xs leading-4 font-medium text-gray-300/90 border-l border-gray-500/50 break-words">
+                          {{ result.item.season_title|default:result.item.title }}
+                        </div>
+                        {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media hide_title=True %}
+                      </div>
+                    {% else %}
+                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
+                    {% endif %}
                   {% endif %}
                 {% endfor %}
               </div>

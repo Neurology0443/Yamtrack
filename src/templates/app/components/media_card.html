@@ -114,11 +114,13 @@
     </div>
   </div>
 
-  <div class="p-3">
-    <a href="{{ item|media_url }}"
-       class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
-       title="{{ title }}">{{ title }}</a>
-  </div>
+  {% if not hide_title %}
+    <div class="p-3">
+      <a href="{{ item|media_url }}"
+         class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
+         title="{{ title }}">{{ title }}</a>
+    </div>
+  {% endif %}
 
   {% if item.media_type == MediaTypes.EPISODE.value %}
     {% include "app/components/fill_track_episode.html" with request=request media=item episode=item episode_title=title csrf_token=csrf_token TRACK_TIME=TRACK_TIME only %}
