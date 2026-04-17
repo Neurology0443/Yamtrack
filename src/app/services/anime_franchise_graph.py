@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from datetime import date
 
@@ -17,13 +18,15 @@ YEAR_MONTH_DAY_CHUNKS = 3
 class AnimeFranchiseGraphBuilder:
     """Discover MAL anime entries and normalize graph relations."""
 
-    def __init__(self, metadata_fetcher=None):
+    def __init__(self, metadata_fetcher=None, *, refresh_cache=False):
         """Create a graph builder with an optional metadata fetcher."""
         self.metadata_fetcher = metadata_fetcher or mal.anime
+        self.refresh_cache = refresh_cache
         self._node_cache: dict[str, AnimeNode] = {}
 
     def build(self, root_media_id: str) -> dict[str, AnimeNode]:
         """Build the MAL anime graph around sequel/prequel continuity."""
+        self._node_cache = {}
         root_id = str(root_media_id)
         queue = deque([root_id])
 
@@ -52,7 +55,13 @@ class AnimeFranchiseGraphBuilder:
         if cached:
             return cached
 
-        metadata = self.metadata_fetcher(media_id)
+        try:
+            metadata = self.metadata_fetcher(
+                media_id,
+                refresh_cache=self.refresh_cache,
+            )
+        except TypeError:
+            metadata = self.metadata_fetcher(media_id)
         node = AnimeNode(
             media_id=str(metadata["media_id"]),
             title=metadata["title"],
@@ -63,6 +72,12 @@ class AnimeFranchiseGraphBuilder:
             relations=self._normalize_relations(
                 str(metadata["media_id"]),
                 metadata,
+            ),
+            runtime_minutes=self._parse_runtime_minutes(
+                metadata["details"].get("runtime"),
+            ),
+            episode_count=self._parse_episode_count(
+                metadata["details"].get("episodes"),
             ),
         )
         self._node_cache[node.media_id] = node
@@ -110,3 +125,36 @@ class AnimeFranchiseGraphBuilder:
         except (TypeError, ValueError):
             return None
         return None
+
+    @staticmethod
+    def _parse_runtime_minutes(raw_runtime: str | None) -> int | None:
+        if not raw_runtime:
+            return None
+
+        normalized = raw_runtime.strip().lower()
+
+        hours_match = re.search(
+            r"(?P<hours>\d+)\s*(?:h|hr|hrs|hour|hours)\.?",
+            normalized,
+        )
+        minutes_match = re.search(
+            r"(?P<minutes>\d+)\s*(?:m|min|mins|minute|minutes)\.?",
+            normalized,
+        )
+
+        if not hours_match and not minutes_match:
+            return None
+
+        hours = int(hours_match.group("hours")) if hours_match else 0
+        minutes = int(minutes_match.group("minutes")) if minutes_match else 0
+        return (hours * 60) + minutes
+
+    @staticmethod
+    def _parse_episode_count(raw_episode_count: int | str | None) -> int | None:
+        if raw_episode_count in (None, ""):
+            return None
+
+        try:
+            return int(raw_episode_count)
+        except (TypeError, ValueError):
+            return None

@@ -772,6 +772,53 @@ class Status(models.TextChoices):
     DROPPED = "Dropped", "Dropped"
 
 
+class AnimeImportProfile(models.TextChoices):
+    """Profiles for MAL anime franchise import scheduling."""
+
+    CONTINUITY = "continuity", "Continuity"
+    SATELLITES = "satellites", "Satellites"
+    COMPLETE = "complete", "Complete"
+
+
+class AnimeImportScanState(models.Model):
+    """Persistent scan state for MAL anime franchise import profiles."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    seed_mal_id = models.CharField(max_length=36)
+    profile_key = models.CharField(max_length=20, choices=AnimeImportProfile)
+    next_scan_at = models.DateTimeField()
+    last_scanned_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    last_change_at = models.DateTimeField(null=True, blank=True)
+    last_result_fingerprint = models.CharField(max_length=64, blank=True, default="")
+    consecutive_stable_scans = models.PositiveIntegerField(default=0)
+    consecutive_error_count = models.PositiveIntegerField(default=0)
+    # Canonical continuity-component root MAL id for this seed.
+    # Invariant: this is the same global root for the component regardless
+    # of which profile row stores/updates it.
+    component_root_mal_id = models.CharField(max_length=36, blank=True, default="")
+    last_component_size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Meta options for import scan state."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "seed_mal_id", "profile_key"],
+                name="app_animpstate_scope_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["profile_key", "next_scan_at"],
+                name="app_animpstate_due_idx",
+            ),
+        ]
+
+
 class UserMessageLevel(models.TextChoices):
     """Choices for persistent user messages."""
 
@@ -1843,6 +1890,39 @@ class Anime(Media):
     """Model for anime."""
 
     tracker = FieldTracker()
+
+    @tracker  # postpone field reset until after the save
+    def save(self, *args, **kwargs):
+        """Save anime and trigger import hot-priority when relevant."""
+        was_adding = self._state.adding
+        status_changed = self.tracker.has_changed("status")
+        previous_status = (
+            self.tracker.previous("status") if status_changed else None
+        )
+
+        super().save(*args, **kwargs)
+
+        if getattr(self, "_skip_hot_priority", False):
+            return
+        if self.item.source != Sources.MAL.value:
+            return
+        if self.item.media_type != MediaTypes.ANIME.value:
+            return
+
+        should_mark_due_now = was_adding or (
+            status_changed
+            and self.status in (Status.IN_PROGRESS.value, Status.COMPLETED.value)
+            and previous_status != self.status
+        )
+        if not should_mark_due_now:
+            return
+
+        from app.services.anime_import_state import AnimeImportStateService
+
+        AnimeImportStateService().mark_due_now(
+            user_id=self.user_id,
+            seed_mal_id=self.item.media_id,
+        )
 
 
 class Movie(Media):
