@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.contrib.admin.sites import AlreadyRegistered
 
 from app.models import (
+    AnimeImportScanState,
     Episode,
     Item,
     UserMessage,
@@ -45,6 +46,23 @@ class UserMessageAdmin(admin.ModelAdmin):
     list_filter = ["level", "shown_at"]
 
 
+@admin.register(AnimeImportScanState)
+class AnimeImportScanStateAdmin(admin.ModelAdmin):
+    """Admin config for anime import scan state rows."""
+
+    search_fields = ["user__username", "seed_mal_id"]
+    list_display = [
+        "user",
+        "seed_mal_id",
+        "profile_key",
+        "next_scan_at",
+        "last_scanned_at",
+        "last_success_at",
+        "last_error_at",
+    ]
+    list_filter = ["profile_key"]
+
+
 class MediaAdmin(admin.ModelAdmin):
     """Custom admin for regular media model with search and filter options."""
 
@@ -58,7 +76,13 @@ class MediaAdmin(admin.ModelAdmin):
 
 # Auto-register remaining models
 app_models = apps.get_app_config("app").get_models()
-SpecialModels = ["Item", "Episode", "BasicMedia", "UserMessage"]
+SpecialModels = [
+    "Item",
+    "Episode",
+    "BasicMedia",
+    "UserMessage",
+    "AnimeImportScanState",
+]
 for model in app_models:
     if (
         not model.__name__.startswith("Historical")
