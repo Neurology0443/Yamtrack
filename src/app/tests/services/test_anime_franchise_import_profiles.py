@@ -319,33 +319,50 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
         self.assertEqual(selection.media_ids, {"20"})
 
-    def test_satellites_profile_keeps_tv_special_with_runtime_10_and_single_episode(self):
+    def test_satellites_profile_excludes_tv_special_with_unknown_runtime(self):
         target = AnimeNode(
             "20",
-            "TV Special Short",
+            "TV Special Unknown Runtime",
             "mal",
             "tv_special",
             "img",
             date(2021, 1, 1),
             [],
-            runtime_minutes=10,
+            runtime_minutes=None,
             episode_count=1,
         )
         selection = SatellitesImportProfile().select(
             self._snapshot_with_single_satellite_node(target)
         )
-        self.assertEqual(selection.media_ids, {"20"})
+        self.assertEqual(selection.media_ids, set())
 
-    def test_satellites_profile_keeps_tv_special_with_runtime_24_and_single_episode(self):
+    def test_satellites_profile_excludes_tv_special_with_runtime_15_and_single_episode(self):
         target = AnimeNode(
             "20",
-            "TV Special Standard",
+            "TV Special Threshold",
             "mal",
             "tv_special",
             "img",
             date(2021, 1, 1),
             [],
-            runtime_minutes=24,
+            runtime_minutes=15,
+            episode_count=1,
+        )
+        selection = SatellitesImportProfile().select(
+            self._snapshot_with_single_satellite_node(target)
+        )
+        self.assertEqual(selection.media_ids, set())
+
+    def test_satellites_profile_keeps_tv_special_with_runtime_16_and_single_episode(self):
+        target = AnimeNode(
+            "20",
+            "TV Special Above Threshold",
+            "mal",
+            "tv_special",
+            "img",
+            date(2021, 1, 1),
+            [],
+            runtime_minutes=16,
             episode_count=1,
         )
         selection = SatellitesImportProfile().select(

@@ -98,10 +98,13 @@ class SatellitesImportProfile(BaseImportProfile):
     min_runtime_minutes = 15
 
     def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
-        if target_node.media_type == "tv_special":
-            return True
-
         runtime_minutes = target_node.runtime_minutes
+
+        if target_node.media_type == "tv_special":
+            if runtime_minutes is None:
+                return False
+            return runtime_minutes > self.min_runtime_minutes
+
         if runtime_minutes is None:
             return True
         if runtime_minutes < self.min_runtime_minutes:
