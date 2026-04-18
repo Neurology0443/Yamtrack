@@ -8,6 +8,18 @@
 
 Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.
 
+## 🔀 This fork (`dev-test`)
+
+Compared to upstream Yamtrack, this fork adds MAL anime franchise grouping/import automation, incremental scan-state scheduling, and entry-added notifications.
+
+Detailed docs are in `docs/`:
+
+- [Architecture overview](docs/architecture-overview.md)
+- [Anime franchise grouping](docs/anime-franchise-grouping.md)
+- [Anime franchise import](docs/anime-franchise-import.md)
+- [Anime franchise customization](docs/anime-franchise-customization.md)
+- [Testing runbook](docs/testing-runbook.md)
+
 ## 🚀 Demo
 
 You can try the app at [yamtrack.fuzzygrim.com](https://yamtrack.fuzzygrim.com) using the username `demo` and password `demo`.
@@ -31,6 +43,10 @@ You can try the app at [yamtrack.fuzzygrim.com](https://yamtrack.fuzzygrim.com) 
 - 🧩 MAL anime franchise grouping with dedicated sections: `Series`, `Main Story Extras`, `Specials`, and `Related Series` (MAL anime scope only). See docs:
   - [Anime franchise grouping](docs/anime-franchise-grouping.md)
   - [Anime franchise debugging runbook](docs/anime-franchise-debugging.md)
+- 🧭 MAL anime franchise import profiles (`continuity`, `satellites`, `complete`) with shared snapshot logic and incremental scan-state scheduling/backoff.
+- ⚙️ Celery automation for profile-based anime franchise imports, plus a dedicated `import_anime_franchise` management command.
+- 🔔 Optional “entry added” notifications sent asynchronously after commit (manual add + automated import), with user-level opt-in settings.
+- 📨 Persistent in-app user messages with periodic cleanup.
 
 ## 📱 Screenshots
 
