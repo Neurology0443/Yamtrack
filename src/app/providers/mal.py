@@ -90,10 +90,10 @@ def search(media_type, query, page):
     return data
 
 
-def anime(media_id):
+def anime(media_id, *, refresh_cache=False):
     """Return the metadata for the selected anime or manga from MyAnimeList."""
     cache_key = f"{Sources.MAL.value}_{MediaTypes.ANIME.value}_{media_id}"
-    data = cache.get(cache_key)
+    data = None if refresh_cache else cache.get(cache_key)
 
     if data is None:
         url = f"{base_url}/anime/{media_id}"
@@ -128,6 +128,7 @@ def anime(media_id):
             "score_count": get_score_count(response),
             "details": {
                 "format": get_format(response),
+                "raw_media_type": response.get("media_type"),
                 "start_date": response.get("start_date"),
                 "end_date": response.get("end_date"),
                 "status": get_readable_status(response),
@@ -153,6 +154,45 @@ def anime(media_id):
         cache.set(cache_key, data)
 
     return data
+
+
+def anime_minimal(media_id, *, refresh_cache=False):
+    """Return lightweight MAL anime metadata suitable for import workflows."""
+    metadata = anime(media_id, refresh_cache=refresh_cache)
+    return {
+        "media_id": str(metadata["media_id"]),
+        "title": metadata["title"],
+        "source": metadata["source"],
+        "media_type": metadata["media_type"],
+        "image": metadata["image"],
+        "details": {
+            "raw_media_type": metadata["details"].get("raw_media_type"),
+            "start_date": metadata["details"].get("start_date"),
+        },
+    }
+
+
+def anime_relations(mal_id, *, refresh_cache=False):
+    """Return normalized relation edges for a MAL anime id."""
+    metadata = anime(mal_id, refresh_cache=refresh_cache)
+    return metadata.get("related", {}).get("related_anime", [])
+
+
+def anime_related_details(mal_id, *, refresh_cache=False):
+    """Return lightweight relation payload for direct-neighbor discovery."""
+    metadata = anime(mal_id, refresh_cache=refresh_cache)
+    related = metadata.get("related", {}).get("related_anime", [])
+    return [
+        {
+            "media_id": str(item["media_id"]),
+            "relation_type": normalize_relation_type(item.get("relation_type")),
+            "source": item.get("source", Sources.MAL.value),
+            "media_type": item.get("media_type", MediaTypes.ANIME.value),
+            "title": item.get("title", ""),
+            "image": item.get("image", settings.IMG_NONE),
+        }
+        for item in related
+    ]
 
 
 def manga(media_id):
@@ -390,8 +430,18 @@ def get_related(related_medias, media_type):
                 "source": Sources.MAL.value,
                 "title": media["node"]["title"],
                 "media_type": media_type,
+                "relation_type": normalize_relation_type(
+                    media.get("relation_type"),
+                ),
                 "image": get_image_url(media["node"]),
             }
             for media in related_medias
         ]
     return []
+
+
+def normalize_relation_type(relation_type: str | None) -> str:
+    """Normalize MAL relation types to lower snake_case."""
+    if not relation_type:
+        return ""
+    return relation_type.strip().lower().replace("-", "_").replace(" ", "_")

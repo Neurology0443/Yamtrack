@@ -1,6 +1,7 @@
 import logging
 
 from celery import shared_task
+from django.contrib.auth import get_user_model
 
 from events import notifications
 from events.calendar.main import fetch_releases
@@ -36,3 +37,17 @@ def send_daily_digest_notifications():
     logger.info("Starting daily digest task")
 
     return notifications.send_daily_digest()
+
+
+@shared_task(name="Send entry added notification")
+def send_entry_added_notification_task(user_id, media_label):
+    """Send queued entry-added notification to a user."""
+    user = get_user_model().objects.filter(id=user_id).first()
+    if not user:
+        logger.warning(
+            "Skipping entry-added notification because user %s does not exist",
+            user_id,
+        )
+        return
+
+    notifications.send_entry_added_notification(user, media_label)

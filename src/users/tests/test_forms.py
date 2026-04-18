@@ -26,6 +26,7 @@ class NotificationSettingsFormTests(TestCase):
                 "notification_urls",
                 "daily_digest_enabled",
                 "release_notifications_enabled",
+                "entry_added_notifications_enabled",
             ],
         )
 
@@ -45,6 +46,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": self.valid_discord_url,
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -60,6 +62,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": f"{self.valid_discord_url}\n{self.valid_telegram_url}",
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -75,6 +78,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": "",
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -88,6 +92,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": "   \n  \t  ",
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -103,6 +108,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": self.invalid_url,
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -128,6 +134,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": f"{self.valid_discord_url}\n{self.invalid_url}",
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -150,6 +157,7 @@ class NotificationSettingsFormTests(TestCase):
             ),
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -167,6 +175,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": f"{self.valid_discord_url}\n{self.valid_telegram_url}",
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -180,6 +189,7 @@ class NotificationSettingsFormTests(TestCase):
         )
         self.assertTrue(self.user.daily_digest_enabled)
         self.assertTrue(self.user.release_notifications_enabled)
+        self.assertTrue(self.user.entry_added_notifications_enabled)
 
     @patch("apprise.Apprise.add")
     def test_empty_lines_are_ignored(self, mock_add):
@@ -192,6 +202,7 @@ class NotificationSettingsFormTests(TestCase):
             ),
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -206,6 +217,7 @@ class NotificationSettingsFormTests(TestCase):
             "notification_urls": self.valid_discord_url,
             "daily_digest_enabled": False,
             "release_notifications_enabled": True,
+            "entry_added_notifications_enabled": False,
         }
 
         with patch("apprise.Apprise.add", return_value=True):
@@ -216,3 +228,4 @@ class NotificationSettingsFormTests(TestCase):
         self.user.refresh_from_db()
         self.assertFalse(self.user.daily_digest_enabled)
         self.assertTrue(self.user.release_notifications_enabled)
+        self.assertFalse(self.user.entry_added_notifications_enabled)
