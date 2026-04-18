@@ -102,7 +102,7 @@ class SatellitesImportProfile(BaseImportProfile):
     satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
     include_relation_types = frozenset(
-        {"spin_off", "alternative_version", "side_story", "parent_story"}
+        {"spin_off", "alternative_version", "side_story"}
     )
     min_runtime_minutes = 15
 
