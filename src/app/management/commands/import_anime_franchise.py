@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_import_service import AnimeFranchiseImportService
 
 
 class Command(BaseCommand):

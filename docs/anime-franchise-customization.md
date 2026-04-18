@@ -6,12 +6,36 @@ Use this guide to change behavior without breaking the architecture.
 
 ### Section rules (UI grouping)
 
-- File: `src/app/services/anime_franchise_rules.py`
+- File: `src/app/services/anime_franchise_ui_rules.py`
 - Use for:
   - section keys/titles,
   - match filters (`relation_type`, media type, predicate),
   - ordering priority,
   - sort mode and visibility.
+
+### UI builder orchestration
+
+- File: `src/app/services/anime_franchise_ui_builder.py`
+- Use for:
+  - candidate construction from snapshot/direct candidates,
+  - first-match rule classification,
+  - section assembly into `AnimeFranchiseViewModel`.
+
+### UI profile hooks
+
+- File: `src/app/services/anime_franchise_ui_profiles.py`
+- Use for:
+  - declarative masking (`hidden_relation_types`, `hidden_media_types`, `hidden_titles`),
+  - section reclassification (`target_section_key`),
+  - per-section sort policy (`sort_section_candidates`),
+  - section title policy (`section_title`).
+- `hidden_titles` comparisons are normalized (`strip + case-insensitive`).
+- Default behavior is provided by `DefaultUiProfile` and is intentionally a no-op.
+- Profiles are policy-level (niveau 2): they customize UI behavior without rebuilding the whole view model.
+- Example reference: `CuratedUiProfile` combines hide/reclassify/sort/rename behavior.
+- Compatibility shims exist for older names:
+  - `src/app/services/anime_franchise_rules.py`
+  - `src/app/services/anime_franchise_ui_profile.py`
 
 ### Import heuristics and profile behavior
 
@@ -21,6 +45,13 @@ Use this guide to change behavior without breaking the architecture.
   - runtime/episode heuristics,
   - eligible relation types,
   - seed mode constraints.
+
+### Import orchestration
+
+- File: `src/app/services/anime_franchise_import_service.py`
+- Use for:
+  - due seed retrieval, profile execution, entry creation, and scan-state recording.
+- `src/app/services/anime_franchise_import.py` is retained as a compatibility re-export.
 
 ### Scan scheduling/backoff
 

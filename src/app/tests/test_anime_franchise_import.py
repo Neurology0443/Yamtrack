@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
-from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_import_service import AnimeFranchiseImportService
 
 
 class AnimeFranchiseImportNotificationTests(TestCase):
@@ -36,9 +36,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             state_service=state_service,
         ), profile
 
-    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
-    @patch("app.services.anime_franchise_import.mal.anime_minimal")
-    @patch("app.services.anime_franchise_import.get_import_profile")
+    @patch("app.services.anime_franchise_import_service.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import_service.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import_service.get_import_profile")
     def test_newly_created_anime_schedules_notification(
         self,
         mock_get_profile,
@@ -74,9 +74,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             media_label=str(created_anime),
         )
 
-    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
-    @patch("app.services.anime_franchise_import.mal.anime_minimal")
-    @patch("app.services.anime_franchise_import.get_import_profile")
+    @patch("app.services.anime_franchise_import_service.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import_service.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import_service.get_import_profile")
     def test_existing_anime_does_not_schedule_notification(
         self,
         mock_get_profile,
@@ -116,9 +116,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_notify.assert_not_called()
         mock_anime_minimal.assert_not_called()
 
-    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
-    @patch("app.services.anime_franchise_import.mal.anime_minimal")
-    @patch("app.services.anime_franchise_import.get_import_profile")
+    @patch("app.services.anime_franchise_import_service.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import_service.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import_service.get_import_profile")
     def test_dry_run_does_not_schedule_notification(
         self,
         mock_get_profile,
