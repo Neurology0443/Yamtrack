@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from django.db import transaction
@@ -12,6 +13,8 @@ from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
 from events.notifications import notify_entry_added_after_commit
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,6 +129,12 @@ class AnimeFranchiseImportService:
                     stats.state_rows_updated += 1
 
             except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Anime franchise import failed for profile=%s user_id=%s seed_mal_id=%s",
+                    profile_key,
+                    due_seed.user_id,
+                    due_seed.seed_mal_id,
+                )
                 stats.errors += 1
                 if not dry_run:
                     _, state_created = self.state_service.record_error(

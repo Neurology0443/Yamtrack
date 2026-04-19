@@ -145,3 +145,50 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertFalse(Anime.objects.filter(user=self.user, item__media_id="123").exists())
         mock_notify.assert_not_called()
         mock_anime_minimal.assert_not_called()
+
+    @patch("app.services.anime_franchise_import_service.logger")
+    @patch("app.services.anime_franchise_import_service.get_import_profile")
+    def test_import_errors_are_logged_with_context(
+        self,
+        mock_get_profile,
+        mock_logger,
+    ):
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = RuntimeError("boom")
+
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = (
+            [SimpleNamespace(user_id=self.user.id, seed_mal_id="321")],
+            0,
+        )
+        state_service.record_error.return_value = (None, True)
+
+        profile = Mock()
+        mock_get_profile.return_value = profile
+
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+        )
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.errors, 1)
+        state_service.record_error.assert_called_once_with(
+            user_id=self.user.id,
+            seed_mal_id="321",
+            profile_key="satellites",
+        )
+        mock_logger.exception.assert_called_once_with(
+            "Anime franchise import failed for profile=%s user_id=%s seed_mal_id=%s",
+            "satellites",
+            self.user.id,
+            "321",
+        )

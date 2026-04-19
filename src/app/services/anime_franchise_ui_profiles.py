@@ -7,6 +7,8 @@ sorting, and section title overrides.
 
 from __future__ import annotations
 
+from functools import cached_property
+
 from app.services.anime_franchise_types import AnimeFranchiseCandidate
 
 
@@ -30,7 +32,7 @@ class BaseUiProfile:
             return False
         if candidate.media_type in self.hidden_media_types:
             return False
-        return normalized_title not in self._normalized_hidden_titles()
+        return normalized_title not in self.normalized_hidden_titles
 
     def target_section_key(
         self,
@@ -60,12 +62,14 @@ class BaseUiProfile:
 
         return default_title
 
-    def _normalized_hidden_titles(self) -> set[str]:
-        return {self._normalize_title(title) for title in self.hidden_titles}
-
     @staticmethod
     def _normalize_title(title: str) -> str:
         return title.strip().casefold()
+
+    @cached_property
+    def normalized_hidden_titles(self) -> frozenset[str]:
+        """Return hidden titles normalized once per profile instance."""
+        return frozenset(self._normalize_title(title) for title in self.hidden_titles)
 
 
 class DefaultUiProfile(BaseUiProfile):
@@ -82,7 +86,7 @@ class NoCharacterRelationsUiProfile(BaseUiProfile):
 
 
 class CuratedUiProfile(BaseUiProfile):
-    """Concrete policy example for curated UI presentation.
+    """Concrete policy profile kept as pedagogical and regression reference.
 
     Demonstrates: hide entries, reclassify section, custom section sorting,
     and section title rename while keeping common rule classification as base.

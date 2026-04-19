@@ -136,18 +136,19 @@ class AnimeFranchiseUiBuilder:
                 target_section_key = default_section_key
             sections[target_section_key].append(candidate)
 
-        normalized_sections = self._normalize_grouped_sections(sections)
-        for section_key, section_candidates in normalized_sections.items():
+        sorted_sections: dict[str, list[AnimeFranchiseCandidate]] = {}
+        for section_key, section_candidates in sections.items():
             section_rule = rules_by_key.get(section_key)
             if section_rule is not None:
                 section_candidates.sort(
                     key=lambda candidate: self._candidate_sort_key(candidate, section_rule.sort_mode)
                 )
-            normalized_sections[section_key] = self._normalize_candidates(
-                self.ui_profile.sort_section_candidates(section_key, section_candidates)
+            sorted_sections[section_key] = self._validated_profile_candidates(
+                section_key=section_key,
+                candidates=self.ui_profile.sort_section_candidates(section_key, section_candidates),
             )
 
-        return normalized_sections
+        return sorted_sections
 
     def _classify_candidate(
         self,
@@ -159,22 +160,37 @@ class AnimeFranchiseUiBuilder:
                 return rule.key
         return None
 
-    @staticmethod
-    def _normalize_candidates(candidates) -> list[AnimeFranchiseCandidate]:
-        if not candidates:
+    def _validated_profile_candidates(
+        self,
+        *,
+        section_key: str,
+        candidates,
+    ) -> list[AnimeFranchiseCandidate]:
+        """Validate profile sort hook return contract for one section."""
+        profile_name = self.ui_profile.__class__.__name__
+        if candidates is None:
             return []
-        return list(candidates)
+        if isinstance(candidates, list):
+            validated_candidates = candidates
+        elif isinstance(candidates, tuple):
+            validated_candidates = list(candidates)
+        else:
+            msg = (
+                f"UI profile '{profile_name}' returned invalid candidates for section "
+                f"'{section_key}': expected None, list[AnimeFranchiseCandidate], or "
+                f"tuple[AnimeFranchiseCandidate, ...], got {type(candidates).__name__}"
+            )
+            raise TypeError(msg)
 
-    @staticmethod
-    def _normalize_grouped_sections(grouped_sections) -> dict[str, list[AnimeFranchiseCandidate]]:
-        """Normalize section map to a dict of candidate lists."""
-
-        if not isinstance(grouped_sections, dict):
-            return {}
-        normalized: dict[str, list[AnimeFranchiseCandidate]] = {}
-        for section_key, section_candidates in grouped_sections.items():
-            normalized[section_key] = list(section_candidates or [])
-        return normalized
+        for idx, candidate in enumerate(validated_candidates):
+            if not isinstance(candidate, AnimeFranchiseCandidate):
+                msg = (
+                    f"UI profile '{profile_name}' returned invalid candidate at index "
+                    f"{idx} for section '{section_key}': expected AnimeFranchiseCandidate, "
+                    f"got {type(candidate).__name__}"
+                )
+                raise TypeError(msg)
+        return validated_candidates
 
     def _matches_rule(self, candidate: AnimeFranchiseCandidate, rule: AnimeFranchiseSectionRule) -> bool:  # noqa: PLR0911
         if rule.predicate and not rule.predicate(candidate):

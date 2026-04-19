@@ -33,6 +33,8 @@ Use this guide to change behavior without breaking the architecture.
 - Default behavior is provided by `DefaultUiProfile` and is intentionally a no-op.
 - Profiles are policy-level (niveau 2): they customize UI behavior without rebuilding the whole view model.
 - Example reference: `CuratedUiProfile` combines hide/reclassify/sort/rename behavior.
+- Builder fallback behavior is explicit: unknown section target from a profile falls back to the default rule-based section.
+- Profile return contracts are validated strictly; invalid return payloads raise explicit `TypeError` errors.
 - Compatibility shims exist for older names:
   - `src/app/services/anime_franchise_rules.py`
   - `src/app/services/anime_franchise_ui_profile.py`

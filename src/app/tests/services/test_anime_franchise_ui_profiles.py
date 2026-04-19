@@ -43,6 +43,34 @@ class PartialSectionsProfile(BaseUiProfile):
         return candidates
 
 
+class NoneSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "specials":
+            return None
+        return candidates
+
+
+class TupleSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "related_series":
+            return tuple(candidates)
+        return candidates
+
+
+class DictSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "related_series":
+            return {"bad": "payload"}
+        return candidates
+
+
+class InvalidItemSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "specials":
+            return [*candidates, "bad"]
+        return candidates
+
+
 class HideSpecialMediaProfile(BaseUiProfile):
     key = "hide_special"
     hidden_media_types = frozenset({"special"})
@@ -180,6 +208,50 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
         self.assertEqual([entry["media_id"] for entry in sections["specials"].entries], ["201"])
         self.assertEqual([entry["media_id"] for entry in sections["related_series"].entries], ["207", "204"])
+
+    def test_sort_section_candidates_accepts_none_as_empty(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=NoneSortProfile()),
+        )
+
+        view_model = service.build("101")
+        sections = {section.key: section for section in view_model.sections}
+        self.assertEqual(sections["specials"].entries, [])
+
+    def test_sort_section_candidates_accepts_tuple(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=TupleSortProfile()),
+        )
+
+        view_model = service.build("101")
+        sections = {section.key: section for section in view_model.sections}
+        self.assertEqual([entry["media_id"] for entry in sections["related_series"].entries], ["204", "207"])
+
+    def test_sort_section_candidates_rejects_invalid_container_type(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=DictSortProfile()),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "DictSortProfile.*related_series.*got dict",
+        ):
+            service.build("101")
+
+    def test_sort_section_candidates_rejects_invalid_item_type(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=InvalidItemSortProfile()),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "InvalidItemSortProfile.*specials.*got str",
+        ):
+            service.build("101")
 
 
 class UiServiceIntegrationTests(SimpleTestCase):

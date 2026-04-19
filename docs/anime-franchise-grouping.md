@@ -68,6 +68,7 @@ Builder robustness note:
 - If a profile targets an unknown section key, the builder safely falls back to the default rule-based section.
 - Section candidate lookups remain defensive (`.get(section_key, [])`) to avoid `KeyError`.
 - `hidden_titles` uses normalized matching (`strip + case-insensitive`) for stable behavior.
+- Profile hook return values are validated strictly; invalid types raise explicit `TypeError` (no silent broad coercion).
 
 ## UI profile API (niveau 2)
 
