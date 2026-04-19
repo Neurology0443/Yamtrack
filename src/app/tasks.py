@@ -7,7 +7,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from app.models import UserMessage
-from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_import_service import AnimeFranchiseImportService
 
 logger = logging.getLogger(__name__)
 

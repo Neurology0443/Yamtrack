@@ -7,6 +7,7 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
 - Grouping applies only to MAL anime (`source=mal`, `media_type=anime`).
 - The canonical domain object is a franchise `snapshot`.
 - UI and import are projections on top of the same snapshot.
+- UI profiles and import profiles have different goals: UI profiles tune rendering policy, import profiles select creation IDs.
 
 ## Layer responsibilities
 
@@ -27,12 +28,16 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
 ### 3) Projections
 
 - UI projection:
-  - `src/app/services/anime_franchise_rules.py`
-  - `src/app/services/anime_franchise_ui_profile.py`
+  - `src/app/services/anime_franchise_ui_rules.py`
+  - `src/app/services/anime_franchise_ui_builder.py`
+  - `src/app/services/anime_franchise_ui_profiles.py`
+  - `src/app/services/anime_franchise_rules.py` (compatibility re-export)
+  - `src/app/services/anime_franchise_ui_profile.py` (compatibility re-export)
   - `src/app/services/anime_franchise.py` (facade)
 - Import projection:
   - `src/app/services/anime_franchise_import_profiles.py`
-  - `src/app/services/anime_franchise_import.py`
+  - `src/app/services/anime_franchise_import_service.py`
+  - `src/app/services/anime_franchise_import.py` (compatibility re-export)
   - `src/app/services/anime_import_state.py`
 
 ### 4) Delivery and app integration
@@ -57,7 +62,9 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
 app/providers/mal.py
    -> app/services/anime_franchise_graph.py
    -> app/services/anime_franchise_snapshot.py
-   -> app/services/anime_franchise_ui_profile.py
+   -> app/services/anime_franchise_ui_rules.py
+   -> app/services/anime_franchise_ui_profiles.py
+   -> app/services/anime_franchise_ui_builder.py
    -> app/services/anime_franchise.py
    -> app/views.py (media_details)
    -> templates/app/media_details.html
@@ -70,7 +77,8 @@ app/providers/mal.py
    -> app/services/anime_franchise_graph.py
    -> app/services/anime_franchise_snapshot.py
    -> app/services/anime_franchise_import_profiles.py
-   -> app/services/anime_franchise_import.py
+   -> app/services/anime_franchise_import_service.py
+   -> app/services/anime_franchise_import.py (compat)
    -> app/services/anime_import_state.py
    -> app/tasks.py / management command / schedules+settings
 ```
