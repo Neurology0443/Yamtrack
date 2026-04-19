@@ -14,7 +14,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
 
     def _build_service(self, media_ids):
         snapshot_service = Mock()
-        snapshot_service.build.return_value = object()
+        snapshot_service.build.return_value = SimpleNamespace(
+            continuity_component=["321"],
+        )
 
         state_service = Mock()
         state_service.select_due_seeds.return_value = (
@@ -23,6 +25,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         )
         state_service.build_fingerprint.return_value = "fingerprint"
         state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, False)
 
         profile = Mock()
         profile.select.return_value = SimpleNamespace(
