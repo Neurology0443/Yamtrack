@@ -143,9 +143,11 @@ class AnimeFranchiseUiBuilder:
                 section_candidates.sort(
                     key=lambda candidate: self._candidate_sort_key(candidate, section_rule.sort_mode)
                 )
+            base_sorted_candidates = list(section_candidates)
             sorted_sections[section_key] = self._validated_profile_candidates(
                 section_key=section_key,
                 candidates=self.ui_profile.sort_section_candidates(section_key, section_candidates),
+                original_candidates=base_sorted_candidates,
             )
 
         return sorted_sections
@@ -165,6 +167,7 @@ class AnimeFranchiseUiBuilder:
         *,
         section_key: str,
         candidates,
+        original_candidates: list[AnimeFranchiseCandidate],
     ) -> list[AnimeFranchiseCandidate]:
         """Validate profile sort hook return contract for one section."""
         profile_name = self.ui_profile.__class__.__name__
@@ -190,6 +193,24 @@ class AnimeFranchiseUiBuilder:
                     f"got {type(candidate).__name__}"
                 )
                 raise TypeError(msg)
+
+        original_ids = {candidate.media_id for candidate in original_candidates}
+        seen_ids: set[str] = set()
+        for candidate in validated_candidates:
+            if candidate.media_id not in original_ids:
+                msg = (
+                    f"UI profile '{profile_name}' returned candidate with media_id "
+                    f"'{candidate.media_id}' for section '{section_key}' that was not "
+                    "present in the input candidate set"
+                )
+                raise TypeError(msg)
+            if candidate.media_id in seen_ids:
+                msg = (
+                    f"UI profile '{profile_name}' returned duplicate candidate with media_id "
+                    f"'{candidate.media_id}' for section '{section_key}'"
+                )
+                raise TypeError(msg)
+            seen_ids.add(candidate.media_id)
         return validated_candidates
 
     def _matches_rule(self, candidate: AnimeFranchiseCandidate, rule: AnimeFranchiseSectionRule) -> bool:  # noqa: PLR0911

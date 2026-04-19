@@ -39,6 +39,17 @@ Use this guide to change behavior without breaking the architecture.
   - `src/app/services/anime_franchise_rules.py`
   - `src/app/services/anime_franchise_ui_profile.py`
 
+#### Illustrative profile snippets (examples only)
+
+These snippets are pedagogical examples for `BaseUiProfile` customization, not
+mandatory canonical business rules:
+
+- Hide `character` relations globally with `hidden_relation_types`.
+- Reclassify selected `spin_off` entries from `related_series` to `specials`
+  in `target_section_key(...)` when media type is special-like.
+- Reorder `related_series` in `sort_section_candidates(...)` (for example:
+  `spin_off` first, then continuity/date tie-breakers).
+
 ### Import heuristics and profile behavior
 
 - File: `src/app/services/anime_franchise_import_profiles.py`

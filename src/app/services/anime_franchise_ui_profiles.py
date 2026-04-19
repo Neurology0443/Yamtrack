@@ -3,6 +3,14 @@
 Unlike import profiles (which select IDs to create), UI profiles tune presentation
 policy after base rule classification: visibility, section reassignment, section
 sorting, and section title overrides.
+
+Illustrative customization patterns (pedagogical examples, not mandatory business
+rules):
+- hide a relation type globally via ``hidden_relation_types = frozenset({"character"})``
+- reclassify specific spin-offs from ``related_series`` to ``specials`` when their
+  media type is special-like (e.g. ``special`` / ``tv_special``)
+- sort ``related_series`` by editorial intent (e.g. spin-offs first), then by
+  continuity link/date tie-breakers
 """
 
 from __future__ import annotations
@@ -88,8 +96,9 @@ class NoCharacterRelationsUiProfile(BaseUiProfile):
 class CuratedUiProfile(BaseUiProfile):
     """Concrete policy profile kept as pedagogical and regression reference.
 
-    Demonstrates: hide entries, reclassify section, custom section sorting,
-    and section title rename while keeping common rule classification as base.
+    Demonstrates (illustrative policy only): hide entries, reclassify section,
+    custom section sorting, and section title rename while keeping common rule
+    classification as base.
     """
 
     key = "curated"

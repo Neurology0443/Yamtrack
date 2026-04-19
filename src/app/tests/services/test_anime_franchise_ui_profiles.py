@@ -71,6 +71,35 @@ class InvalidItemSortProfile(BaseUiProfile):
         return candidates
 
 
+class ForeignCandidateSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "related_series":
+            return [
+                *candidates,
+                AnimeFranchiseCandidate(
+                    media_id="999",
+                    title="Foreign Candidate",
+                    image="img",
+                    source="mal",
+                    media_type="tv",
+                    start_date=date(2019, 1, 1),
+                    relation_type="spin_off",
+                    is_current=False,
+                    is_direct_from_series_line=True,
+                    linked_series_line_media_id="100",
+                    linked_series_line_index=0,
+                ),
+            ]
+        return candidates
+
+
+class DuplicateCandidateSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "related_series" and candidates:
+            return [candidates[0], *candidates]
+        return candidates
+
+
 class HideSpecialMediaProfile(BaseUiProfile):
     key = "hide_special"
     hidden_media_types = frozenset({"special"})
@@ -250,6 +279,30 @@ class UiBuilderRobustnessTests(SimpleTestCase):
         with self.assertRaisesRegex(
             TypeError,
             "InvalidItemSortProfile.*specials.*got str",
+        ):
+            service.build("101")
+
+    def test_sort_section_candidates_rejects_foreign_candidates(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=ForeignCandidateSortProfile()),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "ForeignCandidateSortProfile.*related_series.*999.*not present",
+        ):
+            service.build("101")
+
+    def test_sort_section_candidates_rejects_duplicate_candidates(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=DuplicateCandidateSortProfile()),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "DuplicateCandidateSortProfile.*related_series.*duplicate",
         ):
             service.build("101")
 
