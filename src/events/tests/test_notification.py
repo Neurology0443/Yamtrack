@@ -12,6 +12,8 @@ from events.notifications import (
     format_notification,
     get_all_user_tracking_data,
     get_tv_tracking_data,
+    notify_entry_added_after_commit,
+    send_entry_added_notification,
     get_user_releases,
     is_user_tracking_item,
     send_daily_digest,
@@ -1148,3 +1150,58 @@ class NotificationTests(TestCase):
 
         # Verify the result message
         self.assertEqual(result, "Daily digest sent for 5 releases")
+
+
+class EntryAddedNotificationTests(TestCase):
+    """Tests for entry-added notification helpers."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="entry-user",
+            password="12345",
+            notification_urls="https://example.com/notify1\nhttps://example.com/notify2",
+        )
+
+    @patch("events.notifications.send_user_notification")
+    def test_send_entry_added_notification_noop_when_preference_disabled(self, mock_send):
+        self.user.entry_added_notifications_enabled = False
+        self.user.save(update_fields=["entry_added_notifications_enabled"])
+
+        send_entry_added_notification(self.user, "My Anime")
+
+        mock_send.assert_not_called()
+
+    @patch("events.notifications.send_user_notification")
+    def test_send_entry_added_notification_noop_when_urls_blank(self, mock_send):
+        self.user.notification_urls = " \n\t"
+        self.user.save(update_fields=["notification_urls"])
+
+        send_entry_added_notification(self.user, "My Anime")
+
+        mock_send.assert_not_called()
+
+    @patch("events.notifications.send_user_notification")
+    def test_send_entry_added_notification_sends_expected_payload(self, mock_send):
+        self.user.entry_added_notifications_enabled = True
+        self.user.save(update_fields=["entry_added_notifications_enabled"])
+        send_entry_added_notification(self.user, "My Anime")
+
+        mock_send.assert_called_once_with(
+            self.user,
+            ["https://example.com/notify1", "https://example.com/notify2"],
+            "➕ YamTrack: New Entry Added",
+            "My Anime was added to your tracking.",
+        )
+
+    @patch("events.tasks.send_entry_added_notification_task.delay")
+    def test_notify_entry_added_after_commit_queues_task_only_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            notify_entry_added_after_commit(self.user.id, "My Anime")
+            mock_delay.assert_not_called()
+
+        self.assertEqual(len(callbacks), 1)
+        callbacks[0]()
+        mock_delay.assert_called_once_with(
+            user_id=self.user.id,
+            media_label="My Anime",
+        )

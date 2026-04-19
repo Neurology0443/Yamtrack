@@ -1,162 +1,192 @@
-# Anime Franchise Grouping (MAL-only, Anime-only)
+# Anime Franchise Grouping (MAL anime)
 
-## Goal
+This document describes the real grouping pipeline used by the anime details page.
 
-This feature adds a **service-first** franchise grouping engine for MAL anime detail pages. It classifies related entries into:
+## Functional scope
 
-- `Series`
-- `Main Story Extras`
-- `Specials`
-- `Related Series`
+- Enabled by `ANIME_FRANCHISE_GROUPING_ENABLED`.
+- Applied only when `source=mal` and `media_type=anime` in `media_details`.
+- Grouping output is injected as `anime_franchise` context and rendered by `media_details.html`.
 
-The design is intentionally modular and prepared for future UI improvements (for example, numbered seasons from the `Series` line).
+## Pipeline and file map
 
-## Scope
+1. **MAL provider data** (`app/providers/mal.py`).
+2. **Graph normalization** (`app/services/anime_franchise_graph.py`).
+3. **Canonical snapshot** (`app/services/anime_franchise_snapshot.py`).
+4. **UI projection**
+   - `app/services/anime_franchise_ui_rules.py`
+   - `app/services/anime_franchise_ui_builder.py`
+   - `app/services/anime_franchise_ui_profiles.py`
+5. **Facade service** (`app/services/anime_franchise.py`).
+6. **View integration** (`app/views.py`).
+7. **Rendering** (`templates/app/media_details.html`).
 
-- MAL provider only (`source == mal`)
-- Anime detail pages only (`media_type == anime`)
-- No cross-provider behavior
-- No title matching
-- No business classification logic in templates/JS
+## Snapshot semantics
 
-Feature flag:
+`AnimeFranchiseSnapshot` defines the canonical franchise state:
 
-- `ANIME_FRANCHISE_GROUPING_ENABLED`
+- `continuity_component`: transitive component connected by `prequel/sequel`.
+- `series_line`: TV-only ordered line derived from continuity.
+- `direct_anchors`: where direct neighbors are collected.
+- `direct_candidates`: direct normalized relations from anchors.
+- `canonical_root_media_id`: canonical component root.
+- `fallback_anchor_media_id`: seed fallback anchor when no series line exists.
+- `has_series_line`: indicates whether TV continuity exists.
 
-## Architecture
+### Required business details
 
-Implementation is split into focused modules:
+- `series_line` is **TV-only**.
+- `continuity_component` is **transitive prequel/sequel**.
+- `direct_anchors` are:
+  - full `series_line` (plus root if not in line), or
+  - only root when no `series_line`.
+- `direct_candidates` come from direct relations of anchors.
+- `canonical_root_media_id`:
+  - first `series_line` entry when available,
+  - otherwise earliest continuity node by date/id ordering.
 
-- `src/app/services/anime_franchise_types.py`
-  - dataclasses and section rule schema
-- `src/app/services/anime_franchise_graph.py`
-  - MAL graph discovery + normalized relation extraction
-- `src/app/services/anime_franchise_rules.py`
-  - V1 section rules and priority ordering
-- `src/app/services/anime_franchise.py`
-  - orchestration pipeline and UI view model generation
+### Fallback behavior (no `series_line`)
 
-## Business pipeline
+- Series section stays empty.
+- Seed/root becomes fallback anchor for direct candidate collection.
+- No fake series entry is injected.
 
-1. Discover the useful MAL graph from the seed anime.
-2. Build sequel/prequel continuity component.
-3. Derive a TV-only `series_line`.
-4. Build non-series candidates from direct neighbors.
-5. Classify candidates with first-match-wins priority rules.
-6. Return one generic UI view model.
+## UI rules and first-match-wins
 
-## Relation normalization
+Rules are evaluated by priority in `anime_franchise_ui_rules.py`.
+The first matching rule consumes the candidate.
 
-`relation_type` values are normalized with the MAL provider helper:
+Responsibility split:
 
-- `app.providers.mal.normalize_relation_type(...)`
+- `anime_franchise_ui_rules.py`: static, shared rule table that defines default section classification and base sort intent.
+- `anime_franchise_ui_builder.py`: orchestrates full flow (base classification, profile visibility/reclassification/sorting/title policy, final `AnimeFranchiseViewModel` assembly).
+- `anime_franchise_ui_profiles.py`: global UI policy layer (not a full UI rebuild) with declarative hiding + targeted methods.
 
-This avoids divergence in normalization logic and keeps relation matching consistent.
+Builder robustness note:
 
-## V1 sections and rules
+- Missing section keys are always treated as empty sections.
+- If a profile targets an unknown section key, the builder safely falls back to the default rule-based section.
+- Section candidate lookups remain defensive (`.get(section_key, [])`) to avoid `KeyError`.
+- `hidden_titles` uses normalized matching (`strip + case-insensitive`) for stable behavior.
+- Profile hook return values are validated strictly; invalid types raise explicit `TypeError` (no silent broad coercion).
+- `sort_section_candidates` is limited to reordering/filtering the original input candidate objects: injected/rebuilt objects and duplicates are rejected explicitly.
 
-### `Series` (`series_line`)
+## UI profile API (niveau 2)
 
-- TV entries only (`anime_media_type == tv`)
-- built from sequel/prequel continuity
-- stable deterministic ordering:
-  - continuity direction when possible
-  - fallback `start_date ASC`, then `MAL id ASC`
+`anime_franchise_ui_profiles.py` is intentionally **policy-level**:
 
-### `ignored`
+- Declarative flags:
+  - `hidden_relation_types`
+  - `hidden_media_types`
+  - `hidden_titles`
+- Targeted policy methods:
+  - `is_candidate_visible(candidate)`
+  - `target_section_key(candidate, default_section_key)`
+  - `sort_section_candidates(section_key, candidates)`
+  - `section_title(section_key, default_title, candidates)`
 
-- internal only (not visible in UI)
-- absorbs:
-  - `anime_media_type in {cm, pv}`
-  - or `relation_type == other`
+This keeps shared classification in `ui_rules.py`, while allowing profile-specific behavior without re-implementing the entire view model pipeline.
 
-### `Main Story Extras` (`continuity_extras`)
+### Example: `CuratedUiProfile`
 
-- include relation: `{prequel, sequel}`
-- include formats: `{movie, ova, ona, special, tv_special}`
-- exclude formats: `{tv, cm, pv}`
-- `direct_from_series_line_only = True`
-- sorting:
-  - `linked_series_line_index ASC`
-  - `prequel` before `sequel`
-  - `start_date ASC`
-  - `MAL id ASC`
+`CuratedUiProfile` demonstrates all four policy levers:
 
-### `Specials`
+- hides `character` relations and noisy titles,
+- reclassifies `spin_off` + `special/tv_special` from `related_series` to `specials`,
+- applies profile-level sorting for `related_series` and `specials`,
+- renames `related_series` to `Spin-offs & Related`.
 
-- include relation: `{side_story, summary, full_story}`
-- include formats: `{ova, movie, special, tv_special}`
-- exclude formats: `{tv, ona, cm, pv}`
-- `direct_from_series_line_only = True`
+Current visible sections:
 
-### `Related Series`
+1. `continuity_extras` (Main Story Extras)
+2. `specials`
+3. `related_series`
 
-- include relation: `{spin_off, parent_story, alternative_setting, alternative_version, character}`
-- include formats: `{tv, movie, ova, ona, special, tv_special}`
-- exclude formats: `{cm, pv}`
-- `direct_from_series_line_only = True` in V1
+Internal section:
 
-## Fallback behavior when `series_line` is empty
+- `ignored` (not shown in UI)
 
-When no TV node exists:
+### Current rule intent
 
-- `Series` stays empty in UI.
-- The current seed is used as an **internal fallback anchor**.
-- Seed direct neighbors are treated as direct candidates for rule evaluation.
-- No fake `Series` item is created.
-- The seed is not injected into `Series`.
+- `ignored`: swallows `cm`, `pv`, and relation `other`.
+- `continuity_extras`: direct-only prequel/sequel satellites in non-TV narrative formats.
+- `specials`: direct-only side-story/summary/full-story satellites.
+- `related_series`: direct-only spin-off/parent/alternative/character relations.
 
-This keeps the UI consistent while preserving useful satellite sections.
+## Default values currently applied (UI groups)
 
-## UI payload model
+These are the defaults from `SECTION_RULES` in `anime_franchise_ui_rules.py`.
 
-Every franchise entry (series and section entries) includes:
+### `series_line` (rendered as **Series**)
 
-- `media_id`
-- `source`
-- `media_type` (always `anime` for Yamtrack integration)
-- `anime_media_type` (real MAL format, e.g. `tv`, `movie`, `ova`, ...)
-- `relation_type` (when relevant)
-- `is_current`
-- `linked_series_line_media_id`
-- `linked_series_line_index`
+- Built from snapshot `series_line` only (TV-only continuity line).
+- Not a rule-driven candidate group.
+- Entries are rendered in snapshot order.
 
-This payload is intentionally ready for future badges and richer UI diagnostics.
+### `ignored` (internal, not rendered)
 
-## View/template responsibilities
+- `visible_in_ui`: `False`
+- `priority`: `10` then `11` (two ignored rules)
+- `include_media_types` (rule 1): `{"cm", "pv"}`
+- `predicate` (rule 2): relation type is `other`
+- `direct_from_series_line_only`: `False`
+- `allow_indirect_candidates`: `True`
+- `sort_mode`: `linked_then_date`
+- `hidden_if_empty`: default `True`
 
-### View
+### `continuity_extras` (**Main Story Extras**)
 
-`media_details`:
+- `visible_in_ui`: `True`
+- `priority`: `20`
+- `include_relation_types`: `{"prequel", "sequel"}`
+- `include_media_types`: `{"movie", "ova", "ona", "special", "tv_special"}`
+- `exclude_media_types`: `{"tv", "cm", "pv"}`
+- `direct_from_series_line_only`: `True`
+- `allow_indirect_candidates`: `False`
+- `sort_mode`: `continuity_extras`
+- `hidden_if_empty`: `True`
 
-- activates franchise grouping only under MAL+Anime+flag
-- calls `AnimeFranchiseService().build(media_id)`
-- enriches entries via existing `helpers.enrich_items_with_user_data`
-- injects a single context object: `anime_franchise`
-- removes `related_anime` from legacy related sections to avoid duplicated rendering
+### `specials`
 
-### Template
+- `visible_in_ui`: `True`
+- `priority`: `30`
+- `include_relation_types`: `{"side_story", "summary", "full_story"}`
+- `include_media_types`: `{"ova", "movie", "special", "tv_special"}`
+- `exclude_media_types`: `{"tv", "ona", "cm", "pv"}`
+- `direct_from_series_line_only`: `True`
+- `allow_indirect_candidates`: `False`
+- `sort_mode`: `linked_then_date`
+- `hidden_if_empty`: `True`
 
-- renders `Series`
-- loops generically over visible franchise sections
-- does not perform classification logic
+### `related_series`
 
-## Extensibility
+- `visible_in_ui`: `True`
+- `priority`: `40`
+- `include_relation_types`: `{"spin_off", "parent_story", "alternative_setting", "alternative_version", "character"}`
+- `include_media_types`: `{"tv", "movie", "ova", "ona", "special", "tv_special"}`
+- `exclude_media_types`: `{"cm", "pv"}`
+- `direct_from_series_line_only`: `True`
+- `allow_indirect_candidates`: `False`
+- `sort_mode`: `linked_then_date`
+- `hidden_if_empty`: `True`
 
-Adding a new section should mostly be:
+## View and template integration
 
-1. add one `AnimeFranchiseSectionRule`
-2. set priority and title
-3. define matching/sorting strategy
+In `media_details`:
 
-No special-case branch should be required in view/template.
+- Franchise grouping is gated by MAL + anime + setting.
+- `AnimeFranchiseService().build(media_id)` is called.
+- Result entries are enriched with user data.
+- Footer display metadata is added via `anime_franchise_footer.py`.
+- Legacy `media.related.related_anime` is removed to prevent duplicate display.
 
-## Known V1 constraints
+In `media_details.html`:
 
-- `Related Series` is direct-only by product decision.
-- Compact badges are displayed on non-Series franchise sections:
-  - relation badge
-  - anime format badge
-- Relation badge highlight is enabled only when:
-  - `linked_series_line_media_id == media.media_id`
-- `Series` entries remain badge-free.
+- Template renders `Series` and generic section blocks.
+- No grouping logic is implemented in the template.
+
+## Design constraints
+
+- Keep classification in services, not in templates.
+- Keep MAL normalization in provider helper.
+- Keep snapshot as the only canonical franchise domain object.

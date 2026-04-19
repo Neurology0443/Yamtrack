@@ -12,7 +12,27 @@ class FakeGraphBuilder:
         self.nodes = nodes
 
     def build(self, root_media_id):
-        return self.nodes
+        # Emulate production contract: build() returns only the continuity graph
+        # (prequel/sequel component), while neighbor discovery remains broader.
+        root_id = str(root_media_id)
+        if root_id not in self.nodes:
+            return {}
+
+        continuity_relation_types = {"prequel", "sequel"}
+        visited = set()
+        stack = [root_id]
+        while stack:
+            current_id = stack.pop()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            for relation in self.nodes[current_id].relations:
+                if relation.relation_type not in continuity_relation_types:
+                    continue
+                if relation.target_media_id in self.nodes and relation.target_media_id not in visited:
+                    stack.append(relation.target_media_id)
+
+        return {media_id: self.nodes[media_id] for media_id in visited}
 
     def get_direct_neighbors(self, media_id):
         return self.nodes[str(media_id)].relations
@@ -100,7 +120,7 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
         self.assertEqual(
             [entry["media_id"] for entry in continuity.entries],
-            ["209", "200", "210", "208", "212"],
+            ["200", "209", "208", "210", "212"],
         )
 
     def test_specials_selective_and_excludes_ona(self):
@@ -191,3 +211,40 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
     def test_relation_type_normalization_helper(self):
         self.assertEqual(mal.normalize_relation_type("Side Story"), "side_story")
         self.assertEqual(mal.normalize_relation_type("full-story"), "full_story")
+
+    def test_existing_section_classification_still_works_for_root_outside_series_line(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "TV",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Special",
+                "mal",
+                "special",
+                "img",
+                date(2011, 2, 1),
+                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+            ),
+            "300": AnimeNode(
+                "300",
+                "Movie",
+                "mal",
+                "movie",
+                "img",
+                date(2011, 3, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
+        }
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
+
+        view_model = service.build("200")
+        continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
+
+        self.assertIn("300", [entry["media_id"] for entry in continuity.entries])

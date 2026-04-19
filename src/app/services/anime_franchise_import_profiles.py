@@ -68,12 +68,21 @@ class ContinuityImportProfile(BaseImportProfile):
             return True
         return runtime_minutes > self.min_runtime_minutes
 
+    def _summary_target_ids(self, snapshot: AnimeFranchiseSnapshot) -> set[str]:
+        return {
+            relation.target_media_id
+            for relation in snapshot.all_normalized_relations
+            if relation.relation_type == "summary"
+        }
+
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
+        summary_target_ids = self._summary_target_ids(snapshot)
         ids = {
             node.media_id
             for node in snapshot.continuity_component
             if node.media_type not in self.ignored_media_types
             and self.is_runtime_eligible(node)
+            and node.media_id not in summary_target_ids
         }
         payload = {
             "continuity_ids": sorted(ids),
@@ -93,15 +102,28 @@ class SatellitesImportProfile(BaseImportProfile):
     satellites_mode = "direct_only"
     ignored_media_types = {"cm", "pv"}
     include_relation_types = frozenset(
-        {"spin_off", "alternative_version", "side_story", "parent_story"}
+        {"spin_off", "alternative_version", "side_story"}
     )
     min_runtime_minutes = 15
 
     def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
-        if target_node.media_type == "tv_special":
-            return True
-
+        """Return whether a direct satellite is substantial enough to import.
+        
+        Heuristic:
+        - tv_special is handled conservatively because this format is often noisy.
+          If runtime is unknown, reject it.
+        - other satellite formats are handled more permissively to avoid false
+          negatives when provider metadata is incomplete.
+        - very short known runtimes are rejected.
+        - single-episode items of 30 minutes or less are rejected.
+        """
         runtime_minutes = target_node.runtime_minutes
+
+        if target_node.media_type == "tv_special":
+            if runtime_minutes is None:
+                return False
+            return runtime_minutes > self.min_runtime_minutes
+
         if runtime_minutes is None:
             return True
         if runtime_minutes < self.min_runtime_minutes:

@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -51,6 +52,56 @@ class CreateMedia(TestCase):
             Anime.objects.filter(item__media_id="1", user=self.user).exists(),
             True,
         )
+
+    @patch("app.views.notify_entry_added_after_commit")
+    def test_media_save_notifies_on_create(self, mock_notify):
+        Item.objects.create(
+            media_id="777",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Notify Anime",
+            image="http://example.com/image.jpg",
+        )
+
+        self.client.post(
+            reverse("media_save"),
+            {
+                "media_id": "777",
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "status": Status.PLANNING.value,
+                "progress": 0,
+                "repeats": 0,
+            },
+        )
+
+        created_anime = Anime.objects.get(item__media_id="777", user=self.user)
+        mock_notify.assert_called_once_with(
+            user_id=self.user.id,
+            media_label=str(created_anime),
+        )
+
+    @patch("app.views.notify_entry_added_after_commit")
+    def test_media_save_invalid_submission_does_not_notify(self, mock_notify):
+        Item.objects.create(
+            media_id="888",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Invalid Anime",
+            image="http://example.com/image.jpg",
+        )
+
+        self.client.post(
+            reverse("media_save"),
+            {
+                "media_id": "888",
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "progress": 0,
+            },
+        )
+
+        mock_notify.assert_not_called()
 
     @override_settings(MEDIA_ROOT=("create_media"))
     def test_create_tv(self):
@@ -166,6 +217,39 @@ class EditMedia(TestCase):
             },
         )
         self.assertEqual(Movie.objects.get(item__media_id="10494").score, 10)
+
+    @patch("app.views.notify_entry_added_after_commit")
+    def test_media_save_does_not_notify_on_update(self, mock_notify):
+        item = Item.objects.create(
+            media_id="2048",
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            title="No Notify Update",
+            image="http://example.com/image.jpg",
+        )
+        movie = Movie.objects.create(
+            item=item,
+            user=self.user,
+            score=7,
+            progress=1,
+            status=Status.COMPLETED.value,
+        )
+
+        self.client.post(
+            reverse("media_save"),
+            {
+                "instance_id": movie.id,
+                "media_id": "2048",
+                "source": Sources.TMDB.value,
+                "media_type": MediaTypes.MOVIE.value,
+                "score": 8,
+                "progress": 1,
+                "status": Status.COMPLETED.value,
+                "notes": "",
+            },
+        )
+
+        mock_notify.assert_not_called()
 
 
 class DeleteMedia(TestCase):

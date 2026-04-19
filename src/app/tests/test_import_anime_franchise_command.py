@@ -7,7 +7,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from app.models import Anime, AnimeImportScanState, Item, MediaTypes, Sources, Status
-from app.services.anime_franchise_import import FranchiseImportStats
+from app.services.anime_franchise_import_service import FranchiseImportStats
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import AnimeNode
 
@@ -36,7 +36,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
         self.assertFalse(AnimeImportScanState.objects.exists())
 
     @patch("app.providers.mal.anime_minimal")
-    @patch("app.services.anime_franchise_import.AnimeFranchiseSnapshotService.build")
+    @patch("app.services.anime_franchise_import_service.AnimeFranchiseSnapshotService.build")
     def test_real_dry_run_writes_no_entries_and_no_scan_state(
         self,
         mock_build,
@@ -115,7 +115,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
         self.assertTrue(mock_run.call_args.kwargs["refresh_cache"])
 
     @patch("app.providers.mal.anime_minimal")
-    @patch("app.services.anime_franchise_import.AnimeFranchiseSnapshotService.build")
+    @patch("app.services.anime_franchise_import_service.AnimeFranchiseSnapshotService.build")
     def test_live_run_is_idempotent(self, mock_build, mock_anime_minimal):
         seed_item = Item.objects.create(
             media_id="100",

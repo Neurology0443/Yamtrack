@@ -34,6 +34,7 @@ from app.models import (
 from app.providers import manual, services, tmdb
 from app.services.anime_franchise import AnimeFranchiseService
 from app.templatetags import app_tags
+from events.notifications import notify_entry_added_after_commit
 from users.models import HomeSortChoices, MediaSortChoices, MediaStatusChoices
 
 logger = logging.getLogger(__name__)
@@ -592,6 +593,7 @@ def media_save(request):
     media_type = request.POST["media_type"]
     season_number = request.POST.get("season_number")
     instance_id = request.POST.get("instance_id")
+    is_creation = not instance_id
 
     if instance_id:
         instance = BasicMedia.objects.get_media(
@@ -625,6 +627,11 @@ def media_save(request):
     if form.is_valid():
         form.save()
         logger.info("%s saved successfully.", form.instance)
+        if is_creation:
+            notify_entry_added_after_commit(
+                user_id=request.user.id,
+                media_label=str(form.instance),
+            )
     else:
         logger.error(form.errors.as_json())
         for field, errors in form.errors.items():
@@ -789,6 +796,11 @@ def create_entry(request):
         media_form.instance.related_season = form.cleaned_data["parent_season"]
 
     media_form.save()
+    saved_media = media_form.instance
+    notify_entry_added_after_commit(
+        user_id=request.user.id,
+        media_label=str(saved_media),
+    )
 
     # Success message
     msg = f"{item} added successfully."
