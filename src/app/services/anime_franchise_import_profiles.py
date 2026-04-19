@@ -115,7 +115,7 @@ class SatellitesImportProfile(BaseImportProfile):
             return runtime_minutes > self.min_runtime_minutes
 
         if runtime_minutes is None:
-            return False
+            return True
         if runtime_minutes < self.min_runtime_minutes:
             return False
         if target_node.episode_count == 1 and runtime_minutes <= 30:
