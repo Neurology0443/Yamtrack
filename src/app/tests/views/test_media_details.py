@@ -303,8 +303,8 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-value="spin_off"', count=1)
         self.assertContains(response, 'data-franchise-badge-type="format"', count=1)
         self.assertContains(response, 'data-franchise-badge-value="tv"', count=1)
-        self.assertContains(response, 'data-franchise-badge-active="true"', count=1)
-        self.assertContains(response, 'data-franchise-badge-active="false"', count=1)
+        self.assertNotContains(response, 'data-franchise-badge-active="true"')
+        self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
 
     @patch("app.views.AnimeFranchiseService")

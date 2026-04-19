@@ -107,6 +107,16 @@ class SatellitesImportProfile(BaseImportProfile):
     min_runtime_minutes = 15
 
     def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
+        """Return whether a direct satellite is substantial enough to import.
+        
+        Heuristic:
+        - tv_special is handled conservatively because this format is often noisy.
+          If runtime is unknown, reject it.
+        - other satellite formats are handled more permissively to avoid false
+          negatives when provider metadata is incomplete.
+        - very short known runtimes are rejected.
+        - single-episode items of 30 minutes or less are rejected.
+        """
         runtime_minutes = target_node.runtime_minutes
 
         if target_node.media_type == "tv_special":
@@ -115,7 +125,7 @@ class SatellitesImportProfile(BaseImportProfile):
             return runtime_minutes > self.min_runtime_minutes
 
         if runtime_minutes is None:
-            return False
+            return True
         if runtime_minutes < self.min_runtime_minutes:
             return False
         if target_node.episode_count == 1 and runtime_minutes <= 30:

@@ -12,7 +12,27 @@ class FakeGraphBuilder:
         self.nodes = nodes
 
     def build(self, root_media_id):
-        return self.nodes
+        # Emulate production contract: build() returns only the continuity graph
+        # (prequel/sequel component), while neighbor discovery remains broader.
+        root_id = str(root_media_id)
+        if root_id not in self.nodes:
+            return {}
+
+        continuity_relation_types = {"prequel", "sequel"}
+        visited = set()
+        stack = [root_id]
+        while stack:
+            current_id = stack.pop()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            for relation in self.nodes[current_id].relations:
+                if relation.relation_type not in continuity_relation_types:
+                    continue
+                if relation.target_media_id in self.nodes and relation.target_media_id not in visited:
+                    stack.append(relation.target_media_id)
+
+        return {media_id: self.nodes[media_id] for media_id in visited}
 
     def get_direct_neighbors(self, media_id):
         return self.nodes[str(media_id)].relations
@@ -100,7 +120,7 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
         self.assertEqual(
             [entry["media_id"] for entry in continuity.entries],
-            ["209", "200", "210", "208", "212"],
+            ["200", "209", "208", "210", "212"],
         )
 
     def test_specials_selective_and_excludes_ona(self):

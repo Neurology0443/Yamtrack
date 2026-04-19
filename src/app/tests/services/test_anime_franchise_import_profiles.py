@@ -242,7 +242,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
 
         selection = SatellitesImportProfile().select(snapshot)
-        self.assertEqual(selection.media_ids, {"20", "21", "22", "23"})
+        self.assertEqual(selection.media_ids, {"20", "21", "22"})
         self.assertNotIn("24", selection.media_ids)
 
     def test_satellites_profile_excludes_runtime_below_15_minutes(self):

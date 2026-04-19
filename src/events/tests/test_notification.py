@@ -1182,6 +1182,8 @@ class EntryAddedNotificationTests(TestCase):
 
     @patch("events.notifications.send_user_notification")
     def test_send_entry_added_notification_sends_expected_payload(self, mock_send):
+        self.user.entry_added_notifications_enabled = True
+        self.user.save(update_fields=["entry_added_notifications_enabled"])
         send_entry_added_notification(self.user, "My Anime")
 
         mock_send.assert_called_once_with(
