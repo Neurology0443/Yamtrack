@@ -16,11 +16,15 @@ from app.services.anime_franchise_ui_profiles import (
 
 
 class FakeGraphBuilder:
-    def __init__(self, nodes):
+    def __init__(self, nodes, continuity_ids=None):
         self.nodes = nodes
+        self.continuity_ids = set(continuity_ids or nodes.keys())
 
     def build(self, root_media_id):
-        return self.nodes
+        return {
+            media_id: self.nodes[media_id]
+            for media_id in self.continuity_ids
+        }
 
     def get_direct_neighbors(self, media_id):
         return self.nodes[str(media_id)].relations
@@ -249,7 +253,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
     def test_builder_handles_missing_or_unknown_sections_without_key_error(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=PartialSectionsProfile()),
         )
 
@@ -261,7 +265,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
     def test_sort_section_candidates_accepts_none_as_empty(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=NoneSortProfile()),
         )
 
@@ -271,7 +275,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
     def test_sort_section_candidates_accepts_tuple(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=TupleSortProfile()),
         )
 
@@ -281,63 +285,70 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
     def test_sort_section_candidates_rejects_invalid_container_type(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=DictSortProfile()),
         )
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "DictSortProfile.*related_series.*got dict",
-        ):
+        with self.assertRaises(TypeError) as exc:
             service.build("101")
+        message = str(exc.exception)
+        self.assertIn("DictSortProfile", message)
+        self.assertIn("related_series", message)
+        self.assertIn("got dict", message)
 
     def test_sort_section_candidates_rejects_invalid_item_type(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=InvalidItemSortProfile()),
         )
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "InvalidItemSortProfile.*specials.*got str",
-        ):
+        with self.assertRaises(TypeError) as exc:
             service.build("101")
+        message = str(exc.exception)
+        self.assertIn("InvalidItemSortProfile", message)
+        self.assertIn("specials", message)
+        self.assertIn("got str", message)
 
     def test_sort_section_candidates_rejects_foreign_candidates(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=ForeignCandidateSortProfile()),
         )
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "ForeignCandidateSortProfile.*related_series.*999.*original input candidate objects",
-        ):
+        with self.assertRaises(TypeError) as exc:
             service.build("101")
+        message = str(exc.exception)
+        self.assertIn("ForeignCandidateSortProfile", message)
+        self.assertIn("related_series", message)
+        self.assertIn("999", message)
+        self.assertIn("original input candidate objects", message)
 
     def test_sort_section_candidates_rejects_duplicate_candidates(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=DuplicateCandidateSortProfile()),
         )
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "DuplicateCandidateSortProfile.*related_series.*duplicate",
-        ):
+        with self.assertRaises(TypeError) as exc:
             service.build("101")
+        message = str(exc.exception)
+        self.assertIn("DuplicateCandidateSortProfile", message)
+        self.assertIn("related_series", message)
+        self.assertIn("duplicate", message)
 
     def test_sort_section_candidates_rejects_rebuilt_candidate_with_same_media_id(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_builder=AnimeFranchiseUiBuilder(ui_profile=RebuiltCandidateSortProfile()),
         )
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "RebuiltCandidateSortProfile.*related_series.*204.*original input candidate objects",
-        ):
+        with self.assertRaises(TypeError) as exc:
             service.build("101")
+        message = str(exc.exception)
+        self.assertIn("RebuiltCandidateSortProfile", message)
+        self.assertIn("related_series", message)
+        self.assertIn("204", message)
+        self.assertIn("original input candidate objects", message)
 
 
 class UiServiceIntegrationTests(SimpleTestCase):
@@ -374,7 +385,9 @@ class UiServiceIntegrationTests(SimpleTestCase):
         }
 
     def test_service_build_default_profile_still_works(self):
-        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(self._nodes()))
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"})
+        )
         view_model = service.build("101")
 
         related = next(section for section in view_model.sections if section.key == "related_series")
@@ -382,7 +395,7 @@ class UiServiceIntegrationTests(SimpleTestCase):
 
     def test_service_build_curated_profile_applies_policy(self):
         service = AnimeFranchiseService(
-            graph_builder=FakeGraphBuilder(self._nodes()),
+            graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
             ui_profile_key="curated",
         )
         view_model = service.build("101")
