@@ -44,11 +44,35 @@ Use this guide to change behavior without breaking the architecture.
 These snippets are pedagogical examples for `BaseUiProfile` customization, not
 mandatory canonical business rules:
 
-- Hide `character` relations globally with `hidden_relation_types`.
-- Reclassify selected `spin_off` entries from `related_series` to `specials`
-  in `target_section_key(...)` when media type is special-like.
-- Reorder `related_series` in `sort_section_candidates(...)` (for example:
-  `spin_off` first, then continuity/date tie-breakers).
+```python
+# Example only:
+class NoCharacterRelationsUiProfile(BaseUiProfile):
+    key = "no_character"
+    hidden_relation_types = frozenset({"character"})
+```
+
+```python
+# Example only:
+def target_section_key(self, candidate, default_section_key):
+    if (
+        default_section_key == "related_series"
+        and candidate.relation_type == "spin_off"
+        and candidate.media_type in {"special", "tv_special"}
+    ):
+        return "specials"
+    return default_section_key
+```
+
+```python
+# Example only:
+def sort_section_candidates(self, section_key, candidates):
+    if section_key == "related_series":
+        return sorted(candidates, key=self._related_series_key)
+    return candidates
+```
+
+These are illustrative only: UI profiles editorialize the output of the shared
+UI rule classification; they do not rebuild the full view model pipeline.
 
 ### Import heuristics and profile behavior
 

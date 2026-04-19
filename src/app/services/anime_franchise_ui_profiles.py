@@ -6,11 +6,30 @@ sorting, and section title overrides.
 
 Illustrative customization patterns (pedagogical examples, not mandatory business
 rules):
-- hide a relation type globally via ``hidden_relation_types = frozenset({"character"})``
-- reclassify specific spin-offs from ``related_series`` to ``specials`` when their
-  media type is special-like (e.g. ``special`` / ``tv_special``)
-- sort ``related_series`` by editorial intent (e.g. spin-offs first), then by
-  continuity link/date tie-breakers
+
+    # Example only:
+    # class NoCharacterRelationsUiProfile(BaseUiProfile):
+    #     key = "no_character"
+    #     hidden_relation_types = frozenset({"character"})
+
+    # Example only:
+    # def target_section_key(self, candidate, default_section_key):
+    #     if (
+    #         default_section_key == "related_series"
+    #         and candidate.relation_type == "spin_off"
+    #         and candidate.media_type in {"special", "tv_special"}
+    #     ):
+    #         return "specials"
+    #     return default_section_key
+
+    # Example only:
+    # def sort_section_candidates(self, section_key, candidates):
+    #     if section_key == "related_series":
+    #         return sorted(candidates, key=self._related_series_key)
+    #     return candidates
+
+These snippets are intentionally illustrative: UI profiles editorialize the
+output of common UI rules; they are not by themselves canonical business rules.
 """
 
 from __future__ import annotations

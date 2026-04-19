@@ -93,6 +93,27 @@ class ForeignCandidateSortProfile(BaseUiProfile):
         return candidates
 
 
+class RebuiltCandidateSortProfile(BaseUiProfile):
+    def sort_section_candidates(self, section_key, candidates):
+        if section_key == "related_series" and candidates:
+            original = candidates[0]
+            rebuilt = AnimeFranchiseCandidate(
+                media_id=original.media_id,
+                title=original.title,
+                image=original.image,
+                source=original.source,
+                media_type=original.media_type,
+                start_date=original.start_date,
+                relation_type=original.relation_type,
+                is_current=original.is_current,
+                is_direct_from_series_line=original.is_direct_from_series_line,
+                linked_series_line_media_id=original.linked_series_line_media_id,
+                linked_series_line_index=original.linked_series_line_index,
+            )
+            return [rebuilt, *candidates[1:]]
+        return candidates
+
+
 class DuplicateCandidateSortProfile(BaseUiProfile):
     def sort_section_candidates(self, section_key, candidates):
         if section_key == "related_series" and candidates:
@@ -290,7 +311,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
 
         with self.assertRaisesRegex(
             TypeError,
-            "ForeignCandidateSortProfile.*related_series.*999.*not present",
+            "ForeignCandidateSortProfile.*related_series.*999.*original input candidate objects",
         ):
             service.build("101")
 
@@ -303,6 +324,18 @@ class UiBuilderRobustnessTests(SimpleTestCase):
         with self.assertRaisesRegex(
             TypeError,
             "DuplicateCandidateSortProfile.*related_series.*duplicate",
+        ):
+            service.build("101")
+
+    def test_sort_section_candidates_rejects_rebuilt_candidate_with_same_media_id(self):
+        service = AnimeFranchiseService(
+            graph_builder=FakeGraphBuilder(self._nodes()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_profile=RebuiltCandidateSortProfile()),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "RebuiltCandidateSortProfile.*related_series.*204.*original input candidate objects",
         ):
             service.build("101")
 

@@ -69,7 +69,7 @@ Builder robustness note:
 - Section candidate lookups remain defensive (`.get(section_key, [])`) to avoid `KeyError`.
 - `hidden_titles` uses normalized matching (`strip + case-insensitive`) for stable behavior.
 - Profile hook return values are validated strictly; invalid types raise explicit `TypeError` (no silent broad coercion).
-- `sort_section_candidates` is limited to reordering/filtering the input section set: foreign candidates and duplicates are rejected explicitly.
+- `sort_section_candidates` is limited to reordering/filtering the original input candidate objects: injected/rebuilt objects and duplicates are rejected explicitly.
 
 ## UI profile API (niveau 2)
 

@@ -194,23 +194,24 @@ class AnimeFranchiseUiBuilder:
                 )
                 raise TypeError(msg)
 
-        original_ids = {candidate.media_id for candidate in original_candidates}
-        seen_ids: set[str] = set()
+        original_candidate_ids = {id(candidate) for candidate in original_candidates}
+        seen_candidate_ids: set[int] = set()
         for candidate in validated_candidates:
-            if candidate.media_id not in original_ids:
+            candidate_identity = id(candidate)
+            if candidate_identity not in original_candidate_ids:
                 msg = (
                     f"UI profile '{profile_name}' returned candidate with media_id "
                     f"'{candidate.media_id}' for section '{section_key}' that was not "
-                    "present in the input candidate set"
+                    "one of the original input candidate objects"
                 )
                 raise TypeError(msg)
-            if candidate.media_id in seen_ids:
+            if candidate_identity in seen_candidate_ids:
                 msg = (
                     f"UI profile '{profile_name}' returned duplicate candidate with media_id "
                     f"'{candidate.media_id}' for section '{section_key}'"
                 )
                 raise TypeError(msg)
-            seen_ids.add(candidate.media_id)
+            seen_candidate_ids.add(candidate_identity)
         return validated_candidates
 
     def _matches_rule(self, candidate: AnimeFranchiseCandidate, rule: AnimeFranchiseSectionRule) -> bool:  # noqa: PLR0911
