@@ -13,9 +13,10 @@ This document describes the real grouping pipeline used by the anime details pag
 1. **MAL provider data** (`app/providers/mal.py`).
 2. **Graph normalization** (`app/services/anime_franchise_graph.py`).
 3. **Canonical snapshot** (`app/services/anime_franchise_snapshot.py`).
-4. **UI rules/profile projection**
-   - `app/services/anime_franchise_rules.py`
-   - `app/services/anime_franchise_ui_profile.py`
+4. **UI projection**
+   - `app/services/anime_franchise_ui_rules.py`
+   - `app/services/anime_franchise_ui_builder.py`
+   - `app/services/anime_franchise_ui_profiles.py`
 5. **Facade service** (`app/services/anime_franchise.py`).
 6. **View integration** (`app/views.py`).
 7. **Rendering** (`templates/app/media_details.html`).
@@ -52,8 +53,48 @@ This document describes the real grouping pipeline used by the anime details pag
 
 ## UI rules and first-match-wins
 
-Rules are evaluated by priority in `anime_franchise_rules.py`.
+Rules are evaluated by priority in `anime_franchise_ui_rules.py`.
 The first matching rule consumes the candidate.
+
+Responsibility split:
+
+- `anime_franchise_ui_rules.py`: static, shared rule table that defines default section classification and base sort intent.
+- `anime_franchise_ui_builder.py`: orchestrates full flow (base classification, profile visibility/reclassification/sorting/title policy, final `AnimeFranchiseViewModel` assembly).
+- `anime_franchise_ui_profiles.py`: global UI policy layer (not a full UI rebuild) with declarative hiding + targeted methods.
+
+Builder robustness note:
+
+- Missing section keys are always treated as empty sections.
+- If a profile targets an unknown section key, the builder safely falls back to the default rule-based section.
+- Section candidate lookups remain defensive (`.get(section_key, [])`) to avoid `KeyError`.
+- `hidden_titles` uses normalized matching (`strip + case-insensitive`) for stable behavior.
+- Profile hook return values are validated strictly; invalid types raise explicit `TypeError` (no silent broad coercion).
+- `sort_section_candidates` is limited to reordering/filtering the original input candidate objects: injected/rebuilt objects and duplicates are rejected explicitly.
+
+## UI profile API (niveau 2)
+
+`anime_franchise_ui_profiles.py` is intentionally **policy-level**:
+
+- Declarative flags:
+  - `hidden_relation_types`
+  - `hidden_media_types`
+  - `hidden_titles`
+- Targeted policy methods:
+  - `is_candidate_visible(candidate)`
+  - `target_section_key(candidate, default_section_key)`
+  - `sort_section_candidates(section_key, candidates)`
+  - `section_title(section_key, default_title, candidates)`
+
+This keeps shared classification in `ui_rules.py`, while allowing profile-specific behavior without re-implementing the entire view model pipeline.
+
+### Example: `CuratedUiProfile`
+
+`CuratedUiProfile` demonstrates all four policy levers:
+
+- hides `character` relations and noisy titles,
+- reclassifies `spin_off` + `special/tv_special` from `related_series` to `specials`,
+- applies profile-level sorting for `related_series` and `specials`,
+- renames `related_series` to `Spin-offs & Related`.
 
 Current visible sections:
 
@@ -74,7 +115,7 @@ Internal section:
 
 ## Default values currently applied (UI groups)
 
-These are the defaults from `SECTION_RULES` in `anime_franchise_rules.py`.
+These are the defaults from `SECTION_RULES` in `anime_franchise_ui_rules.py`.
 
 ### `series_line` (rendered as **Series**)
 

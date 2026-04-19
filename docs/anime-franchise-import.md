@@ -9,7 +9,8 @@ mal.py
  -> anime_franchise_graph.py
  -> anime_franchise_snapshot.py
  -> anime_franchise_import_profiles.py
- -> anime_franchise_import.py
+ -> anime_franchise_import_service.py
+ -> anime_franchise_import.py (compat re-export)
  -> anime_import_state.py
  -> Celery task / management command / schedule
 ```
@@ -17,7 +18,8 @@ mal.py
 ## Core services
 
 - `anime_franchise_import_profiles.py`: chooses IDs from snapshot per profile.
-- `anime_franchise_import.py`: orchestrates due seed selection, creation, and state updates.
+- `anime_franchise_import_service.py`: orchestrates due seed selection, creation, and state updates.
+- `anime_franchise_import.py`: compatibility module that re-exports `AnimeFranchiseImportService` and `FranchiseImportStats`.
 - `anime_import_state.py`: persists incremental scan schedule and backoff.
 
 ## Import profiles
@@ -104,7 +106,7 @@ It calls `AnimeImportStateService.mark_due_now()` for all import profiles.
 
 ## Entry creation and notifications
 
-Import creation path (`anime_franchise_import.py`):
+Import creation path (`anime_franchise_import_service.py`):
 
 - creates missing MAL anime entries (`Anime` + `Item`),
 - marks `_skip_hot_priority=True` during import-created save to avoid recursive reprioritization,

@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from app.models import UserMessage, UserMessageLevel
-from app.services.anime_franchise_import import FranchiseImportStats
+from app.services.anime_franchise_import_service import FranchiseImportStats
 from app.tasks import cleanup_user_messages, import_anime_franchise
 
 
