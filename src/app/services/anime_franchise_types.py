@@ -49,6 +49,8 @@ class AnimeFranchiseCandidate:
     is_direct_from_series_line: bool
     linked_series_line_media_id: str | None
     linked_series_line_index: int | None
+    runtime_minutes: int | None = None
+    episode_count: int | None = None
 
 
 @dataclass(frozen=True)

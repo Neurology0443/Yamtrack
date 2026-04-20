@@ -1,9 +1,10 @@
-"""UI builder that projects a franchise snapshot into a renderable view model."""
+"""Build UI sections from a snapshot + shared franchise candidate projection."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 
+from app.services.anime_franchise_candidate_projection import build_franchise_candidates
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import (
     AnimeFranchiseCandidate,
@@ -19,7 +20,7 @@ class AnimeFranchiseUiBuilder:
     """Build UI grouping from the canonical franchise snapshot.
 
     Flow:
-    1) build candidates
+    1) load shared candidate projection
     2) classify via common UI rules
     3) apply profile visibility
     4) apply profile section reassignment
@@ -28,14 +29,12 @@ class AnimeFranchiseUiBuilder:
     7) assemble ``AnimeFranchiseViewModel``
     """
 
-    SERIES_LINE_KEY = "series_line"
-
     def __init__(self, *, ui_profile: BaseUiProfile | None = None, ui_profile_key: str = "default"):
         self.ui_profile = ui_profile or get_ui_profile(ui_profile_key)
 
     def build_view_model(self, snapshot: AnimeFranchiseSnapshot) -> AnimeFranchiseViewModel:
-        series_line_ids = {node.media_id for node in snapshot.series_line}
-        candidate_map = self._build_candidates(snapshot, series_line_ids)
+        """Assemble the UI view model from snapshot data and shared candidates."""
+        candidate_map = build_franchise_candidates(snapshot)
         grouped_sections = self._group_candidates_with_profile(list(candidate_map.values()))
 
         ordered_sections = []
@@ -74,40 +73,6 @@ class AnimeFranchiseUiBuilder:
             series_line_entries=series_entries,
             sections=ordered_sections,
         )
-
-    def _build_candidates(
-        self,
-        snapshot: AnimeFranchiseSnapshot,
-        series_line_ids: set[str],
-    ) -> dict[str, AnimeFranchiseCandidate]:
-        candidates: dict[str, AnimeFranchiseCandidate] = {}
-        line_index_map = {node.media_id: idx for idx, node in enumerate(snapshot.series_line)}
-
-        for relation in snapshot.direct_candidates:
-            target_id = relation.target_media_id
-            if target_id in series_line_ids:
-                continue
-
-            target_node = snapshot.nodes_by_media_id[target_id]
-            linked_id = relation.source_media_id if snapshot.has_series_line else snapshot.fallback_anchor_media_id
-            candidate = AnimeFranchiseCandidate(
-                media_id=target_node.media_id,
-                title=target_node.title,
-                image=target_node.image,
-                source=target_node.source,
-                media_type=target_node.media_type,
-                start_date=target_node.start_date,
-                relation_type=relation.relation_type,
-                is_current=target_node.media_id == snapshot.root_node.media_id,
-                is_direct_from_series_line=True,
-                linked_series_line_media_id=linked_id,
-                linked_series_line_index=(line_index_map.get(linked_id) if snapshot.has_series_line else 0),
-            )
-            existing = candidates.get(candidate.media_id)
-            if existing is None or self._candidate_sort_key(candidate, "continuity_extras") < self._candidate_sort_key(existing, "continuity_extras"):
-                candidates[candidate.media_id] = candidate
-
-        return candidates
 
     def _group_candidates_with_profile(
         self,
