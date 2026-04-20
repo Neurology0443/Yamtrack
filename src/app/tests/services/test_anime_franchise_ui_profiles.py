@@ -11,6 +11,7 @@ from app.services.anime_franchise_ui_policies import (
     UiPolicyStage,
     UiPolicySuite,
 )
+from app.services.anime_franchise_ui_policy_resolver import resolve_ui_policy_suite
 from app.services.anime_franchise_ui_profiles import (
     BaseUiProfile,
     CuratedUiProfile,
@@ -260,7 +261,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_builder_handles_missing_or_unknown_sections_without_key_error(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=PartialSectionsProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(PartialSectionsProfile())),
         )
 
         view_model = service.build("101")
@@ -272,7 +273,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_accepts_none_as_empty(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=NoneSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(NoneSortProfile())),
         )
 
         view_model = service.build("101")
@@ -282,7 +283,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_accepts_tuple(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=TupleSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(TupleSortProfile())),
         )
 
         view_model = service.build("101")
@@ -292,7 +293,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_rejects_invalid_container_type(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=DictSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(DictSortProfile())),
         )
 
         with self.assertRaises(TypeError) as exc:
@@ -305,7 +306,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_rejects_invalid_item_type(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=InvalidItemSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(InvalidItemSortProfile())),
         )
 
         with self.assertRaises(TypeError) as exc:
@@ -318,7 +319,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_rejects_foreign_candidates(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=ForeignCandidateSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(ForeignCandidateSortProfile())),
         )
 
         with self.assertRaises(TypeError) as exc:
@@ -332,7 +333,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_rejects_duplicate_candidates(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=DuplicateCandidateSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(DuplicateCandidateSortProfile())),
         )
 
         with self.assertRaises(TypeError) as exc:
@@ -345,7 +346,7 @@ class UiBuilderRobustnessTests(SimpleTestCase):
     def test_sort_section_candidates_rejects_rebuilt_candidate_with_same_media_id(self):
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=RebuiltCandidateSortProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(RebuiltCandidateSortProfile())),
         )
 
         with self.assertRaises(TypeError) as exc:
@@ -747,7 +748,7 @@ class LegacyProfileSuiteAdapterTests(SimpleTestCase):
         }
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(nodes, continuity_ids={"100", "101"}),
-            ui_builder=AnimeFranchiseUiBuilder(ui_profile=AlwaysVisibleProfile()),
+            ui_builder=AnimeFranchiseUiBuilder(ui_policy_suite=build_policy_suite_from_legacy_profile(AlwaysVisibleProfile())),
         )
 
         view_model = service.build("101")
@@ -794,7 +795,6 @@ class UiBuilderResolutionPriorityTests(SimpleTestCase):
 
         builder = AnimeFranchiseUiBuilder(
             ui_policy_suite=UiPolicySuite(policies=(HideSpinOffPolicy(),)),
-            ui_profile=NoCharacterRelationsUiProfile(),
         )
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),
@@ -806,8 +806,7 @@ class UiBuilderResolutionPriorityTests(SimpleTestCase):
 
     def test_ui_profile_has_priority_over_ui_profile_key(self):
         builder = AnimeFranchiseUiBuilder(
-            ui_profile=NoCharacterRelationsUiProfile(),
-            ui_profile_key="default",
+            ui_policy_suite=resolve_ui_policy_suite(ui_profile=NoCharacterRelationsUiProfile()),
         )
         service = AnimeFranchiseService(
             graph_builder=FakeGraphBuilder(self._nodes(), continuity_ids={"100", "101"}),

@@ -1,4 +1,4 @@
-"""Build UI sections from a snapshot + shared franchise candidate projection."""
+"""Build UI sections from snapshot + shared franchise candidate projection."""
 
 from __future__ import annotations
 
@@ -13,11 +13,6 @@ from app.services.anime_franchise_types import (
     AnimeFranchiseViewModel,
 )
 from app.services.anime_franchise_ui_policies import BaseUiPolicy, UiPolicyStage, UiPolicySuite
-from app.services.anime_franchise_ui_profiles import (
-    BaseUiProfile,
-    build_policy_suite_from_legacy_profile,
-    get_ui_profile,
-)
 from app.services.anime_franchise_ui_rules import get_section_rules
 
 
@@ -31,22 +26,19 @@ class AnimeFranchiseUiBuilder:
     3) sort
     4) section_title
 
-    Historical UI profiles are still supported by adapting them to policy suites.
+    Execute-only component: expects an already resolved ``UiPolicySuite``
+    (typically provided by ``AnimeFranchiseService``).
     """
 
     def __init__(
         self,
         *,
         ui_policy_suite: UiPolicySuite | None = None,
-        ui_profile: BaseUiProfile | None = None,
-        ui_profile_key: str = "default",
     ):
-        if ui_policy_suite is not None:
-            self.ui_policy_suite = ui_policy_suite
-        elif ui_profile is not None:
-            self.ui_policy_suite = build_policy_suite_from_legacy_profile(ui_profile)
-        else:
-            self.ui_policy_suite = build_policy_suite_from_legacy_profile(get_ui_profile(ui_profile_key))
+        if ui_policy_suite is None:
+            msg = "AnimeFranchiseUiBuilder requires a resolved UiPolicySuite"
+            raise ValueError(msg)
+        self.ui_policy_suite = ui_policy_suite
         self.policies_by_stage = self.ui_policy_suite.grouped_by_stage()
 
     def build_view_model(self, snapshot: AnimeFranchiseSnapshot) -> AnimeFranchiseViewModel:

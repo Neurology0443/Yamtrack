@@ -1,4 +1,4 @@
-"""Historical UI profile definitions adapted to staged UI policy suites.
+"""Historical UI profiles adapted to staged UI policy suites.
 
 Unlike import profiles (which select IDs to create), UI profiles tune presentation
 policy after base rule classification: visibility, section reassignment, section
@@ -28,8 +28,9 @@ rules):
     #         return sorted(candidates, key=self._related_series_key)
     #     return candidates
 
-These snippets are intentionally illustrative: UI profiles editorialize the
-output of common UI rules; they are not by themselves canonical business rules.
+These snippets are intentionally illustrative: profiles editorialize the output
+of common UI rules. Policy-suite selection is handled by the resolver module,
+while profile support remains for transitional legacy compatibility.
 """
 
 from __future__ import annotations
