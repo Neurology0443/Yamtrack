@@ -8,6 +8,7 @@ from app.services.anime_franchise_candidate_projection import build_franchise_ca
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 from app.services.anime_franchise_ui_builder import AnimeFranchiseUiBuilder
+from app.services.anime_franchise_ui_policy_resolver import resolve_ui_policy_suite
 
 
 class AnimeFranchiseCandidateProjectionTests(SimpleTestCase):
@@ -210,9 +211,15 @@ class AnimeFranchiseUiBuilderProjectionRegressionTests(SimpleTestCase):
             canonical_root_media_id="100",
         )
 
-        default_vm = AnimeFranchiseUiBuilder(ui_profile_key="default").build_view_model(snapshot)
-        no_character_vm = AnimeFranchiseUiBuilder(ui_profile_key="no_character").build_view_model(snapshot)
-        curated_vm = AnimeFranchiseUiBuilder(ui_profile_key="curated").build_view_model(snapshot)
+        default_vm = AnimeFranchiseUiBuilder(
+            ui_policy_suite=resolve_ui_policy_suite(ui_profile_key="default")
+        ).build_view_model(snapshot)
+        no_character_vm = AnimeFranchiseUiBuilder(
+            ui_policy_suite=resolve_ui_policy_suite(ui_profile_key="no_character")
+        ).build_view_model(snapshot)
+        curated_vm = AnimeFranchiseUiBuilder(
+            ui_policy_suite=resolve_ui_policy_suite(ui_profile_key="curated")
+        ).build_view_model(snapshot)
 
         default_sections = {section.key: section for section in default_vm.sections}
         no_character_sections = {section.key: section for section in no_character_vm.sections}
@@ -264,6 +271,8 @@ class AnimeFranchiseUiBuilderDelegationTests(SimpleTestCase):
         )
 
         with patch("app.services.anime_franchise_ui_builder.build_franchise_candidates", return_value={}) as mock_projection:
-            AnimeFranchiseUiBuilder(ui_profile_key="default").build_view_model(snapshot)
+            AnimeFranchiseUiBuilder(
+                ui_policy_suite=resolve_ui_policy_suite(ui_profile_key="default")
+            ).build_view_model(snapshot)
 
         mock_projection.assert_called_once_with(snapshot)
