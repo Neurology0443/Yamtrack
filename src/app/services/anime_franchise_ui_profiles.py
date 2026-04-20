@@ -1,4 +1,4 @@
-"""UI policy profiles layered on top of common anime franchise UI rules.
+"""Historical UI profile definitions adapted to staged UI policy suites.
 
 Unlike import profiles (which select IDs to create), UI profiles tune presentation
 policy after base rule classification: visibility, section reassignment, section
@@ -37,6 +37,16 @@ from __future__ import annotations
 from functools import cached_property
 
 from app.services.anime_franchise_types import AnimeFranchiseCandidate
+from app.services.anime_franchise_ui_policies import (
+    HideMediaTypesPolicy,
+    HideRelationTypesPolicy,
+    HideTitlesPolicy,
+    LegacyProfileVisibilityPolicy,
+    LegacyProfileSectionTargetPolicy,
+    LegacyProfileSectionTitlePolicy,
+    LegacyProfileSortPolicy,
+    UiPolicySuite,
+)
 
 
 class BaseUiProfile:
@@ -197,6 +207,31 @@ def get_ui_profile(profile_key: str = "default") -> BaseUiProfile:
     return UI_PROFILES[profile_key]()
 
 
+def build_policy_suite_from_legacy_profile(profile: BaseUiProfile) -> UiPolicySuite:
+    """Adapt a historical monolithic profile to a composable policy suite."""
+
+    policies = []
+    visibility_is_overridden = (
+        profile.__class__.is_candidate_visible is not BaseUiProfile.is_candidate_visible
+    )
+    # Strategy: default visibility -> compile hidden_* to generic hide policies.
+    # Custom visibility override -> delegate only to legacy visibility wrapper.
+    if visibility_is_overridden:
+        policies.append(LegacyProfileVisibilityPolicy(profile))
+    else:
+        if profile.hidden_relation_types:
+            policies.append(HideRelationTypesPolicy(profile.hidden_relation_types))
+        if profile.hidden_media_types:
+            policies.append(HideMediaTypesPolicy(profile.hidden_media_types))
+        if profile.hidden_titles:
+            policies.append(HideTitlesPolicy(profile.hidden_titles))
+
+    policies.append(LegacyProfileSectionTargetPolicy(profile))
+    policies.append(LegacyProfileSortPolicy(profile))
+    policies.append(LegacyProfileSectionTitlePolicy(profile))
+    return UiPolicySuite(policies=tuple(policies))
+
+
 __all__ = [
     "BaseUiProfile",
     "DefaultUiProfile",
@@ -204,4 +239,5 @@ __all__ = [
     "CuratedUiProfile",
     "UI_PROFILES",
     "get_ui_profile",
+    "build_policy_suite_from_legacy_profile",
 ]

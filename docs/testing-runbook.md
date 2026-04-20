@@ -77,3 +77,11 @@ docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test event
   - run import/state/task/schedule/command tests.
 - Changed entry-added notification behavior:
   - run `events.tests.test_notification` and `events.tests.test_tasks`.
+
+## Optional manual grep checks
+
+Use grep commands that ignore bytecode cache directories to reduce noise:
+
+```bash
+grep -R --exclude-dir=__pycache__ "PATTERN" -n src/app/services src/app/tests || true
+```
