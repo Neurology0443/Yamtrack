@@ -186,3 +186,89 @@ class AnimeImportStateServiceTests(TestCase):
             [(seed.user_id, seed.seed_mal_id) for seed in due],
             [(self.user.id, "100"), (self.user.id, "200")],
         )
+
+    def test_stable_delay_keeps_short_window_below_48_hours(self):
+        delay = self.service._stable_delay(
+            hours=12,
+            stable_count=0,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+        )
+        self.assertGreaterEqual(delay, timedelta(hours=12))
+        self.assertLessEqual(delay, timedelta(hours=12, minutes=30))
+
+    def test_stable_delay_uses_expanded_window_for_long_delays(self):
+        delay = self.service._stable_delay(
+            hours=12,
+            stable_count=4,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+        )
+        self.assertGreaterEqual(delay, timedelta(hours=192))
+        self.assertLessEqual(delay, timedelta(hours=192, minutes=1152))
+
+    def test_stable_jitter_window_threshold_values(self):
+        self.assertEqual(self.service._stable_jitter_window_minutes(47), 30)
+        self.assertEqual(self.service._stable_jitter_window_minutes(48), 288)
+
+    def test_jittered_delay_is_deterministic(self):
+        delay_a = self.service._jittered_delay(
+            hours=192,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+            jitter_window_minutes=1152,
+        )
+        delay_b = self.service._jittered_delay(
+            hours=192,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+            jitter_window_minutes=1152,
+        )
+        self.assertEqual(delay_a, delay_b)
+
+    def test_jittered_delay_is_profile_specific(self):
+        continuity_delay = self.service._jittered_delay(
+            hours=96,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+            jitter_window_minutes=576,
+        )
+        satellites_delay = self.service._jittered_delay(
+            hours=96,
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="satellites",
+            jitter_window_minutes=576,
+        )
+        self.assertNotEqual(continuity_delay, satellites_delay)
+
+    def test_record_success_changed_result_keeps_short_behavior(self):
+        fingerprint = self.service.build_fingerprint("continuity", {"ids": ["100"]})
+        state, _, changed = self.service.record_success(
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+            fingerprint=fingerprint,
+            component_root_mal_id="100",
+            component_size=1,
+        )
+        self.assertTrue(changed)
+        delay = state.next_scan_at - state.last_success_at
+        self.assertGreaterEqual(delay, timedelta(hours=6))
+        self.assertLessEqual(delay, timedelta(hours=6, minutes=30))
+
+    def test_record_error_stays_short_window(self):
+        state, _ = self.service.record_error(
+            user_id=self.user.id,
+            seed_mal_id="100",
+            profile_key="continuity",
+        )
+        self.assertEqual(state.consecutive_error_count, 1)
+        delay = state.next_scan_at - state.last_error_at
+        self.assertGreaterEqual(delay, timedelta(hours=2))
+        self.assertLessEqual(delay, timedelta(hours=2, minutes=30))

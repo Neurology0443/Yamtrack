@@ -23,6 +23,10 @@ class AnimeImportStateService:
     """Select due seeds and maintain profile-aware scan state."""
 
     eligible_statuses = [Status.PLANNING.value, Status.IN_PROGRESS.value, Status.COMPLETED.value]
+    DEFAULT_JITTER_WINDOW_MINUTES = 30
+    LONG_STABLE_JITTER_RATIO = 0.10
+    LONG_STABLE_JITTER_MAX_MINUTES = 24 * 60
+    LONG_STABLE_JITTER_THRESHOLD_HOURS = 48
 
     def build_fingerprint(self, profile_key: str, payload: dict) -> str:
         data = {"profile": profile_key, "payload": payload}
@@ -140,10 +144,22 @@ class AnimeImportStateService:
         if changed_result:
             state.last_change_at = now
             state.consecutive_stable_scans = 0
-            delay = self._stable_delay(hours=6, stable_count=0, user_id=user_id, seed_mal_id=seed_mal_id)
+            delay = self._stable_delay(
+                hours=6,
+                stable_count=0,
+                user_id=user_id,
+                seed_mal_id=seed_mal_id,
+                profile_key=profile_key,
+            )
         else:
             state.consecutive_stable_scans += 1
-            delay = self._stable_delay(hours=12, stable_count=state.consecutive_stable_scans, user_id=user_id, seed_mal_id=seed_mal_id)
+            delay = self._stable_delay(
+                hours=12,
+                stable_count=state.consecutive_stable_scans,
+                user_id=user_id,
+                seed_mal_id=seed_mal_id,
+                profile_key=profile_key,
+            )
 
         state.next_scan_at = now + delay
         state.save()
@@ -161,7 +177,12 @@ class AnimeImportStateService:
         state.last_error_at = now
         state.consecutive_error_count += 1
         base = min(2 ** state.consecutive_error_count, 24)
-        state.next_scan_at = now + self._jittered_delay(hours=base, user_id=user_id, seed_mal_id=seed_mal_id)
+        state.next_scan_at = now + self._jittered_delay(
+            hours=base,
+            user_id=user_id,
+            seed_mal_id=seed_mal_id,
+            profile_key=profile_key,
+        )
         state.save()
         return state, created
 
@@ -186,12 +207,45 @@ class AnimeImportStateService:
             changed_rows += 1
         return changed_rows
 
-    def _stable_delay(self, *, hours: int, stable_count: int, user_id: int, seed_mal_id: str) -> timedelta:
+    def _stable_delay(
+        self,
+        *,
+        hours: int,
+        stable_count: int,
+        user_id: int,
+        seed_mal_id: str,
+        profile_key: str,
+    ) -> timedelta:
         base_hours = min(hours * (2 ** min(stable_count, 4)), 24 * 14)
-        return self._jittered_delay(hours=base_hours, user_id=user_id, seed_mal_id=seed_mal_id)
+        jitter_window_minutes = self._stable_jitter_window_minutes(base_hours)
+        return self._jittered_delay(
+            hours=base_hours,
+            user_id=user_id,
+            seed_mal_id=seed_mal_id,
+            profile_key=profile_key,
+            jitter_window_minutes=jitter_window_minutes,
+        )
 
-    def _jittered_delay(self, *, hours: int, user_id: int, seed_mal_id: str) -> timedelta:
-        seed = f"{user_id}:{seed_mal_id}:{hours}"
+    def _stable_jitter_window_minutes(self, base_hours: int) -> int:
+        if base_hours < self.LONG_STABLE_JITTER_THRESHOLD_HOURS:
+            return self.DEFAULT_JITTER_WINDOW_MINUTES
+
+        proportional_minutes = int(base_hours * 60 * self.LONG_STABLE_JITTER_RATIO)
+        return min(
+            max(proportional_minutes, self.DEFAULT_JITTER_WINDOW_MINUTES),
+            self.LONG_STABLE_JITTER_MAX_MINUTES,
+        )
+
+    def _jittered_delay(
+        self,
+        *,
+        hours: int,
+        user_id: int,
+        seed_mal_id: str,
+        profile_key: str,
+        jitter_window_minutes: int = DEFAULT_JITTER_WINDOW_MINUTES,
+    ) -> timedelta:
+        seed = f"{user_id}:{seed_mal_id}:{profile_key}:{hours}"
         digest = hashlib.md5(seed.encode("utf-8"), usedforsecurity=False).hexdigest()  # noqa: S324
-        jitter_minutes = int(digest[:2], 16) % 31
+        jitter_minutes = int(digest[:8], 16) % (jitter_window_minutes + 1)
         return timedelta(hours=hours, minutes=jitter_minutes)
