@@ -8,7 +8,7 @@
 
 Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.
 
-## 🔀 This fork (`dev-test`)
+## 🔀 This fork
 
 Compared to upstream Yamtrack, this fork adds MAL anime franchise grouping/import automation, incremental scan-state scheduling, and entry-added notifications.
 
@@ -40,7 +40,7 @@ You can try the app at [yamtrack.fuzzygrim.com](https://yamtrack.fuzzygrim.com) 
 - 🦀 Integration with [Jellyfin](https://jellyfin.org/), [Plex](https://plex.tv/) and [Emby](https://emby.media/) to automatically track new media watched.
 - 📥 Import from [Trakt](https://trakt.tv/), [Simkl](https://simkl.com/), [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/) and [Kitsu](https://kitsu.app/) with support for periodic automatic imports.
 - 📊 Export all your tracked media to a CSV file and import it back.
-- 🧩 MAL anime franchise grouping with dedicated sections: `Series`, `Main Story Extras`, `Specials`, and `Related Series` (MAL anime scope only). See docs:
+- 🧩 MAL anime franchise grouping with dedicated sections with fixed `Series` + dynamic secondaries (`Main Story Extras`, `Specials`, `Related Series`) in the rule pipeline (MAL anime scope only). See docs:
   - [Anime franchise grouping](docs/anime-franchise-grouping.md)
   - [Anime franchise debugging runbook](docs/anime-franchise-debugging.md)
 - 🧭 MAL anime franchise import profiles (`continuity`, `satellites`, `complete`) with shared snapshot logic and incremental scan-state scheduling/backoff.

@@ -4,32 +4,24 @@ Use this guide to change behavior without breaking the architecture.
 
 ## Where to change what
 
-### Section rules (UI grouping)
+### UI grouping rule packs (main path)
 
-- File: `src/app/services/anime_franchise_rules.py`
+- Directory: `src/app/services/anime_franchise_ui/rules/`
 - Use for:
-  - section keys/titles,
-  - match filters (`relation_type`, media type, predicate),
-  - ordering priority,
-  - sort mode and visibility.
+  - `base_facts.py`: normalized candidate facts shared by other packs,
+  - `base_placement.py`: section declaration and initial fallback placement,
+  - `relation_rules.py`: relation-signal placement refinements,
+  - `anchor_rules.py`: anchor/directness refinements,
+  - `format_rules.py`: format/runtime/episode refinements,
+  - `section_rules.py`: section metadata policy (title/order/visibility only).
 
 ### Import heuristics and profile behavior
 
 - File: `src/app/services/anime_franchise_import_profiles.py`
-- Use for:
-  - continuity/satellite/complete selection,
-  - runtime/episode heuristics,
-  - eligible relation types,
-  - seed mode constraints.
 
 ### Scan scheduling/backoff
 
 - File: `src/app/services/anime_import_state.py`
-- Use for:
-  - due selection policy,
-  - fingerprint semantics,
-  - stable/error backoff,
-  - `mark_due_now` profile list.
 
 ### Task/scheduler automation
 
@@ -37,10 +29,6 @@ Use this guide to change behavior without breaking the architecture.
   - `src/app/tasks.py`
   - `src/app/schedules.py`
   - `src/config/settings.py`
-- Use for:
-  - task lock policy,
-  - beat schedule wiring,
-  - environment setting defaults.
 
 ### Notification behavior
 
@@ -50,11 +38,6 @@ Use this guide to change behavior without breaking the architecture.
   - `src/users/models.py`
   - `src/users/forms.py`
   - `src/templates/users/notifications.html`
-- Use for:
-  - notification trigger payload,
-  - post-commit async dispatch,
-  - user opt-in setting (`entry_added_notifications_enabled`),
-  - Apprise URL validation and settings UI copy.
 
 ### Rendering and footer badges
 
@@ -62,32 +45,27 @@ Use this guide to change behavior without breaking the architecture.
   - `src/app/views.py`
   - `src/app/anime_franchise_footer.py`
   - `src/templates/app/media_details.html`
-- Use for:
-  - series labels (`Season N`),
-  - footer relation/format labels,
-  - section rendering layout.
 
 ## Do / Don’t
 
 ### Do
 
-- Do keep franchise business logic in services.
-- Do keep `AnimeFranchiseSnapshot` as canonical input for both UI and import.
-- Do keep first-match-wins rule order explicit and tested.
-- Do update tests and runbook when profile/rule behavior changes.
-- Do keep MAL scope explicit for grouping behavior.
+- Keep franchise business logic in rule packs/services.
+- Keep `AnimeFranchiseSnapshot` as canonical input for both UI and import.
+- Keep `Series` fixed from `snapshot.series_line`.
+- Keep override discipline explicit (`base_placement` initial, middle packs refine, `section_rules` metadata-only).
+- Update tests and docs together when changing rule behavior.
 
 ### Don’t
 
 - Don’t add classification logic to templates or JavaScript.
-- Don’t duplicate graph/snapshot logic in import or views.
-- Don’t bypass `notify_entry_added_after_commit` for entry-added events.
-- Don’t silently change seed eligibility/backoff rules without updating docs/tests.
-- Don’t reintroduce legacy `related_anime` display alongside grouped sections.
+- Don’t move business rules into `layout.py`.
+- Don’t duplicate snapshot logic in import or views.
+- Don’t add pipeline badges/metadata not consumed by rendering.
 
 ## Safe change checklist
 
-1. Update one layer only (rules, import profile, or scheduler) per change.
-2. Validate impact on both UI and import flows.
+1. Update one concern at a time (facts, placement, relation, anchor, format, or metadata policy).
+2. Validate UI payload contract tests after rule changes.
 3. Run targeted tests from `docs/testing-runbook.md`.
 4. Update docs for any changed behavior.

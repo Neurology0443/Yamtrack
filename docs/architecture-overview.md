@@ -1,4 +1,4 @@
-# Architecture Overview (fork `dev-test`)
+# Architecture Overview
 
 This fork keeps MAL anime franchise logic service-first and shared between UI and import.
 
@@ -34,7 +34,6 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
   - `src/app/services/anime_franchise_ui/layout.py`
   - `src/app/services/anime_franchise_ui/adapter.py`
   - `src/app/services/anime_franchise.py` (facade)
-  - legacy `src/app/services/anime_franchise_ui_profile.py` kept as transition-only (not main path)
 - Import projection:
   - `src/app/services/anime_franchise_import_profiles.py`
   - `src/app/services/anime_franchise_import.py`

@@ -14,6 +14,20 @@ def always() -> CandidatePredicate:
     return lambda _candidate, _context: True
 
 
+def run_once(state_key: str) -> CandidatePredicate:
+    """Return True only for the first evaluation in one pipeline run."""
+
+    sentinel = f"once:{state_key}"
+
+    def _predicate(_candidate, context: RuleContext) -> bool:
+        if context.state.get(sentinel):
+            return False
+        context.state[sentinel] = True
+        return True
+
+    return _predicate
+
+
 def all_of(*predicates: CandidatePredicate) -> CandidatePredicate:
     def _predicate(candidate, context: RuleContext) -> bool:
         return all(predicate(candidate, context) for predicate in predicates)
