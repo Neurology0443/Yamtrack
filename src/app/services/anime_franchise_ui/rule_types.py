@@ -37,6 +37,7 @@ class CompiledSection:
     title: str
     order: int
     hidden_if_empty: bool
+    metadata: dict[str, object] = field(default_factory=dict)
     entries: list[UiCandidate] = field(default_factory=list)
 
 

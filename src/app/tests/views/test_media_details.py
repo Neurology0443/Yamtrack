@@ -148,7 +148,7 @@ class MediaDetailsViewTests(TestCase):
             {
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series_line_entries": [],
+                "series": {"key": "series", "title": "Series", "entries": []},
                 "sections": [],
             },
         )()
@@ -220,7 +220,7 @@ class MediaDetailsViewTests(TestCase):
             {
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series_line_entries": [
+                "series": {"key": "series", "title": "Series", "entries": [
                     {
                         "media_id": "100",
                         "source": "mal",
@@ -245,32 +245,28 @@ class MediaDetailsViewTests(TestCase):
                         "linked_series_line_index": None,
                         "is_current": False,
                     }
-                ],
+                ]},
                 "sections": [
-                    type(
-                        "FranchiseSection",
-                        (),
-                        {
-                            "key": "related_series",
-                            "title": "Related Series",
-                            "entries": [
-                                {
-                                    "media_id": "150",
-                                    "source": "mal",
-                                    "media_type": "anime",
-                                    "anime_media_type": "tv",
-                                    "title": "Spin Off Alpha",
-                                    "image": "http://example.com/spinoff.jpg",
-                                    "relation_type": "spin_off",
-                                    "linked_series_line_media_id": "100",
-                                    "linked_series_line_index": 0,
-                                    "is_current": False,
-                                }
-                            ],
-                            "visible_in_ui": True,
-                            "hidden_if_empty": True,
-                        },
-                    )()
+                    {
+                        "key": "related_series",
+                        "title": "Related Series",
+                        "entries": [
+                            {
+                                "media_id": "150",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "anime_media_type": "tv",
+                                "title": "Spin Off Alpha",
+                                "image": "http://example.com/spinoff.jpg",
+                                "relation_type": "spin_off",
+                                "linked_series_line_media_id": "100",
+                                "linked_series_line_index": 0,
+                                "is_current": False,
+                            }
+                        ],
+                        "visible_in_ui": True,
+                        "hidden_if_empty": True,
+                    }
                 ],
             },
         )()
@@ -292,8 +288,10 @@ class MediaDetailsViewTests(TestCase):
         self.assertNotIn("related_anime", response.context["media"]["related"])
         self.assertIn("recommendations", response.context["media"]["related"])
         mock_anime_franchise_service.return_value.build.assert_called_once_with("100")
-        self.assertContains(response, "Season 1")
-        self.assertContains(response, "Season 2")
+        self.assertContains(response, "Series")
+        self.assertContains(response, "Test Anime")
+        self.assertContains(response, "Test Anime Season 2")
+        self.assertContains(response, "Related Series")
         self.assertContains(response, "Spin Off Alpha")
         self.assertContains(response, "Spin Off")
         self.assertContains(response, 'data-franchise-badge="true"', count=2)
@@ -301,8 +299,8 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-value="spin_off"', count=1)
         self.assertContains(response, 'data-franchise-badge-type="format"', count=1)
         self.assertContains(response, 'data-franchise-badge-value="tv"', count=1)
-        self.assertContains(response, 'data-franchise-badge-active="true"', count=1)
-        self.assertContains(response, 'data-franchise-badge-active="false"', count=1)
+        self.assertContains(response, 'data-franchise-badge-active="true"', count=0)
+        self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
 
     @patch("app.views.AnimeFranchiseService")

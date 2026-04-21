@@ -13,9 +13,13 @@ This document describes the real grouping pipeline used by the anime details pag
 1. **MAL provider data** (`app/providers/mal.py`).
 2. **Graph normalization** (`app/services/anime_franchise_graph.py`).
 3. **Canonical snapshot** (`app/services/anime_franchise_snapshot.py`).
-4. **UI rules/profile projection**
-   - `app/services/anime_franchise_rules.py`
-   - `app/services/anime_franchise_ui_profile.py`
+4. **UI pipeline projection**
+   - `app/services/anime_franchise_ui/series.py`
+   - `app/services/anime_franchise_ui/assembler.py`
+   - `app/services/anime_franchise_ui/presets/default.py`
+   - `app/services/anime_franchise_ui/engine.py`
+   - `app/services/anime_franchise_ui/layout.py`
+   - `app/services/anime_franchise_ui/adapter.py`
 5. **Facade service** (`app/services/anime_franchise.py`).
 6. **View integration** (`app/views.py`).
 7. **Rendering** (`templates/app/media_details.html`).
@@ -52,8 +56,17 @@ This document describes the real grouping pipeline used by the anime details pag
 
 ## UI rules and first-match-wins
 
-Rules are evaluated by priority in `anime_franchise_rules.py`.
-The first matching rule consumes the candidate.
+Rules are evaluated by ordered packs from `anime_franchise_ui/presets/default.py`:
+
+1. `base_facts`
+2. `base_placement`
+3. `relation_rules`
+4. `anchor_rules`
+5. `format_rules`
+6. `section_rules`
+
+`ensure_section(...)` is declaration-only (create-if-missing), while explicit
+section mutations are applied via dedicated setters.
 
 Current visible sections:
 
@@ -74,7 +87,9 @@ Internal section:
 
 ## Default values currently applied (UI groups)
 
-These are the defaults from `SECTION_RULES` in `anime_franchise_rules.py`.
+These are declared by the default UI pipeline rule packs. Section visibility is
+driven by section `metadata["visible_in_ui"]`, propagated through layout and
+consumed by the adapter.
 
 ### `series_line` (rendered as **Series**)
 
@@ -84,49 +99,29 @@ These are the defaults from `SECTION_RULES` in `anime_franchise_rules.py`.
 
 ### `ignored` (internal, not rendered)
 
-- `visible_in_ui`: `False`
-- `priority`: `10` then `11` (two ignored rules)
-- `include_media_types` (rule 1): `{"cm", "pv"}`
-- `predicate` (rule 2): relation type is `other`
-- `direct_from_series_line_only`: `False`
-- `allow_indirect_candidates`: `True`
-- `sort_mode`: `linked_then_date`
-- `hidden_if_empty`: default `True`
+- `visible_in_ui`: `False` (metadata)
+- receives at least: relation `other`, `cm`, `pv`, and non-direct anchors.
+- `hidden_if_empty`: `True`
 
 ### `continuity_extras` (**Main Story Extras**)
 
-- `visible_in_ui`: `True`
-- `priority`: `20`
-- `include_relation_types`: `{"prequel", "sequel"}`
-- `include_media_types`: `{"movie", "ova", "ona", "special", "tv_special"}`
-- `exclude_media_types`: `{"tv", "cm", "pv"}`
-- `direct_from_series_line_only`: `True`
-- `allow_indirect_candidates`: `False`
-- `sort_mode`: `continuity_extras`
+- `visible_in_ui`: `True` (metadata)
+- coarse relation placement: `prequel` / `sequel`
+- coarse format filter: excludes `tv`, `cm`, `pv`
 - `hidden_if_empty`: `True`
 
 ### `specials`
 
-- `visible_in_ui`: `True`
-- `priority`: `30`
-- `include_relation_types`: `{"side_story", "summary", "full_story"}`
-- `include_media_types`: `{"ova", "movie", "special", "tv_special"}`
-- `exclude_media_types`: `{"tv", "ona", "cm", "pv"}`
-- `direct_from_series_line_only`: `True`
-- `allow_indirect_candidates`: `False`
-- `sort_mode`: `linked_then_date`
+- `visible_in_ui`: `True` (metadata)
+- coarse relation placement: `side_story`, `summary`, `full_story`
+- coarse format filter: `ona` excluded from `specials`
 - `hidden_if_empty`: `True`
 
 ### `related_series`
 
-- `visible_in_ui`: `True`
-- `priority`: `40`
-- `include_relation_types`: `{"spin_off", "parent_story", "alternative_setting", "alternative_version", "character"}`
-- `include_media_types`: `{"tv", "movie", "ova", "ona", "special", "tv_special"}`
-- `exclude_media_types`: `{"cm", "pv"}`
-- `direct_from_series_line_only`: `True`
-- `allow_indirect_candidates`: `False`
-- `sort_mode`: `linked_then_date`
+- `visible_in_ui`: `True` (metadata)
+- coarse relation placement: `spin_off`, `parent_story`, `alternative_setting`,
+  `alternative_version`, `character`
 - `hidden_if_empty`: `True`
 
 ## View and template integration
@@ -134,7 +129,7 @@ These are the defaults from `SECTION_RULES` in `anime_franchise_rules.py`.
 In `media_details`:
 
 - Franchise grouping is gated by MAL + anime + setting.
-- `AnimeFranchiseService().build(media_id)` is called.
+- `AnimeFranchiseService().build(media_id)` runs snapshot + UI pipeline.
 - Result entries are enriched with user data.
 - Footer display metadata is added via `anime_franchise_footer.py`.
 - Legacy `media.related.related_anime` is removed to prevent duplicate display.
@@ -149,3 +144,6 @@ In `media_details.html`:
 - Keep classification in services, not in templates.
 - Keep MAL normalization in provider helper.
 - Keep snapshot as the only canonical franchise domain object.
+- Keep `layout.py` structural only (group/filter/order/metadata propagation).
+- `anime_franchise_ui_profile.py` remains transitional in-repo and is no longer
+  the main UI path.
