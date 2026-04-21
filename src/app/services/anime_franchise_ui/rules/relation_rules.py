@@ -1,39 +1,55 @@
 """Coarse relation-driven placement refinements."""
 
 from __future__ import annotations
+
 from app.services.anime_franchise_ui.actions import place_in
-from app.services.anime_franchise_ui.predicates import relation_type_in, relation_type_is
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
+
+
+def _facts(candidate) -> dict:
+    return candidate.metadata.get("relation_facts", {})
+
+
+def _only_other(candidate, _context) -> bool:
+    return bool(_facts(candidate).get("only_other"))
+
+
+def _continuity(candidate, _context) -> bool:
+    return bool(_facts(candidate).get("has_continuity"))
+
+
+def _specials(candidate, _context) -> bool:
+    return bool(_facts(candidate).get("has_specials"))
+
+
+def _related(candidate, _context) -> bool:
+    facts = _facts(candidate)
+    return bool(facts.get("has_related")) and not (
+        facts.get("has_continuity") or facts.get("has_specials")
+    )
+
 
 RelationRules = RulePack(
     key="relation_rules",
     rules=(
         Rule(
-            key="ignore_relation_other",
-            when=relation_type_is("other"),
+            key="ignore_only_other",
+            when=_only_other,
             actions=(place_in("ignored"),),
         ),
         Rule(
-            key="place_continuity_extras_by_relation",
-            when=relation_type_in({"prequel", "sequel"}),
+            key="continuity_by_relations",
+            when=_continuity,
             actions=(place_in("continuity_extras"),),
         ),
         Rule(
-            key="place_specials_by_relation",
-            when=relation_type_in({"side_story", "summary", "full_story"}),
+            key="specials_by_relations",
+            when=_specials,
             actions=(place_in("specials"),),
         ),
         Rule(
-            key="place_related_series_by_relation",
-            when=relation_type_in(
-                {
-                    "spin_off",
-                    "parent_story",
-                    "alternative_setting",
-                    "alternative_version",
-                    "character",
-                },
-            ),
+            key="related_by_relations",
+            when=_related,
             actions=(place_in("related_series"),),
         ),
     ),

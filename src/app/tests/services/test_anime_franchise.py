@@ -263,6 +263,52 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
 
         self.assertIn("300", [entry["media_id"] for entry in continuity["entries"]])
 
+    def test_ambiguous_other_plus_side_story_prefers_relation_types_signal(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "TV Root",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [
+                    AnimeRelation("100", "101", "sequel"),
+                    AnimeRelation("100", "300", "other"),
+                    AnimeRelation("100", "300", "side_story"),
+                ],
+            ),
+            "101": AnimeNode(
+                "101",
+                "TV S2",
+                "mal",
+                "tv",
+                "img",
+                date(2012, 1, 1),
+                [AnimeRelation("101", "100", "prequel")],
+            ),
+            "300": AnimeNode(
+                "300",
+                "Ambiguous OVA",
+                "mal",
+                "ova",
+                "img",
+                date(2012, 2, 1),
+                [],
+            ),
+        }
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
+
+        payload = service.build("100")
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["specials"]["entries"]],
+            ["300"],
+        )
+        if "ignored" in sections:
+            self.assertNotIn("300", [entry["media_id"] for entry in sections["ignored"]["entries"]])
+
     @patch("app.services.anime_franchise.AnimeFranchiseUiPipeline")
     @patch("app.services.anime_franchise.AnimeFranchiseSnapshotService")
     def test_service_build_calls_snapshot_then_pipeline(

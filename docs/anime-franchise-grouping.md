@@ -7,6 +7,7 @@ This document describes the real grouping pipeline used by the anime details pag
 - Enabled by `ANIME_FRANCHISE_GROUPING_ENABLED`.
 - Applied only when `source=mal` and `media_type=anime` in `media_details`.
 - Grouping output is injected as `anime_franchise` context and rendered by `media_details.html`.
+- Import behavior is out of scope for this document.
 
 ## Pipeline and file map
 
@@ -33,7 +34,7 @@ This document describes the real grouping pipeline used by the anime details pag
 - `direct_anchors`: where direct neighbors are collected.
 - `direct_candidates`: direct normalized relations from anchors.
 - `canonical_root_media_id`: canonical component root.
-- `fallback_anchor_media_id`: seed fallback anchor when no series line exists.
+- `fallback_anchor_media_id`: seed fallback anchor when no TV line exists.
 - `has_series_line`: indicates whether TV continuity exists.
 
 ### Required business details
@@ -50,13 +51,19 @@ This document describes the real grouping pipeline used by the anime details pag
 
 ### Fallback behavior (no `series_line`)
 
-- Series section stays empty.
+- `Series` stays empty.
 - Seed/root becomes fallback anchor for direct candidate collection.
 - No fake series entry is injected.
 
-## UI rules and first-match-wins
+## Series vs secondary sections
 
-Rules are evaluated by ordered packs from `anime_franchise_ui/presets/default.py`:
+- `Series` is fixed and built only from `snapshot.series_line`.
+- Secondary sections are dynamic and assigned by the rule pipeline.
+- `layout.py` remains structural (group/filter/order + metadata propagation), with no business placement rules.
+
+## Rule packs, execution order, and override discipline
+
+Packs are evaluated in order from `anime_franchise_ui/presets/default.py`:
 
 1. `base_facts`
 2. `base_placement`
@@ -65,10 +72,16 @@ Rules are evaluated by ordered packs from `anime_franchise_ui/presets/default.py
 5. `format_rules`
 6. `section_rules`
 
-`ensure_section(...)` is declaration-only (create-if-missing), while explicit
-section mutations are applied via dedicated setters.
+Runtime behavior is **ordered evaluation with allowed overrides**, not first-match-wins:
 
-Current visible sections:
+- `base_placement` assigns the initial fallback section for unclassified candidates.
+- `relation_rules`, `anchor_rules`, and `format_rules` may rewrite `section_key`.
+- `section_rules` updates section metadata only and does not move candidates.
+- The engine records `candidate.metadata["placement_trace"]` whenever `section_key` changes so initial placement and overrides stay auditable.
+
+## Current section policy
+
+Visible sections:
 
 1. `continuity_extras` (Main Story Extras)
 2. `specials`
@@ -76,74 +89,34 @@ Current visible sections:
 
 Internal section:
 
-- `ignored` (not shown in UI)
+- `ignored` (`visible_in_ui=False`)
 
-### Current rule intent
+### Placement intent
 
-- `ignored`: swallows `cm`, `pv`, and relation `other`.
-- `continuity_extras`: direct-only prequel/sequel satellites in non-TV narrative formats.
-- `specials`: direct-only side-story/summary/full-story satellites.
-- `related_series`: direct-only spin-off/parent/alternative/character relations.
+- `base_placement` declares section definitions once and applies fallback placement to `related_series` when no section was set yet.
+- `relation_rules` classifies using relation facts derived from `relation_types` (not only `relation_type`) so ambiguous candidates use richer relation signals.
+- `anchor_rules` keeps only direct/fallback-anchored candidates in visible sections.
+- `format_rules` applies conservative media-format refinements (e.g. `cm/pv` => `ignored`).
+- `section_rules` stabilizes titles/order/hidden policy and never rewrites `section_key`.
 
-## Default values currently applied (UI groups)
+## Adapter and template contract
 
-These are declared by the default UI pipeline rule packs. Section visibility is
-driven by section `metadata["visible_in_ui"]`, propagated through layout and
-consumed by the adapter.
-
-### `series_line` (rendered as **Series**)
-
-- Built from snapshot `series_line` only (TV-only continuity line).
-- Not a rule-driven candidate group.
-- Entries are rendered in snapshot order.
-
-### `ignored` (internal, not rendered)
-
-- `visible_in_ui`: `False` (metadata)
-- receives at least: relation `other`, `cm`, `pv`, and non-direct anchors.
-- `hidden_if_empty`: `True`
-
-### `continuity_extras` (**Main Story Extras**)
-
-- `visible_in_ui`: `True` (metadata)
-- coarse relation placement: `prequel` / `sequel`
-- coarse format filter: excludes `tv`, `cm`, `pv`
-- `hidden_if_empty`: `True`
-
-### `specials`
-
-- `visible_in_ui`: `True` (metadata)
-- coarse relation placement: `side_story`, `summary`, `full_story`
-- coarse format filter: `ona` excluded from `specials`
-- `hidden_if_empty`: `True`
-
-### `related_series`
-
-- `visible_in_ui`: `True` (metadata)
-- coarse relation placement: `spin_off`, `parent_story`, `alternative_setting`,
-  `alternative_version`, `character`
-- `hidden_if_empty`: `True`
-
-## View and template integration
-
-In `media_details`:
-
-- Franchise grouping is gated by MAL + anime + setting.
-- `AnimeFranchiseService().build(media_id)` runs snapshot + UI pipeline.
-- Result entries are enriched with user data.
-- Footer display metadata is added via `anime_franchise_footer.py`.
-- Legacy `media.related.related_anime` is removed to prevent duplicate display.
-
-In `media_details.html`:
-
-- Template renders `Series` and generic section blocks.
-- No grouping logic is implemented in the template.
+- Adapter is a compatibility layer from compiled sections to template payload shape.
+- Section visibility comes from section metadata (`visible_in_ui`).
+- Footer labels/badges are still applied in `anime_franchise_footer.py` during view enrichment.
+- No classification logic is implemented in template/view/layout.
 
 ## Design constraints
 
-- Keep classification in services, not in templates.
-- Keep MAL normalization in provider helper.
-- Keep snapshot as the only canonical franchise domain object.
-- Keep `layout.py` structural only (group/filter/order/metadata propagation).
-- `anime_franchise_ui_profile.py` remains transitional in-repo and is no longer
-  the main UI path.
+- Keep business classification in rule packs.
+- Keep `Series` fixed from `snapshot.series_line`.
+- Keep `layout.py` structural-only.
+- Keep adapter as compatibility-only.
+- Do not reintroduce the deleted legacy UI profile/rules path.
+
+
+## Relation signal fields
+
+- `relation_type`: compatibility facade (single representative value).
+- `relation_types`: richer relation set used by ambiguous placement rules.
+- `metadata["origins"]`: detailed provenance captured by assembler; useful for debugging and future targeted rules, but not currently a primary placement driver.

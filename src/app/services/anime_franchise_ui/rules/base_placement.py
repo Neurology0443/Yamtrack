@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from app.services.anime_franchise_ui.actions import ensure_section, place_in
-from app.services.anime_franchise_ui.predicates import always
+from app.services.anime_franchise_ui.predicates import run_once
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
+
+
+def _no_section(candidate, _context) -> bool:
+    return candidate.section_key is None
+
 
 BasePlacementRules = RulePack(
     key="base_placement",
     rules=(
         Rule(
-            key="declare_core_sections",
-            when=always(),
+            key="declare_sections",
+            when=run_once("sections_declared"),
             actions=(
                 ensure_section(
                     key="ignored",
@@ -44,8 +49,8 @@ BasePlacementRules = RulePack(
             ),
         ),
         Rule(
-            key="default_place_in_related_series",
-            when=always(),
+            key="fallback_related",
+            when=_no_section,
             actions=(place_in("related_series"),),
         ),
     ),
