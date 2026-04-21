@@ -6,7 +6,13 @@ from unittest import TestCase
 
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
-from app.services.anime_franchise_ui.actions import ensure_section, set_section_order, set_section_title
+from app.services.anime_franchise_ui.actions import (
+    ensure_section,
+    set_section_hidden_if_empty,
+    set_section_order,
+    set_section_title,
+)
+from app.services.anime_franchise_ui.adapter import ViewModelAdapter
 from app.services.anime_franchise_ui.assembler import UiCandidateAssembler
 from app.services.anime_franchise_ui.candidates import UiCandidate
 from app.services.anime_franchise_ui.engine import RulePipeline
@@ -25,6 +31,7 @@ from app.services.anime_franchise_ui.predicates import (
     runtime_minutes_lte,
 )
 from app.services.anime_franchise_ui.rule_types import (
+    CompiledSection,
     Rule,
     RuleContext,
     RulePack,
@@ -136,15 +143,35 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
-    def test_pipeline_output_contains_root_display_and_neutral_fallback(self):
+    def test_pipeline_output_contains_root_display_and_expected_sections(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
 
         self.assertEqual(payload.root_media_id, "200")
         self.assertEqual(payload.display_title, "Season 2")
         self.assertEqual(payload.series["key"], "series")
         self.assertEqual(payload.series["title"], "Series")
-        self.assertEqual(payload.sections[0]["key"], "other_entries")
-        self.assertEqual(payload.sections[0]["title"], "Other Entries")
+        section_keys = [section["key"] for section in payload.sections]
+        self.assertIn("specials", section_keys)
+        specials = next(section for section in payload.sections if section["key"] == "specials")
+        self.assertEqual(specials["title"], "Specials")
+        self.assertIn("media_type", payload.series["entries"][0])
+        self.assertIn("anime_media_type", payload.series["entries"][0])
+
+    def test_adapter_output_keeps_footer_and_enrichment_fields(self):
+        payload = AnimeFranchiseUiPipeline().run(self._snapshot())
+        entry = payload.sections[0]["entries"][0]
+
+        self.assertEqual(entry["media_type"], "anime")
+        self.assertIn("anime_media_type", entry)
+        self.assertIn("relation_type", entry)
+        self.assertIn("linked_series_line_media_id", entry)
+        self.assertIn("linked_series_line_index", entry)
+        self.assertIn("is_current", entry)
+
+    def test_ignored_section_is_not_visible_in_ui(self):
+        payload = AnimeFranchiseUiPipeline().run(self._snapshot())
+        ignored = next(section for section in payload.sections if section["key"] == "ignored")
+        self.assertFalse(ignored["visible_in_ui"])
 
     def test_predicates_runtime_episode_and_relation_comparators(self):
         candidate = UiCandidate(
@@ -261,6 +288,58 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(sections[0].key, "undefined_bucket")
         self.assertEqual(sections[0].title, "Undefined Bucket")
 
+    def test_layout_compiler_propagates_section_metadata(self):
+        context = RuleContext(
+            snapshot=self._snapshot(),
+            sections={
+                "meta_section": SectionDefinition(
+                    key="meta_section",
+                    title="Meta",
+                    order=1,
+                    hidden_if_empty=False,
+                    metadata={"visible_in_ui": False, "kind": "internal"},
+                )
+            },
+        )
+        candidate = UiCandidate(
+            media_id="901",
+            title="Meta Entry",
+            image="img",
+            source="mal",
+            media_type="movie",
+            relation_type="other",
+            start_date=None,
+            runtime_minutes=None,
+            episode_count=None,
+            linked_series_line_media_id=None,
+            linked_series_line_index=None,
+            section_key="meta_section",
+        )
+
+        sections = LayoutCompiler().compile(candidates=[candidate], context=context)
+
+        self.assertEqual(sections[0].metadata["visible_in_ui"], False)
+        self.assertEqual(sections[0].metadata["kind"], "internal")
+
+    def test_adapter_reads_visible_in_ui_from_section_metadata(self):
+        payload = ViewModelAdapter().adapt(
+            root_media_id="1",
+            display_title="Root",
+            series_block=SeriesBuilder().build(self._snapshot()),
+            sections=[
+                CompiledSection(
+                    key="ignored",
+                    title="Ignored",
+                    order=10,
+                    hidden_if_empty=True,
+                    metadata={"visible_in_ui": True},
+                    entries=[],
+                )
+            ],
+        )
+
+        self.assertTrue(payload.sections[0]["visible_in_ui"])
+
     def test_section_definition_can_be_refined_after_initial_ensure(self):
         context = RuleContext(snapshot=self._snapshot())
         candidate = UiCandidate(
@@ -285,10 +364,46 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         )(candidate, context)
         set_section_title(key="refine_me", title="Refined Title")(candidate, context)
         set_section_order(key="refine_me", order=50)(candidate, context)
+        set_section_hidden_if_empty(key="refine_me", hidden_if_empty=False)(candidate, context)
 
         definition = context.sections["refine_me"]
         self.assertEqual(definition.title, "Refined Title")
         self.assertEqual(definition.order, 50)
+        self.assertFalse(definition.hidden_if_empty)
+
+    def test_ensure_section_is_create_only_and_does_not_overwrite(self):
+        context = RuleContext(snapshot=self._snapshot())
+        candidate = UiCandidate(
+            media_id="999",
+            title="No Overwrite",
+            image="img",
+            source="mal",
+            media_type="movie",
+            relation_type="other",
+            start_date=None,
+            runtime_minutes=None,
+            episode_count=None,
+            linked_series_line_media_id=None,
+            linked_series_line_index=None,
+        )
+
+        ensure_section(
+            key="create_once",
+            title="First",
+            order=10,
+            hidden_if_empty=True,
+        )(candidate, context)
+        ensure_section(
+            key="create_once",
+            title="Second",
+            order=999,
+            hidden_if_empty=False,
+        )(candidate, context)
+
+        definition = context.sections["create_once"]
+        self.assertEqual(definition.title, "First")
+        self.assertEqual(definition.order, 10)
+        self.assertTrue(definition.hidden_if_empty)
 
     def test_rule_pipeline_rule_can_read_snapshot_from_context(self):
         snapshot = self._snapshot()

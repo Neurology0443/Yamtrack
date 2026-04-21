@@ -9,6 +9,21 @@ from __future__ import annotations
 from .rule_types import RuleContext, SectionDefinition
 
 
+def _get_or_create_section(
+    context: RuleContext,
+    *,
+    key: str,
+    default_title: str | None = None,
+) -> SectionDefinition:
+    return context.sections.setdefault(
+        key,
+        SectionDefinition(
+            key=key,
+            title=default_title or key.replace("_", " ").title(),
+        ),
+    )
+
+
 def ensure_section(
     *,
     key: str,
@@ -18,8 +33,7 @@ def ensure_section(
     metadata: dict[str, object] | None = None,
 ):
     def _action(_candidate, context: RuleContext) -> None:
-        existing = context.sections.get(key)
-        if existing is None:
+        if key not in context.sections:
             context.sections[key] = SectionDefinition(
                 key=key,
                 title=title,
@@ -27,25 +41,16 @@ def ensure_section(
                 hidden_if_empty=hidden_if_empty,
                 metadata=dict(metadata or {}),
             )
-            return
-
-        existing.title = title
-        existing.order = order
-        existing.hidden_if_empty = hidden_if_empty
-        if metadata:
-            existing.metadata.update(metadata)
 
     return _action
 
 
 def set_section_title(*, key: str, title: str):
     def _action(_candidate, context: RuleContext) -> None:
-        definition = context.sections.setdefault(
-            key,
-            SectionDefinition(
-                key=key,
-                title=title,
-            ),
+        definition = _get_or_create_section(
+            context,
+            key=key,
+            default_title=title,
         )
         definition.title = title
 
@@ -54,13 +59,7 @@ def set_section_title(*, key: str, title: str):
 
 def set_section_order(*, key: str, order: int):
     def _action(_candidate, context: RuleContext) -> None:
-        definition = context.sections.setdefault(
-            key,
-            SectionDefinition(
-                key=key,
-                title=key.replace("_", " ").title(),
-            ),
-        )
+        definition = _get_or_create_section(context, key=key)
         definition.order = order
 
     return _action
@@ -68,13 +67,7 @@ def set_section_order(*, key: str, order: int):
 
 def set_section_hidden_if_empty(*, key: str, hidden_if_empty: bool):
     def _action(_candidate, context: RuleContext) -> None:
-        definition = context.sections.setdefault(
-            key,
-            SectionDefinition(
-                key=key,
-                title=key.replace("_", " ").title(),
-            ),
-        )
+        definition = _get_or_create_section(context, key=key)
         definition.hidden_if_empty = hidden_if_empty
 
     return _action

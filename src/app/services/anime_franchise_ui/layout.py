@@ -42,6 +42,7 @@ class LayoutCompiler:
                     title=definition.title,
                     order=definition.order,
                     hidden_if_empty=definition.hidden_if_empty,
+                    metadata=dict(definition.metadata),
                     entries=entries,
                 )
             )

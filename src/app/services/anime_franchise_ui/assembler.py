@@ -48,7 +48,12 @@ class UiCandidateAssembler:
                 source_id for source_id in source_media_ids if source_id not in series_ids
             ]
 
-            linked_series_line_media_id = self._pick_series_anchor(series_line_sources, series_index)
+            linked_series_line_media_id = self._pick_series_anchor(
+                series_line_sources,
+                series_index,
+            )
+            if linked_series_line_media_id is None and not snapshot.has_series_line:
+                linked_series_line_media_id = snapshot.fallback_anchor_media_id
             linked_root_media_id = root_media_id if root_sources else None
 
             candidates.append(
@@ -64,8 +69,8 @@ class UiCandidateAssembler:
                 episode_count=node.episode_count,
                 linked_series_line_media_id=linked_series_line_media_id,
                 linked_series_line_index=(
-                    series_index.get(linked_series_line_media_id)
-                    if linked_series_line_media_id
+                    series_index.get(linked_series_line_media_id, 0)
+                    if linked_series_line_media_id is not None
                     else None
                 ),
                 linked_root_media_id=linked_root_media_id,

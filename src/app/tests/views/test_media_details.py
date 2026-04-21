@@ -148,7 +148,7 @@ class MediaDetailsViewTests(TestCase):
             {
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series_line_entries": [],
+                "series": {"key": "series", "title": "Series", "entries": []},
                 "sections": [],
             },
         )()
@@ -220,7 +220,7 @@ class MediaDetailsViewTests(TestCase):
             {
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series_line_entries": [
+                "series": {"key": "series", "title": "Series", "entries": [
                     {
                         "media_id": "100",
                         "source": "mal",
@@ -245,32 +245,28 @@ class MediaDetailsViewTests(TestCase):
                         "linked_series_line_index": None,
                         "is_current": False,
                     }
-                ],
+                ]},
                 "sections": [
-                    type(
-                        "FranchiseSection",
-                        (),
-                        {
-                            "key": "related_series",
-                            "title": "Related Series",
-                            "entries": [
-                                {
-                                    "media_id": "150",
-                                    "source": "mal",
-                                    "media_type": "anime",
-                                    "anime_media_type": "tv",
-                                    "title": "Spin Off Alpha",
-                                    "image": "http://example.com/spinoff.jpg",
-                                    "relation_type": "spin_off",
-                                    "linked_series_line_media_id": "100",
-                                    "linked_series_line_index": 0,
-                                    "is_current": False,
-                                }
-                            ],
-                            "visible_in_ui": True,
-                            "hidden_if_empty": True,
-                        },
-                    )()
+                    {
+                        "key": "related_series",
+                        "title": "Related Series",
+                        "entries": [
+                            {
+                                "media_id": "150",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "anime_media_type": "tv",
+                                "title": "Spin Off Alpha",
+                                "image": "http://example.com/spinoff.jpg",
+                                "relation_type": "spin_off",
+                                "linked_series_line_media_id": "100",
+                                "linked_series_line_index": 0,
+                                "is_current": False,
+                            }
+                        ],
+                        "visible_in_ui": True,
+                        "hidden_if_empty": True,
+                    }
                 ],
             },
         )()
