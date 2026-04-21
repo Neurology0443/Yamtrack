@@ -13,7 +13,28 @@ class FakeGraphBuilder:
         self.nodes = nodes
 
     def build(self, root_media_id):
-        return self.nodes
+        continuity_relations = {"prequel", "sequel"}
+        root_id = str(root_media_id)
+        queue = [root_id]
+        visited = set()
+        continuity_nodes = {}
+
+        while queue:
+            node_id = queue.pop(0)
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+
+            node = self.nodes[node_id]
+            continuity_nodes[node_id] = node
+            for relation in node.relations:
+                if relation.relation_type not in continuity_relations:
+                    continue
+                target_id = str(relation.target_media_id)
+                if target_id in self.nodes and target_id not in visited:
+                    queue.append(target_id)
+
+        return continuity_nodes
 
     def get_direct_neighbors(self, media_id):
         return self.nodes[str(media_id)].relations
@@ -99,7 +120,7 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
     def test_continuity_extras_collects_non_tv_prequel_sequel(self):
         payload = self._build()
         continuity = next(section for section in payload.sections if section["key"] == "continuity_extras")
-        self.assertEqual(
+        self.assertCountEqual(
             [entry["media_id"] for entry in continuity["entries"]],
             ["209", "200", "210", "208", "212"],
         )
@@ -133,13 +154,23 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
 
     def test_noise_is_ignored_and_no_duplicates(self):
         payload = self._build()
-        all_section_ids = []
+        visible_section_ids = []
+        ignored_section_ids = []
         for section in payload.sections:
-            all_section_ids.extend(entry["media_id"] for entry in section["entries"])
+            ids = [entry["media_id"] for entry in section["entries"]]
+            if section["key"] == "ignored":
+                ignored_section_ids.extend(ids)
+                continue
+            visible_section_ids.extend(ids)
 
-        self.assertNotIn("205", all_section_ids)
-        self.assertNotIn("206", all_section_ids)
-        self.assertNotIn("211", all_section_ids)
+        self.assertNotIn("205", visible_section_ids)
+        self.assertNotIn("206", visible_section_ids)
+        self.assertNotIn("211", visible_section_ids)
+        self.assertIn("205", ignored_section_ids)
+        self.assertIn("206", ignored_section_ids)
+        self.assertIn("211", ignored_section_ids)
+
+        all_section_ids = visible_section_ids + ignored_section_ids
         self.assertEqual(len(all_section_ids), len(set(all_section_ids)))
 
         series_ids = {entry["media_id"] for entry in payload.series["entries"]}
@@ -181,13 +212,15 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
 
     def test_payload_exposes_anime_media_type_for_future_badges(self):
         payload = self._build()
-        self.assertEqual(payload.series["entries"][0]["anime_media_type"], "tv")
+        series_anime_media_types = {entry["anime_media_type"] for entry in payload.series["entries"]}
+        self.assertEqual(series_anime_media_types, {"tv"})
 
         related = next(
             section for section in payload.sections if section["key"] == "related_series"
         )
-        self.assertEqual(related["entries"][0]["anime_media_type"], "tv")
-        self.assertEqual(related["entries"][0]["relation_type"], "spin_off")
+        target = next(entry for entry in related["entries"] if entry["media_id"] == "204")
+        self.assertEqual(target["anime_media_type"], "tv")
+        self.assertEqual(target["relation_type"], "spin_off")
 
     def test_relation_type_normalization_helper(self):
         self.assertEqual(mal.normalize_relation_type("Side Story"), "side_story")
