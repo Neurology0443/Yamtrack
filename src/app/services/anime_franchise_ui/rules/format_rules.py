@@ -1,4 +1,7 @@
-"""Formatting and badge rules placeholder."""
+"""Pack reserved for future display formatting/badge adjustments.
+
+It should only shape presentation metadata, not placement semantics.
+"""
 
 from __future__ import annotations
 

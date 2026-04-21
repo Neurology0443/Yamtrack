@@ -1,4 +1,7 @@
-"""Anchor-focused rules placeholder."""
+"""Pack reserved for future anchor/provenance-aware rule refinements.
+
+It stays intentionally empty until anchoring behavior is specified in detail.
+"""
 
 from __future__ import annotations
 

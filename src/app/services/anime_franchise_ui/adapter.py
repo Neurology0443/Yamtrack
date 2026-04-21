@@ -1,4 +1,7 @@
-"""Adapter from pipeline objects to a template-oriented payload."""
+"""Adapt compiled pipeline output to a template-oriented payload shape.
+
+The adapter is a compatibility layer only: no placement or business logic.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ class AnimeFranchiseUiPayload:
 
 
 class ViewModelAdapter:
-    """Convert compiled model into an integration-friendly dict structure."""
+    """Convert compiled blocks/sections into an integration-friendly dict payload."""
 
     def adapt(
         self,

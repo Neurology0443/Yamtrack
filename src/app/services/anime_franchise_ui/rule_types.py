@@ -1,4 +1,8 @@
-"""Rule and layout datatypes for anime franchise UI pipeline."""
+"""Shared datatypes for the anime franchise UI pipeline.
+
+These types model declarative rules and compiled section data. They intentionally
+avoid business semantics so rule packs can evolve independently.
+"""
 
 from __future__ import annotations
 
