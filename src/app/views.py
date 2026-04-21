@@ -249,38 +249,38 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         and media_type == MediaTypes.ANIME.value
     )
     if is_anime_franchise_enabled:
-        franchise_view_model = AnimeFranchiseService().build(media_id)
+        franchise_payload = AnimeFranchiseService().build(media_id)
         prepared_series_entries = [
             {
                 **entry,
                 "series_label": f"Season {index}",
             }
             for index, entry in enumerate(
-                franchise_view_model.series_line_entries,
+                franchise_payload.series["entries"],
                 start=1,
             )
         ]
         franchise_sections = [
             {
-                "key": section.key,
-                "title": section.title,
+                "key": section["key"],
+                "title": section["title"],
                 "entries": helpers.enrich_items_with_user_data(
                     request,
                     enrich_franchise_entries_for_footer(
-                        section.entries,
+                        section["entries"],
                         media_metadata,
                     ),
-                    section.key,
+                    section["key"],
                 ),
-                "visible_in_ui": section.visible_in_ui,
-                "hidden_if_empty": section.hidden_if_empty,
+                "visible_in_ui": section["visible_in_ui"],
+                "hidden_if_empty": section["hidden_if_empty"],
             }
-            for section in franchise_view_model.sections
+            for section in franchise_payload.sections
         ]
 
         anime_franchise = {
-            "root_media_id": franchise_view_model.root_media_id,
-            "display_title": franchise_view_model.display_title,
+            "root_media_id": franchise_payload.root_media_id,
+            "display_title": franchise_payload.display_title,
             "series": {
                 "key": AnimeFranchiseService.SERIES_LINE_KEY,
                 "title": "Series",

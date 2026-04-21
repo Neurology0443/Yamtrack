@@ -44,11 +44,15 @@ class ViewModelAdapter:
                         "title": entry.title,
                         "image": entry.image,
                         "source": entry.source,
-                        "media_type": entry.media_type,
+                        "media_type": "anime",
+                        "anime_media_type": entry.media_type,
                         "start_date": entry.start_date,
                         "runtime_minutes": entry.runtime_minutes,
                         "episode_count": entry.episode_count,
                         "index": entry.index,
+                        "relation_type": None,
+                        "linked_series_line_media_id": None,
+                        "linked_series_line_index": None,
                         "is_current": entry.is_current,
                     }
                     for entry in series_block.entries
@@ -60,13 +64,15 @@ class ViewModelAdapter:
                     "title": section.title,
                     "order": section.order,
                     "hidden_if_empty": section.hidden_if_empty,
+                    "visible_in_ui": bool(section.metadata.get("visible_in_ui", True)),
                     "entries": [
                         {
                             "media_id": candidate.media_id,
                             "title": candidate.title,
                             "image": candidate.image,
                             "source": candidate.source,
-                            "media_type": candidate.media_type,
+                            "media_type": "anime",
+                            "anime_media_type": candidate.media_type,
                             "relation_type": candidate.relation_type,
                             "start_date": candidate.start_date,
                             "runtime_minutes": candidate.runtime_minutes,

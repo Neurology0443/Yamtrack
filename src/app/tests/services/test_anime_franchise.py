@@ -1,5 +1,6 @@
 # ruff: noqa: D101,D102,D107,ARG002,E501,I001
 from datetime import date
+from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from app.providers import mal
@@ -89,59 +90,59 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         return service.build("101")
 
     def test_series_line_contains_only_tv(self):
-        view_model = self._build()
+        payload = self._build()
         self.assertEqual(
-            [entry["media_id"] for entry in view_model.series_line_entries],
+            [entry["media_id"] for entry in payload.series["entries"]],
             ["100", "101", "102"],
         )
 
     def test_continuity_extras_collects_non_tv_prequel_sequel(self):
-        view_model = self._build()
-        continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
+        payload = self._build()
+        continuity = next(section for section in payload.sections if section["key"] == "continuity_extras")
         self.assertEqual(
-            [entry["media_id"] for entry in continuity.entries],
+            [entry["media_id"] for entry in continuity["entries"]],
             ["209", "200", "210", "208", "212"],
         )
 
     def test_specials_selective_and_excludes_ona(self):
-        view_model = self._build()
-        specials = next(section for section in view_model.sections if section.key == "specials")
-        self.assertEqual([entry["media_id"] for entry in specials.entries], ["201", "202"])
-        self.assertNotIn("203", [entry["media_id"] for entry in specials.entries])
+        payload = self._build()
+        specials = next(section for section in payload.sections if section["key"] == "specials")
+        self.assertEqual([entry["media_id"] for entry in specials["entries"]], ["201", "202"])
+        self.assertNotIn("203", [entry["media_id"] for entry in specials["entries"]])
 
     def test_expected_entries_are_grouped_in_target_sections(self):
-        view_model = self._build()
-        sections = {section.key: section for section in view_model.sections}
+        payload = self._build()
+        sections = {section["key"]: section for section in payload.sections}
 
-        continuity_ids = {entry["media_id"] for entry in sections["continuity_extras"].entries}
+        continuity_ids = {entry["media_id"] for entry in sections["continuity_extras"]["entries"]}
         self.assertIn("200", continuity_ids)  # movie sequel
         self.assertIn("209", continuity_ids)  # ova prequel
         self.assertIn("208", continuity_ids)  # ona sequel
         self.assertIn("210", continuity_ids)  # special sequel
         self.assertIn("212", continuity_ids)  # tv_special sequel
 
-        specials_ids = {entry["media_id"] for entry in sections["specials"].entries}
+        specials_ids = {entry["media_id"] for entry in sections["specials"]["entries"]}
         self.assertIn("201", specials_ids)  # side_story + ova
         self.assertIn("202", specials_ids)  # summary + movie
         self.assertNotIn("203", specials_ids)  # side_story + ona excluded
 
     def test_related_series_direct_only(self):
-        view_model = self._build()
-        related = next(section for section in view_model.sections if section.key == "related_series")
-        self.assertEqual([entry["media_id"] for entry in related.entries], ["204", "207"])
+        payload = self._build()
+        related = next(section for section in payload.sections if section["key"] == "related_series")
+        self.assertEqual([entry["media_id"] for entry in related["entries"]], ["204", "207"])
 
     def test_noise_is_ignored_and_no_duplicates(self):
-        view_model = self._build()
+        payload = self._build()
         all_section_ids = []
-        for section in view_model.sections:
-            all_section_ids.extend(entry["media_id"] for entry in section.entries)
+        for section in payload.sections:
+            all_section_ids.extend(entry["media_id"] for entry in section["entries"])
 
         self.assertNotIn("205", all_section_ids)
         self.assertNotIn("206", all_section_ids)
         self.assertNotIn("211", all_section_ids)
         self.assertEqual(len(all_section_ids), len(set(all_section_ids)))
 
-        series_ids = {entry["media_id"] for entry in view_model.series_line_entries}
+        series_ids = {entry["media_id"] for entry in payload.series["entries"]}
         self.assertFalse(series_ids.intersection(set(all_section_ids)))
 
     def test_no_series_line_fallback_uses_seed_anchor_for_direct_only_rules(self):
@@ -167,26 +168,26 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
             graph_builder=FakeGraphBuilder({"500": movie_root, "501": spin_off}),
         )
 
-        view_model = service.build("500")
-        self.assertEqual(view_model.series_line_entries, [])
-        related = next(section for section in view_model.sections if section.key == "related_series")
-        self.assertEqual([entry["media_id"] for entry in related.entries], ["501"])
-        self.assertEqual(related.entries[0]["linked_series_line_media_id"], "500")
-        self.assertEqual(related.entries[0]["linked_series_line_index"], 0)
+        payload = service.build("500")
+        self.assertEqual(payload.series["entries"], [])
+        related = next(section for section in payload.sections if section["key"] == "related_series")
+        self.assertEqual([entry["media_id"] for entry in related["entries"]], ["501"])
+        self.assertEqual(related["entries"][0]["linked_series_line_media_id"], "500")
+        self.assertEqual(related["entries"][0]["linked_series_line_index"], 0)
         self.assertNotIn(
             "500",
-            [entry["media_id"] for section in view_model.sections for entry in section.entries],
+            [entry["media_id"] for section in payload.sections for entry in section["entries"]],
         )
 
     def test_payload_exposes_anime_media_type_for_future_badges(self):
-        view_model = self._build()
-        self.assertEqual(view_model.series_line_entries[0]["anime_media_type"], "tv")
+        payload = self._build()
+        self.assertEqual(payload.series["entries"][0]["anime_media_type"], "tv")
 
         related = next(
-            section for section in view_model.sections if section.key == "related_series"
+            section for section in payload.sections if section["key"] == "related_series"
         )
-        self.assertEqual(related.entries[0]["anime_media_type"], "tv")
-        self.assertEqual(related.entries[0]["relation_type"], "spin_off")
+        self.assertEqual(related["entries"][0]["anime_media_type"], "tv")
+        self.assertEqual(related["entries"][0]["relation_type"], "spin_off")
 
     def test_relation_type_normalization_helper(self):
         self.assertEqual(mal.normalize_relation_type("Side Story"), "side_story")
@@ -224,7 +225,38 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         }
         service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes))
 
-        view_model = service.build("200")
-        continuity = next(section for section in view_model.sections if section.key == "continuity_extras")
+        payload = service.build("200")
+        continuity = next(section for section in payload.sections if section["key"] == "continuity_extras")
 
-        self.assertIn("300", [entry["media_id"] for entry in continuity.entries])
+        self.assertIn("300", [entry["media_id"] for entry in continuity["entries"]])
+
+    @patch("app.services.anime_franchise.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise.AnimeFranchiseSnapshotService")
+    def test_service_build_calls_snapshot_then_pipeline(
+        self,
+        mock_snapshot_service_cls,
+        mock_pipeline_cls,
+    ):
+        snapshot = object()
+        snapshot_instance = mock_snapshot_service_cls.return_value
+        pipeline_instance = mock_pipeline_cls.return_value
+        snapshot_instance.build.return_value = snapshot
+        pipeline_instance.run.return_value = {"ok": True}
+
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(self.nodes))
+        result = service.build("101", refresh_cache=True)
+
+        self.assertEqual(result, {"ok": True})
+        snapshot_instance.build.assert_called_once_with("101", refresh_cache=True)
+        pipeline_instance.run.assert_called_once_with(snapshot)
+
+    @patch("app.services.anime_franchise.AnimeFranchiseUiPipeline")
+    def test_service_facade_uses_ui_pipeline(self, mock_pipeline_cls):
+        pipeline_instance = mock_pipeline_cls.return_value
+        pipeline_instance.run.return_value = "payload"
+
+        service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(self.nodes))
+        result = service.build("101")
+
+        self.assertEqual(result, "payload")
+        pipeline_instance.run.assert_called_once()

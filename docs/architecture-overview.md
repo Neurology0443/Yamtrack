@@ -27,9 +27,14 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
 ### 3) Projections
 
 - UI projection:
-  - `src/app/services/anime_franchise_rules.py`
-  - `src/app/services/anime_franchise_ui_profile.py`
+  - `src/app/services/anime_franchise_ui/series.py`
+  - `src/app/services/anime_franchise_ui/assembler.py`
+  - `src/app/services/anime_franchise_ui/presets/default.py`
+  - `src/app/services/anime_franchise_ui/engine.py`
+  - `src/app/services/anime_franchise_ui/layout.py`
+  - `src/app/services/anime_franchise_ui/adapter.py`
   - `src/app/services/anime_franchise.py` (facade)
+  - legacy `src/app/services/anime_franchise_ui_profile.py` kept as transition-only (not main path)
 - Import projection:
   - `src/app/services/anime_franchise_import_profiles.py`
   - `src/app/services/anime_franchise_import.py`
@@ -57,7 +62,7 @@ This fork keeps MAL anime franchise logic service-first and shared between UI an
 app/providers/mal.py
    -> app/services/anime_franchise_graph.py
    -> app/services/anime_franchise_snapshot.py
-   -> app/services/anime_franchise_ui_profile.py
+   -> app/services/anime_franchise_ui (pipeline)
    -> app/services/anime_franchise.py
    -> app/views.py (media_details)
    -> templates/app/media_details.html
