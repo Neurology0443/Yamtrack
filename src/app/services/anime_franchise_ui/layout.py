@@ -1,4 +1,8 @@
-"""Compile rule-assigned candidates into ordered secondary sections."""
+"""Compile rule-assigned candidates into ordered secondary sections.
+
+This compiler is structural only: it groups candidates, resolves section
+definitions, and orders the result. Placement decisions stay in rules.
+"""
 
 from __future__ import annotations
 
@@ -25,13 +29,7 @@ class LayoutCompiler:
 
         section_defs = dict(context.sections)
         for section_key in grouped:
-            section_defs.setdefault(
-                section_key,
-                SectionDefinition(
-                    key=section_key,
-                    title=section_key.replace("_", " ").title(),
-                ),
-            )
+            section_defs.setdefault(section_key, self._fallback_section_definition(section_key))
 
         sections: list[CompiledSection] = []
         for key, definition in section_defs.items():
@@ -49,3 +47,11 @@ class LayoutCompiler:
             )
 
         return sorted(sections, key=lambda section: (section.order, section.key))
+
+    @staticmethod
+    def _fallback_section_definition(section_key: str) -> SectionDefinition:
+        """Build default section metadata for keys created by rules without definitions."""
+        return SectionDefinition(
+            key=section_key,
+            title=section_key.replace("_", " ").title(),
+        )

@@ -6,6 +6,7 @@ from unittest import TestCase
 
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
+from app.services.anime_franchise_ui.actions import ensure_section, set_section_order, set_section_title
 from app.services.anime_franchise_ui.assembler import UiCandidateAssembler
 from app.services.anime_franchise_ui.candidates import UiCandidate
 from app.services.anime_franchise_ui.engine import RulePipeline
@@ -80,6 +81,60 @@ class AnimeFranchiseUiPipelineTests(TestCase):
 
         self.assertEqual({candidate.media_id for candidate in candidates}, {"300", "400"})
         self.assertEqual(len(candidates), 2)
+
+    def test_candidate_assembler_preserves_multi_origin_signals_for_same_media(self):
+        snapshot = self._snapshot()
+        candidates = UiCandidateAssembler().build(snapshot)
+        movie_candidate = next(candidate for candidate in candidates if candidate.media_id == "300")
+
+        self.assertEqual(movie_candidate.relation_type, "side_story")
+        self.assertEqual(movie_candidate.relation_types, ["side_story", "spin_off"])
+        self.assertEqual(movie_candidate.source_media_ids, ["200"])
+        self.assertTrue(movie_candidate.has_series_line_origin)
+        self.assertTrue(movie_candidate.has_root_origin)
+        self.assertFalse(movie_candidate.has_non_series_origin)
+        self.assertEqual(movie_candidate.linked_series_line_media_id, "200")
+        self.assertEqual(movie_candidate.linked_root_media_id, "200")
+        self.assertEqual(
+            movie_candidate.metadata["origins"],
+            [
+                {
+                    "source_media_id": "200",
+                    "relation_type": "side_story",
+                    "is_from_series_line": True,
+                    "is_from_root_node": True,
+                },
+                {
+                    "source_media_id": "200",
+                    "relation_type": "spin_off",
+                    "is_from_series_line": True,
+                    "is_from_root_node": True,
+                },
+            ],
+        )
+
+    def test_candidate_assembler_keeps_non_series_anchor_information(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [AnimeRelation("999", "300", "other")]
+
+        candidates = UiCandidateAssembler().build(snapshot)
+        candidate = candidates[0]
+
+        self.assertIsNone(candidate.linked_series_line_media_id)
+        self.assertIsNone(candidate.linked_root_media_id)
+        self.assertTrue(candidate.has_non_series_origin)
+        self.assertEqual(candidate.source_media_ids, ["999"])
+        self.assertEqual(
+            candidate.metadata["origins"],
+            [
+                {
+                    "source_media_id": "999",
+                    "relation_type": "other",
+                    "is_from_series_line": False,
+                    "is_from_root_node": False,
+                }
+            ],
+        )
 
     def test_pipeline_output_contains_root_display_and_neutral_fallback(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
@@ -180,6 +235,60 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual([entry.media_id for entry in sections[0].entries], ["302"])
         self.assertEqual([entry.media_id for entry in sections[1].entries], ["301"])
         self.assertNotIn("empty_hidden", [section.key for section in sections])
+
+    def test_layout_compiler_uses_explicit_fallback_definition_for_undefined_key(self):
+        context = RuleContext(snapshot=self._snapshot())
+        candidates = [
+            UiCandidate(
+                media_id="777",
+                title="Undefined Section Entry",
+                image="img",
+                source="mal",
+                media_type="movie",
+                relation_type="other",
+                start_date=None,
+                runtime_minutes=None,
+                episode_count=None,
+                linked_series_line_media_id=None,
+                linked_series_line_index=None,
+                section_key="undefined_bucket",
+            )
+        ]
+
+        sections = LayoutCompiler().compile(candidates=candidates, context=context)
+
+        self.assertEqual(len(sections), 1)
+        self.assertEqual(sections[0].key, "undefined_bucket")
+        self.assertEqual(sections[0].title, "Undefined Bucket")
+
+    def test_section_definition_can_be_refined_after_initial_ensure(self):
+        context = RuleContext(snapshot=self._snapshot())
+        candidate = UiCandidate(
+            media_id="888",
+            title="Section Refinement Target",
+            image="img",
+            source="mal",
+            media_type="movie",
+            relation_type="other",
+            start_date=None,
+            runtime_minutes=None,
+            episode_count=None,
+            linked_series_line_media_id=None,
+            linked_series_line_index=None,
+        )
+
+        ensure_section(
+            key="refine_me",
+            title="Initial Title",
+            order=300,
+            hidden_if_empty=True,
+        )(candidate, context)
+        set_section_title(key="refine_me", title="Refined Title")(candidate, context)
+        set_section_order(key="refine_me", order=50)(candidate, context)
+
+        definition = context.sections["refine_me"]
+        self.assertEqual(definition.title, "Refined Title")
+        self.assertEqual(definition.order, 50)
 
     def test_rule_pipeline_rule_can_read_snapshot_from_context(self):
         snapshot = self._snapshot()

@@ -1,4 +1,9 @@
-"""Step-1 declarative UI pipeline scaffold for anime franchise grouping."""
+"""Public entrypoint for the anime franchise UI pipeline scaffold.
+
+Pipeline contract:
+Snapshot -> SeriesBuilder -> UiCandidateAssembler -> RulePipeline
+-> LayoutCompiler -> ViewModelAdapter.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +22,7 @@ if TYPE_CHECKING:
 
 
 class AnimeFranchiseUiPipeline:
-    """Minimal executable pipeline for fixed Series + dynamic secondary sections."""
+    """Execute fixed-Series + dynamic-secondary pipeline without import coupling."""
 
     def __init__(self, *, preset: tuple[RulePack, ...] = DefaultUiPreset):
         self.series_builder = SeriesBuilder()

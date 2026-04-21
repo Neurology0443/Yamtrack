@@ -1,4 +1,7 @@
-"""Section post-processing rules placeholder."""
+"""Pack reserved for future section-level refinements after placement.
+
+No section business policy is enforced in this scaffold step.
+"""
 
 from __future__ import annotations
 

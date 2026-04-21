@@ -1,7 +1,7 @@
-"""Base facts rules.
+"""Pack reserved for future candidate fact-enrichment.
 
-Intentionally minimal for step 1: this pack is the extension point where
-future fact-derivation rules can enrich candidate metadata.
+This stage may later normalize cross-candidate signals, but it intentionally
+contains no business logic in the current step.
 """
 
 from __future__ import annotations
