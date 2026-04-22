@@ -4,7 +4,7 @@ from .anchor_rules import AnchorRules
 from .base_facts import BaseFactsRules
 from .base_placement import BasePlacementRules
 from .format_rules import FormatRules
-from .related_refinement_rules import RelatedRefinementRules
+from .secondary_refinement_rules import SecondaryRefinementRules
 from .relation_rules import RelationRules
 from .section_rules import SectionRules
 
@@ -13,7 +13,7 @@ __all__ = [
     "BaseFactsRules",
     "BasePlacementRules",
     "FormatRules",
-    "RelatedRefinementRules",
+    "SecondaryRefinementRules",
     "RelationRules",
     "SectionRules",
 ]

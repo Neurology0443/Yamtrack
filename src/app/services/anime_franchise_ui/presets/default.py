@@ -8,7 +8,7 @@ from app.services.anime_franchise_ui.rules import (
     BaseFactsRules,
     BasePlacementRules,
     FormatRules,
-    RelatedRefinementRules,
+    SecondaryRefinementRules,
     RelationRules,
     SectionRules,
 )
@@ -17,7 +17,7 @@ DefaultUiPreset: tuple[RulePack, ...] = (
     BaseFactsRules,
     BasePlacementRules,
     RelationRules,
-    RelatedRefinementRules,
+    SecondaryRefinementRules,
     AnchorRules,
     FormatRules,
     SectionRules,
