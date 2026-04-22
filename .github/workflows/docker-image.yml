@@ -28,7 +28,7 @@ jobs:
       - name: Get version from git
         id: get-version
         run: |
-          VERSION=$(git describe --tags 2>/dev/null || echo "dev")
+          VERSION=$(git describe --tags 2>/dev/null || echo "main")
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Using version: $VERSION"
 
