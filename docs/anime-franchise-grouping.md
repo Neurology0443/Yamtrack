@@ -1,69 +1,66 @@
-# Anime Franchise Grouping (MAL anime)
+# Anime Franchise Grouping (MAL anime) — Reference
 
-This document describes the real grouping pipeline used by the anime details page.
+This is the reference document for the **current** MAL anime franchise UI grouping path.
 
-## Functional scope
+It describes what is executed today, how placement is decided, and where compatibility layers still exist.
 
-- Enabled by `ANIME_FRANCHISE_GROUPING_ENABLED`.
-- Applied only when `source=mal` and `media_type=anime` in `media_details`.
-- Grouping output is injected as `anime_franchise` context and rendered by `media_details.html`.
-- Import behavior is out of scope for this document.
+## 1) Functional scope
 
-## Pipeline and file map
+- Feature-gated by `ANIME_FRANCHISE_GROUPING_ENABLED`.
+- Applied in `media_details` only for `source=mal` and `media_type=anime`.
+- Produces `anime_franchise` context consumed by `templates/app/media_details.html`.
+- Import projection is intentionally out of scope for this document.
 
-1. **MAL provider data** (`app/providers/mal.py`).
-2. **Graph normalization** (`app/services/anime_franchise_graph.py`).
-3. **Canonical snapshot** (`app/services/anime_franchise_snapshot.py`).
-4. **UI pipeline projection**
-   - `app/services/anime_franchise_ui/series.py`
-   - `app/services/anime_franchise_ui/assembler.py`
-   - `app/services/anime_franchise_ui/presets/default.py`
-   - `app/services/anime_franchise_ui/engine.py`
-   - `app/services/anime_franchise_ui/layout.py`
-   - `app/services/anime_franchise_ui/adapter.py`
-5. **Facade service** (`app/services/anime_franchise.py`).
-6. **View integration** (`app/views.py`).
-7. **Rendering** (`templates/app/media_details.html`).
+## 2) Principal runtime path (today)
 
-## Snapshot semantics
+1. `AnimeFranchiseService` (`src/app/services/anime_franchise.py`)
+2. `AnimeFranchiseUiPipeline` (`src/app/services/anime_franchise_ui/__init__.py`)
+3. `SeriesBuilder`
+4. `UiCandidateAssembler`
+5. `RulePipeline`
+6. `LayoutCompiler`
+7. `ViewModelAdapter`
+8. `views.py` integration + enrichment (`anime_franchise` reconstruction)
+9. `anime_franchise_footer.py` footer labels/badges
+10. `templates/app/media_details.html` presentation
 
-`AnimeFranchiseSnapshot` defines the canonical franchise state:
+## 3) Snapshot semantics (canonical input)
 
-- `continuity_component`: transitive component connected by `prequel/sequel`.
-- `series_line`: TV-only ordered line derived from continuity.
-- `direct_anchors`: where direct neighbors are collected.
-- `direct_candidates`: direct normalized relations from anchors.
-- `canonical_root_media_id`: canonical component root.
-- `fallback_anchor_media_id`: seed fallback anchor when no TV line exists.
-- `has_series_line`: indicates whether TV continuity exists.
+`AnimeFranchiseSnapshot` (from `anime_franchise_snapshot.py`) is the canonical franchise state used by UI and import projections.
 
-### Required business details
+Current fields and meaning:
 
-- `series_line` is **TV-only**.
-- `continuity_component` is **transitive prequel/sequel**.
-- `direct_anchors` are:
-  - full `series_line` (plus root if not in line), or
-  - only root when no `series_line`.
-- `direct_candidates` come from direct relations of anchors.
-- `canonical_root_media_id`:
-  - first `series_line` entry when available,
-  - otherwise earliest continuity node by date/id ordering.
+- `continuity_component`: transitive node set connected by continuity relations (prequel/sequel).
+- `series_line`: TV-only continuity line (ordered).
+- `direct_anchors`: anchors used for direct-neighbor harvesting.
+- `direct_candidates`: direct normalized relations collected from anchors.
+- `canonical_root_media_id`: stable root ID for the continuity component.
+- `fallback_anchor_media_id`: fallback direct anchor when there is no `series_line`.
+- `has_series_line`: convenience flag for TV continuity availability.
 
-### Fallback behavior (no `series_line`)
+### Current fallback behavior when `has_series_line` is false
 
-- `Series` stays empty.
-- Seed/root becomes fallback anchor for direct candidate collection.
-- No fake series entry is injected.
+- `Series` remains empty.
+- Direct-candidate collection still runs from fallback/root anchor.
+- No synthetic/fake series row is injected.
 
-## Series vs secondary sections
+## 4) Fixed `Series` vs dynamic secondary sections
 
-- `Series` is fixed and built only from `snapshot.series_line`.
-- Secondary sections are dynamic and assigned by the rule pipeline.
-- `layout.py` remains structural (group/filter/order + metadata propagation), with no business placement rules.
+### Fixed `Series` block (principal contract)
 
-## Rule packs, execution order, and override discipline
+- Built only by `SeriesBuilder` from `snapshot.series_line`.
+- Not produced by section rule packs.
+- Not treated as a dynamic section.
 
-Packs are evaluated in order from `anime_franchise_ui/presets/default.py`:
+### Dynamic secondary sections
+
+- Candidates come from `UiCandidateAssembler`.
+- Placement/refinement occurs in ordered rule packs.
+- Final grouping/ordering is compiled by `LayoutCompiler`.
+
+## 5) Rule pack order and actual engine behavior
+
+Preset order (`anime_franchise_ui/presets/default.py`):
 
 1. `base_facts`
 2. `base_placement`
@@ -72,51 +69,97 @@ Packs are evaluated in order from `anime_franchise_ui/presets/default.py`:
 5. `format_rules`
 6. `section_rules`
 
-Runtime behavior is **ordered evaluation with allowed overrides**, not first-match-wins:
+### Behavior model (current, accurate)
 
-- `base_placement` assigns the initial fallback section for unclassified candidates.
-- `relation_rules`, `anchor_rules`, and `format_rules` may rewrite `section_key`.
-- `section_rules` updates section metadata only and does not move candidates.
-- The engine records `candidate.metadata["placement_trace"]` whenever `section_key` changes so initial placement and overrides stay auditable.
+- Packs run in order.
+- `base_placement` provides initial section hypothesis.
+- Later packs may override `candidate.section_key`.
+- `section_rules` is metadata-only (title/order/hidden policy), no candidate placement actions.
+- The engine appends `metadata["placement_trace"]` whenever `section_key` changes.
 
-## Current section policy
+This is **not** a global “first-match-wins” engine.
 
-Visible sections:
+## 6) Responsibilities by layer (clear boundaries)
 
-1. `continuity_extras` (Main Story Extras)
-2. `specials`
-3. `related_series`
+### Business placement logic (principal)
 
-Internal section:
+- `anime_franchise_ui/rules/*.py`
+
+### Structural-only
+
+- `anime_franchise_ui/layout.py`
+- Groups by section key, applies section definitions, ordering, hidden-if-empty.
+- Does not replay relation/anchor/format business policy.
+
+### Compatibility layer
+
+- `anime_franchise_ui/adapter.py`
+- Adapts compiled output to integration payload shape.
+- No placement logic.
+
+### Integration + presentation enrichment
+
+- `app/views.py`
+- `app/anime_franchise_footer.py`
+
+Current view-side enrichment includes:
+
+- rebuilding `anime_franchise` block for template contract,
+- adding `series_label` (`Season N`) for series entries,
+- applying footer-friendly relation/format labels and active-state markers.
+
+### Template role
+
+- `templates/app/media_details.html` consumes prepared context.
+- Presentation/display logic only (loops/visibility checks), not classification logic.
+
+## 7) Relation signal fields (`relation_type`, `relation_types`, `metadata["origins"]`)
+
+Current intent and practical use:
+
+- `relation_type`: compatibility facade (single representative relation value).
+- `relation_types`: richer multi-signal relation set (primary for ambiguous grouping cases).
+- `metadata["origins"]`: detailed provenance from assembler.
+
+Important nuance:
+
+- `origins` is useful for debugging and targeted heuristics.
+- It is not yet a broad standalone placement driver across the whole policy.
+
+## 8) Section policy (current maturity)
+
+Visible sections currently configured:
+
+- `continuity_extras` (Main Story Extras)
+- `specials`
+- `related_series`
+
+Internal compatibility/filtered section:
 
 - `ignored` (`visible_in_ui=False`)
 
-### Placement intent
+Current policy is intentionally conservative and maintainable:
 
-- `base_placement` declares section definitions once and applies fallback placement to `related_series` when no section was set yet.
-- `relation_rules` classifies using relation facts derived from `relation_types` (not only `relation_type`) so ambiguous candidates use richer relation signals.
-- `anchor_rules` keeps only direct/fallback-anchored candidates in visible sections.
-- `format_rules` applies conservative media-format refinements (e.g. `cm/pv` => `ignored`).
-- `section_rules` stabilizes titles/order/hidden policy and never rewrites `section_key`.
+- coarse relation-driven placement,
+- anchor filtering for direct/fallback relevance,
+- conservative format exclusions,
+- section metadata stabilization pass.
 
-## Adapter and template contract
+This is a solid base, but not presented as “fully refined for every MAL edge case”.
 
-- Adapter is a compatibility layer from compiled sections to template payload shape.
-- Section visibility comes from section metadata (`visible_in_ui`).
-- Footer labels/badges are still applied in `anime_franchise_footer.py` during view enrichment.
-- No classification logic is implemented in template/view/layout.
+## 9) What is principal vs compatibility vs transitional
 
-## Design constraints
+- **Principal / active path**: service + modern UI pipeline + rules.
+- **Structural-only**: `layout.py`.
+- **Compatibility layer**: `adapter.py` payload-shape bridge.
+- **Integration/presentation compatibility**: view reconstruction + footer enrichment.
+- **Transitional/legacy**: older UI grouping mental models are not the main execution path.
 
-- Keep business classification in rule packs.
-- Keep `Series` fixed from `snapshot.series_line`.
-- Keep `layout.py` structural-only.
-- Keep adapter as compatibility-only.
-- Do not reintroduce the deleted legacy UI profile/rules path.
+## 10) Change discipline
 
+When changing grouping behavior:
 
-## Relation signal fields
-
-- `relation_type`: compatibility facade (single representative value).
-- `relation_types`: richer relation set used by ambiguous placement rules.
-- `metadata["origins"]`: detailed provenance captured by assembler; useful for debugging and future targeted rules, but not currently a primary placement driver.
+1. Change rule packs first (facts / placement / relation / anchor / format / section metadata).
+2. Keep `Series` sourced only from `snapshot.series_line`.
+3. Avoid adding business placement logic to layout/adapter/template.
+4. Update debugging/customization docs and tests with the behavior change.
