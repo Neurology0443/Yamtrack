@@ -69,7 +69,7 @@ Preset order (`anime_franchise_ui/presets/default.py`):
 1. `base_facts`
 2. `base_placement`
 3. `relation_rules`
-4. `related_refinement_rules`
+4. `secondary_refinement_rules`
 5. `anchor_rules`
 6. `format_rules`
 7. `section_rules`
@@ -78,7 +78,7 @@ Preset order (`anime_franchise_ui/presets/default.py`):
 
 - Packs run in order.
 - `base_placement` provides initial section hypothesis.
-- `related_refinement_rules` refines `related_series` into targeted sections (`spin_offs`, `alternatives`) after coarse relation placement.
+- `secondary_refinement_rules` refines coarse secondary placement after `relation_rules`: it can reclassify TV side stories and very short side stories from `specials` to `related_series`, then refine `related_series` into `alternatives` and `spin_offs` before format filtering.
 - Section ordering intent keeps `spin_offs` first, then `alternatives`, then residual `related_series`.
 - Later packs may override `candidate.section_key`.
 - `section_rules` is metadata-only (title/order/hidden policy), no candidate placement actions.
