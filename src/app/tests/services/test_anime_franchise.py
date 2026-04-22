@@ -125,6 +125,220 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
             ["209", "200", "210", "208", "212"],
         )
 
+    def test_continuity_extras_promotes_transitive_movie_chain_from_series_root(self):
+        nodes = {
+            "100": AnimeNode("100", "Season 1", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("100", "101", "sequel")]),
+            "101": AnimeNode(
+                "101",
+                "Season 2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Movie 1",
+                "mal",
+                "movie",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("200", "101", "prequel"), AnimeRelation("200", "201", "sequel")],
+            ),
+            "201": AnimeNode(
+                "201",
+                "Movie 2",
+                "mal",
+                "movie",
+                "img",
+                date(2023, 1, 1),
+                [AnimeRelation("201", "200", "prequel"), AnimeRelation("201", "202", "sequel")],
+            ),
+            "202": AnimeNode("202", "Movie 3", "mal", "movie", "img", date(2024, 1, 1), [AnimeRelation("202", "201", "prequel")]),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("101")
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual([entry["media_id"] for entry in payload.series["entries"]], ["100", "101"])
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
+            ["200", "201", "202"],
+        )
+        continuity_entries = {
+            entry["media_id"]: entry
+            for entry in sections["continuity_extras"]["entries"]
+        }
+        self.assertEqual(continuity_entries["201"]["linked_series_line_media_id"], "101")
+        self.assertEqual(continuity_entries["202"]["linked_series_line_media_id"], "101")
+        self.assertEqual(continuity_entries["201"]["linked_series_line_index"], 1)
+        self.assertEqual(continuity_entries["202"]["linked_series_line_index"], 1)
+        all_section_ids = [
+            entry["media_id"]
+            for section in payload.sections
+            for entry in section["entries"]
+        ]
+        self.assertEqual(len(all_section_ids), len(set(all_section_ids)))
+        self.assertFalse(
+            {"200", "201", "202"}.intersection(
+                {entry["media_id"] for entry in payload.series["entries"]}
+            )
+        )
+
+    def test_promoted_target_prefers_earliest_series_anchor_before_shorter_depth(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Season 1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("100", "101", "sequel"), AnimeRelation("100", "200", "sequel")],
+            ),
+            "101": AnimeNode(
+                "101",
+                "Season 2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "102", "sequel")],
+            ),
+            "102": AnimeNode(
+                "102",
+                "Season 3",
+                "mal",
+                "tv",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("102", "101", "prequel"), AnimeRelation("102", "300", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Movie A",
+                "mal",
+                "movie",
+                "img",
+                date(2022, 6, 1),
+                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+            ),
+            "300": AnimeNode(
+                "300",
+                "Movie B",
+                "mal",
+                "movie",
+                "img",
+                date(2023, 1, 1),
+                [AnimeRelation("300", "200", "prequel"), AnimeRelation("300", "102", "prequel")],
+            ),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("102")
+        sections = {section["key"]: section for section in payload.sections}
+        continuity_entries = {
+            entry["media_id"]: entry
+            for entry in sections["continuity_extras"]["entries"]
+        }
+
+        self.assertEqual(continuity_entries["300"]["linked_series_line_media_id"], "100")
+        self.assertEqual(continuity_entries["300"]["linked_series_line_index"], 0)
+
+    def test_specials_do_not_become_transitive_when_promoted_continuity_exists(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Season 1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("100", "101", "sequel"), AnimeRelation("100", "400", "side_story")],
+            ),
+            "101": AnimeNode(
+                "101",
+                "Season 2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Movie 1",
+                "mal",
+                "movie",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("200", "201", "sequel"), AnimeRelation("200", "101", "prequel")],
+            ),
+            "201": AnimeNode("201", "Movie 2", "mal", "movie", "img", date(2023, 1, 1), [AnimeRelation("201", "200", "prequel")]),
+            "400": AnimeNode(
+                "400",
+                "OVA 1",
+                "mal",
+                "ova",
+                "img",
+                date(2021, 6, 1),
+                [AnimeRelation("400", "401", "side_story"), AnimeRelation("400", "100", "parent_story")],
+            ),
+            "401": AnimeNode("401", "OVA 2", "mal", "ova", "img", date(2021, 7, 1), []),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("101")
+        sections = {section["key"]: section for section in payload.sections}
+        specials_ids = [entry["media_id"] for entry in sections["specials"]["entries"]]
+
+        self.assertIn("400", specials_ids)
+        self.assertNotIn("401", specials_ids)
+
+    def test_related_series_do_not_become_transitive_when_promoted_continuity_exists(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Season 1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("100", "101", "sequel"), AnimeRelation("100", "500", "spin_off")],
+            ),
+            "101": AnimeNode(
+                "101",
+                "Season 2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Movie 1",
+                "mal",
+                "movie",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("200", "101", "prequel"), AnimeRelation("200", "201", "sequel")],
+            ),
+            "201": AnimeNode("201", "Movie 2", "mal", "movie", "img", date(2023, 1, 1), [AnimeRelation("201", "200", "prequel")]),
+            "500": AnimeNode(
+                "500",
+                "Related A",
+                "mal",
+                "movie",
+                "img",
+                date(2021, 6, 1),
+                [AnimeRelation("500", "501", "spin_off")],
+            ),
+            "501": AnimeNode("501", "Related B", "mal", "movie", "img", date(2021, 7, 1), []),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("101")
+        sections = {section["key"]: section for section in payload.sections}
+        related_ids = [entry["media_id"] for entry in sections["related_series"]["entries"]]
+
+        self.assertIn("500", related_ids)
+        self.assertNotIn("501", related_ids)
+
     def test_specials_selective_and_excludes_ona(self):
         payload = self._build()
         specials = next(section for section in payload.sections if section["key"] == "specials")

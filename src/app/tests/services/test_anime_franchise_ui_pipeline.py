@@ -69,6 +69,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             series_line=[series_1, series_2],
             direct_anchors=[series_1, series_2],
             direct_candidates=direct_candidates,
+            promoted_continuity_candidates=[],
             has_series_line=True,
             fallback_anchor_media_id="200",
             canonical_root_media_id="100",
