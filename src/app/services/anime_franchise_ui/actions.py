@@ -6,6 +6,8 @@ delegate all business decisions to rule predicates and rule ordering.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .rule_types import RuleContext, SectionDefinition
 
 
@@ -91,5 +93,12 @@ def add_badge(label: str):
     def _action(candidate, _context: RuleContext) -> None:
         if label not in candidate.badges:
             candidate.badges.append(label)
+
+    return _action
+
+
+def set_candidate_metadata(key: str, value: Any):
+    def _action(candidate, _context: RuleContext) -> None:
+        candidate.metadata[key] = value
 
     return _action
