@@ -33,7 +33,6 @@ def _is_long_tv_spin_off_related(candidate, context) -> bool:
         and "spin_off" in candidate.relation_types
         and candidate.media_type == "tv"
         and candidate.runtime_minutes is not None
-        and candidate.runtime_minutes > 40
     )
 
 
