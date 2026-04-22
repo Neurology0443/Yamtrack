@@ -34,6 +34,7 @@ Current fields and meaning:
 - `series_line`: TV-only continuity line (ordered).
 - `direct_anchors`: anchors used for direct-neighbor harvesting.
 - `direct_candidates`: direct normalized relations collected from anchors.
+- `promoted_continuity_candidates`: UI-only continuity projection that extends direct non-TV continuity seeds transitively for `Main Story Extras`.
 - `canonical_root_media_id`: stable root ID for the continuity component.
 - `fallback_anchor_media_id`: fallback direct anchor when there is no `series_line`.
 - `has_series_line`: convenience flag for TV continuity availability.
@@ -55,6 +56,8 @@ Current fields and meaning:
 ### Dynamic secondary sections
 
 - Candidates come from `UiCandidateAssembler`.
+- `continuity_extras` can use both direct candidates and promoted transitive non-TV continuity candidates.
+- Promoted continuity anchoring exception is intentionally scoped to candidates already classified as `continuity_extras`.
 - Placement/refinement occurs in ordered rule packs.
 - Final grouping/ordering is compiled by `LayoutCompiler`.
 

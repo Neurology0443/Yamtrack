@@ -41,6 +41,7 @@ Default profile values:
 ### `satellites`
 
 - Direct-only satellites from `direct_candidates`.
+- Does **not** consume `promoted_continuity_candidates` (UI-only projection).
 - Eligible relations: `spin_off`, `alternative_version`, `side_story`, `parent_story`.
 - Excludes `cm` and `pv`.
 - Applies runtime/episode heuristics:
@@ -61,6 +62,7 @@ Default profile values:
 ### `complete`
 
 - Union of `continuity` and `satellites` selections.
+- Continues to inherit `satellites` direct-only behavior from `direct_candidates` only.
 
 Default profile values:
 

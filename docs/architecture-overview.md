@@ -41,6 +41,7 @@ Responsibilities:
 - `series_line`
 - `direct_anchors`
 - `direct_candidates`
+- `promoted_continuity_candidates` (UI-only promoted transitive non-TV continuity projection)
 - `canonical_root_media_id`
 - `fallback_anchor_media_id`
 - `has_series_line`

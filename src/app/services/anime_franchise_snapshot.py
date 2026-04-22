@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -22,6 +23,7 @@ class AnimeFranchiseSnapshot:
     has_series_line: bool
     fallback_anchor_media_id: str
     canonical_root_media_id: str
+    promoted_continuity_candidates: list[AnimeRelation] = field(default_factory=list)
 
 
 class AnimeFranchiseSnapshotService:
@@ -72,6 +74,12 @@ class AnimeFranchiseSnapshotService:
                     relation.target_media_id
                 )
 
+        promoted_continuity_candidates = self._derive_promoted_continuity_candidates(
+            series_line=series_line,
+            nodes_by_media_id=nodes_by_media_id,
+            direct_candidates=direct_candidates,
+        )
+
         all_relations = [
             relation
             for node in nodes_by_media_id.values()
@@ -86,10 +94,92 @@ class AnimeFranchiseSnapshotService:
             series_line=series_line,
             direct_anchors=direct_anchors,
             direct_candidates=direct_candidates,
+            promoted_continuity_candidates=promoted_continuity_candidates,
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
         )
+
+    def _derive_promoted_continuity_candidates(
+        self,
+        *,
+        series_line: list[AnimeNode],
+        nodes_by_media_id: dict[str, AnimeNode],
+        direct_candidates: list[AnimeRelation],
+    ) -> list[AnimeRelation]:
+        if not series_line:
+            return []
+
+        series_line_ids = {node.media_id for node in series_line}
+        promoted: list[AnimeRelation] = []
+        seen_relations: set[tuple[str, str, str]] = set()
+        queue = deque()
+        visited_nodes: set[str] = set()
+
+        for relation in direct_candidates:
+            if relation.source_media_id not in series_line_ids:
+                continue
+            if not self._is_non_tv_continuity_relation(
+                relation,
+                series_line_ids=series_line_ids,
+                nodes_by_media_id=nodes_by_media_id,
+            ):
+                continue
+
+            relation_key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if relation_key not in seen_relations:
+                seen_relations.add(relation_key)
+                promoted.append(relation)
+
+            if relation.target_media_id not in visited_nodes:
+                visited_nodes.add(relation.target_media_id)
+                queue.append(relation.target_media_id)
+
+        while queue:
+            current_media_id = queue.popleft()
+            for relation in self.graph_builder.get_direct_neighbors(current_media_id):
+                if not self._is_non_tv_continuity_relation(
+                    relation,
+                    series_line_ids=series_line_ids,
+                    nodes_by_media_id=nodes_by_media_id,
+                ):
+                    continue
+
+                relation_key = (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                if relation_key not in seen_relations:
+                    seen_relations.add(relation_key)
+                    promoted.append(relation)
+
+                if relation.target_media_id not in visited_nodes:
+                    visited_nodes.add(relation.target_media_id)
+                    queue.append(relation.target_media_id)
+
+        return promoted
+
+    def _is_non_tv_continuity_relation(
+        self,
+        relation: AnimeRelation,
+        *,
+        series_line_ids: set[str],
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> bool:
+        if relation.relation_type not in {"prequel", "sequel"}:
+            return False
+        if relation.target_media_id in series_line_ids:
+            return False
+        target_node = nodes_by_media_id.get(relation.target_media_id)
+        if target_node is None:
+            target_node = self.graph_builder.ensure_node(relation.target_media_id)
+            nodes_by_media_id[relation.target_media_id] = target_node
+        return target_node.media_type != "tv"
 
     def _derive_series_line(self, graph: dict[str, AnimeNode]) -> list[AnimeNode]:
         tv_nodes = {
