@@ -1,0 +1,62 @@
+"""Refine coarse `related_series` placement after `relation_rules` classification."""
+
+from __future__ import annotations
+
+from app.services.anime_franchise_ui.actions import place_in, set_candidate_metadata
+from app.services.anime_franchise_ui.rule_types import Rule, RulePack
+
+
+def _is_related_series_candidate(candidate, _context) -> bool:
+    return candidate.section_key == "related_series"
+
+
+def _is_long_tv_spin_off_related(candidate, context) -> bool:
+    return (
+        _is_related_series_candidate(candidate, context)
+        and "spin_off" in candidate.relation_types
+        and candidate.media_type == "tv"
+        and candidate.runtime_minutes is not None
+        and candidate.runtime_minutes > 40
+    )
+
+
+def _is_alternative_version_related(candidate, context) -> bool:
+    return (
+        _is_related_series_candidate(candidate, context)
+        and "alternative_version" in candidate.relation_types
+    )
+
+
+def _is_alternative_setting_related(candidate, context) -> bool:
+    return (
+        _is_related_series_candidate(candidate, context)
+        and "alternative_setting" in candidate.relation_types
+    )
+
+
+RelatedRefinementRules = RulePack(
+    key="related_refinement_rules",
+    rules=(
+        Rule(
+            key="alternative_version_to_alternatives",
+            when=_is_alternative_version_related,
+            actions=(
+                place_in("alternatives"),
+                set_candidate_metadata("section_sort_rank", 0),
+            ),
+        ),
+        Rule(
+            key="alternative_setting_to_alternatives",
+            when=_is_alternative_setting_related,
+            actions=(
+                place_in("alternatives"),
+                set_candidate_metadata("section_sort_rank", 1),
+            ),
+        ),
+        Rule(
+            key="long_tv_spinoff_to_spin_offs",
+            when=_is_long_tv_spin_off_related,
+            actions=(place_in("spin_offs"),),
+        ),
+    ),
+)

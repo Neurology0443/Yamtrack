@@ -34,6 +34,7 @@ class LayoutCompiler:
         sections: list[CompiledSection] = []
         for key, definition in section_defs.items():
             entries = grouped.get(key, [])
+            entries = self._sort_entries(entries)
             if not entries and definition.hidden_if_empty:
                 continue
             sections.append(
@@ -56,3 +57,28 @@ class LayoutCompiler:
             key=section_key,
             title=section_key.replace("_", " ").title(),
         )
+
+    @staticmethod
+    def _sort_entries(entries: list[UiCandidate]) -> list[UiCandidate]:
+        """Apply generic metadata-driven structural sorting when rank metadata exists."""
+        if not entries:
+            return entries
+
+        indexed_entries = list(enumerate(entries))
+        has_rank = any(
+            entry.metadata.get("section_sort_rank") is not None
+            for _, entry in indexed_entries
+        )
+        if not has_rank:
+            return entries
+
+        return [
+            entry
+            for _, entry in sorted(
+                indexed_entries,
+                key=lambda item: (
+                    item[1].metadata.get("section_sort_rank", float("inf")),
+                    item[0],
+                ),
+            )
+        ]

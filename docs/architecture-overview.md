@@ -62,9 +62,20 @@ Current active preset order (from `anime_franchise_ui/presets/default.py`):
 1. `base_facts`
 2. `base_placement`
 3. `relation_rules`
-4. `anchor_rules`
-5. `format_rules`
-6. `section_rules`
+4. `related_refinement_rules`
+5. `anchor_rules`
+6. `format_rules`
+7. `section_rules`
+
+Notes on the added refinement phase:
+
+- `relation_rules` performs coarse section classification first.
+- `related_refinement_rules` then refines `related_series` into:
+  - `spin_offs` for long TV spin-offs (runtime > 40 minutes),
+  - `alternatives` for `alternative_version` / `alternative_setting`.
+- Section order is intentionally `spin_offs`, then `alternatives`, then residual `related_series`.
+- `alternatives` ordering is rule-driven with candidate metadata (`section_sort_rank`), and layout applies only a generic structural sort when that metadata exists.
+- `related_series` remains the residual fallback for related entries that do not match refinement rules.
 
 ## 4) Import projection (principal, separate from UI projection)
 

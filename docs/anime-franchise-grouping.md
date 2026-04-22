@@ -69,14 +69,17 @@ Preset order (`anime_franchise_ui/presets/default.py`):
 1. `base_facts`
 2. `base_placement`
 3. `relation_rules`
-4. `anchor_rules`
-5. `format_rules`
-6. `section_rules`
+4. `related_refinement_rules`
+5. `anchor_rules`
+6. `format_rules`
+7. `section_rules`
 
 ### Behavior model (current, accurate)
 
 - Packs run in order.
 - `base_placement` provides initial section hypothesis.
+- `related_refinement_rules` refines `related_series` into targeted sections (`spin_offs`, `alternatives`) after coarse relation placement.
+- Section ordering intent keeps `spin_offs` first, then `alternatives`, then residual `related_series`.
 - Later packs may override `candidate.section_key`.
 - `section_rules` is metadata-only (title/order/hidden policy), no candidate placement actions.
 - The engine appends `metadata["placement_trace"]` whenever `section_key` changes.
@@ -136,6 +139,8 @@ Visible sections currently configured:
 
 - `continuity_extras` (Main Story Extras)
 - `specials`
+- `spin_offs`
+- `alternatives`
 - `related_series`
 
 Internal compatibility/filtered section:
@@ -145,9 +150,12 @@ Internal compatibility/filtered section:
 Current policy is intentionally conservative and maintainable:
 
 - coarse relation-driven placement,
+- related-series refinement for long TV spin-offs and alternatives,
 - anchor filtering for direct/fallback relevance,
 - conservative format exclusions,
 - section metadata stabilization pass.
+
+`related_series` remains the fallback residual bucket for related entries that are not captured by these refinements.
 
 This is a solid base, but not presented as “fully refined for every MAL edge case”.
 

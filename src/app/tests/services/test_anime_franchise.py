@@ -110,6 +110,14 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         service = AnimeFranchiseService(graph_builder=FakeGraphBuilder(self.nodes))
         return service.build("101")
 
+    @staticmethod
+    def _sections_by_key(payload):
+        return {section["key"]: section for section in payload.sections}
+
+    @staticmethod
+    def _section_media_ids(sections, key):
+        return [entry["media_id"] for entry in sections.get(key, {}).get("entries", [])]
+
     def test_series_line_contains_only_tv(self):
         payload = self._build()
         self.assertEqual(
@@ -365,6 +373,139 @@ class AnimeFranchiseServiceTests(SimpleTestCase):
         payload = self._build()
         related = next(section for section in payload.sections if section["key"] == "related_series")
         self.assertEqual([entry["media_id"] for entry in related["entries"]], ["204", "207"])
+
+    def test_long_tv_spinoff_moves_to_spin_offs(self):
+        nodes = {
+            "100": AnimeNode("100", "Root", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("100", "200", "spin_off")]),
+            "200": AnimeNode("200", "Long Spin Off", "mal", "tv", "img", date(2021, 1, 1), [], runtime_minutes=45),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        sections = self._sections_by_key(payload)
+
+        self.assertEqual(self._section_media_ids(sections, "spin_offs"), ["200"])
+        self.assertNotIn("200", self._section_media_ids(sections, "related_series"))
+
+    def test_short_tv_spinoff_stays_in_related_series(self):
+        nodes = {
+            "100": AnimeNode("100", "Root", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("100", "200", "spin_off")]),
+            "200": AnimeNode("200", "Short Spin Off", "mal", "tv", "img", date(2021, 1, 1), [], runtime_minutes=24),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        sections = self._sections_by_key(payload)
+
+        self.assertEqual(self._section_media_ids(sections, "related_series"), ["200"])
+        self.assertNotIn("200", self._section_media_ids(sections, "spin_offs"))
+
+    def test_alternatives_section_collects_version_and_setting(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Root",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [
+                    AnimeRelation("100", "201", "alternative_version"),
+                    AnimeRelation("100", "202", "alternative_setting"),
+                ],
+            ),
+            "201": AnimeNode("201", "Alt Version", "mal", "movie", "img", date(2021, 1, 1), []),
+            "202": AnimeNode("202", "Alt Setting", "mal", "movie", "img", date(2021, 2, 1), []),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        sections = self._sections_by_key(payload)
+        alternatives_ids = self._section_media_ids(sections, "alternatives")
+
+        self.assertCountEqual(alternatives_ids, ["201", "202"])
+        self.assertNotIn("201", self._section_media_ids(sections, "related_series"))
+        self.assertNotIn("202", self._section_media_ids(sections, "related_series"))
+
+    def test_alternatives_section_orders_version_before_setting(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Root",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [
+                    AnimeRelation("100", "202", "alternative_setting"),
+                    AnimeRelation("100", "201", "alternative_version"),
+                ],
+            ),
+            "201": AnimeNode("201", "Alt Version", "mal", "movie", "img", date(2021, 1, 1), []),
+            "202": AnimeNode("202", "Alt Setting", "mal", "movie", "img", date(2021, 2, 1), []),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        sections = self._sections_by_key(payload)
+
+        self.assertEqual(
+            self._section_media_ids(sections, "alternatives"),
+            ["201", "202"],
+        )
+        self.assertNotIn("201", self._section_media_ids(sections, "related_series"))
+        self.assertNotIn("202", self._section_media_ids(sections, "related_series"))
+
+    def test_other_related_entries_remain_in_related_series(self):
+        payload = self._build()
+        sections = self._sections_by_key(payload)
+
+        related_ids = self._section_media_ids(sections, "related_series")
+        self.assertIn("207", related_ids)
+        self.assertNotIn("207", self._section_media_ids(sections, "spin_offs"))
+        self.assertNotIn("207", self._section_media_ids(sections, "alternatives"))
+        self.assertGreater(len(related_ids), 0)
+
+    def test_refined_related_section_order_spin_offs_then_alternatives_then_related(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Root",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [
+                    AnimeRelation("100", "201", "spin_off"),
+                    AnimeRelation("100", "202", "alternative_version"),
+                    AnimeRelation("100", "203", "character"),
+                ],
+            ),
+            "201": AnimeNode("201", "Long Spin Off", "mal", "tv", "img", date(2021, 1, 1), [], runtime_minutes=45),
+            "202": AnimeNode("202", "Alt Version", "mal", "movie", "img", date(2021, 2, 1), []),
+            "203": AnimeNode("203", "Residual Related", "mal", "special", "img", date(2021, 3, 1), []),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        section_keys = [section["key"] for section in payload.sections]
+
+        self.assertLess(section_keys.index("spin_offs"), section_keys.index("alternatives"))
+        self.assertLess(section_keys.index("alternatives"), section_keys.index("related_series"))
+
+    def test_ambiguous_spin_off_and_alternative_version_prefers_spin_offs(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "Root",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [
+                    AnimeRelation("100", "210", "spin_off"),
+                    AnimeRelation("100", "210", "alternative_version"),
+                ],
+            ),
+            "210": AnimeNode("210", "Ambiguous", "mal", "tv", "img", date(2021, 1, 1), [], runtime_minutes=48),
+        }
+        payload = AnimeFranchiseService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        sections = self._sections_by_key(payload)
+
+        # Spin Offs wins because the long-TV spin-off refinement runs after alternatives and can overwrite section_key.
+        self.assertEqual(self._section_media_ids(sections, "spin_offs"), ["210"])
+        self.assertNotIn("210", self._section_media_ids(sections, "alternatives"))
+        self.assertNotIn("210", self._section_media_ids(sections, "related_series"))
 
     def test_noise_is_ignored_and_no_duplicates(self):
         payload = self._build()
