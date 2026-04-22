@@ -18,7 +18,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         self.nodes = {
             "1": AnimeNode("1", "S1", "mal", "tv", "img", date(2020, 1, 1), []),
             "2": AnimeNode("2", "S2", "mal", "tv", "img", date(2021, 1, 1), []),
-            "3": AnimeNode("3", "Movie", "mal", "movie", "img", date(2021, 6, 1), []),
+            "3": AnimeNode("3", "Movie", "mal", "movie", "img", date(2021, 6, 1), [], 24, 13),
             "4": AnimeNode("4", "CM", "mal", "cm", "img", date(2021, 7, 1), []),
         }
         self.snapshot = AnimeFranchiseSnapshot(
@@ -32,6 +32,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="2",
             canonical_root_media_id="1",
+            promoted_continuity_candidates=[],
         )
 
     def test_continuity_profile_filters_noise(self):
@@ -54,6 +55,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = ContinuityImportProfile().select(snapshot)
@@ -76,6 +78,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = ContinuityImportProfile().select(snapshot)
@@ -100,6 +103,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = ContinuityImportProfile().select(snapshot)
@@ -121,6 +125,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
     def test_continuity_profile_keeps_runtime_above_15_minutes(self):
@@ -204,6 +209,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = ContinuityImportProfile().select(snapshot)
@@ -212,6 +218,32 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
     def test_satellites_profile_uses_direct_candidates(self):
         selection = SatellitesImportProfile().select(self.snapshot)
         self.assertEqual(selection.media_ids, {"3"})
+
+    def test_satellites_profile_remains_direct_only_when_ui_promoted_continuity_exists(self):
+        nodes = {
+            "10": AnimeNode("10", "Season 1", "mal", "tv", "img", date(2020, 1, 1), []),
+            "20": AnimeNode("20", "Satellite", "mal", "movie", "img", date(2021, 1, 1), [], 24, 13),
+            "21": AnimeNode("21", "Promoted only", "mal", "movie", "img", date(2022, 1, 1), [], 24, 13),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "spin_off")],
+            promoted_continuity_candidates=[
+                AnimeRelation("10", "20", "sequel"),
+                AnimeRelation("20", "21", "sequel"),
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+        self.assertEqual(selection.media_ids, {"20"})
 
     def test_satellites_profile_filters_relation_types(self):
         nodes = {
@@ -239,10 +271,12 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = SatellitesImportProfile().select(snapshot)
-        self.assertEqual(selection.media_ids, {"20", "21", "22", "23"})
+        self.assertEqual(selection.media_ids, {"20", "21", "22"})
+        self.assertNotIn("23", selection.media_ids)
         self.assertNotIn("24", selection.media_ids)
 
     def test_satellites_profile_excludes_runtime_below_15_minutes(self):
@@ -261,6 +295,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = SatellitesImportProfile().select(snapshot)
@@ -282,6 +317,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
     def test_satellites_profile_keeps_13_episodes_24_minutes(self):
@@ -505,7 +541,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
         self.assertEqual(selection.media_ids, {"20"})
 
-    def test_satellites_profile_keeps_unknown_runtime(self):
+    def test_satellites_profile_rejects_unknown_runtime(self):
         target = AnimeNode(
             "20",
             "Unknown Runtime",
@@ -520,7 +556,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = SatellitesImportProfile().select(
             self._snapshot_with_single_satellite_node(target)
         )
-        self.assertEqual(selection.media_ids, {"20"})
+        self.assertEqual(selection.media_ids, set())
 
     def test_satellites_profile_keeps_unknown_episode_count_with_24_runtime(self):
         target = AnimeNode(
@@ -539,7 +575,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         )
         self.assertEqual(selection.media_ids, {"20"})
 
-    def test_satellites_profile_keeps_runtime_15_or_more(self):
+    def test_satellites_profile_keeps_runtime_15_when_episode_count_is_unknown(self):
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
             "20": AnimeNode("20", "Edge", "mal", "movie", "img", date(2021, 1, 1), [], 15),
@@ -555,6 +591,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = SatellitesImportProfile().select(snapshot)
@@ -563,8 +600,8 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
     def test_satellites_profile_is_direct_only(self):
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), []),
-            "20": AnimeNode("20", "Direct", "mal", "movie", "img", date(2021, 1, 1), []),
-            "30": AnimeNode("30", "Indirect", "mal", "movie", "img", date(2022, 1, 1), []),
+            "20": AnimeNode("20", "Direct", "mal", "movie", "img", date(2021, 1, 1), [], 24, 13),
+            "30": AnimeNode("30", "Indirect", "mal", "movie", "img", date(2022, 1, 1), [], 24, 13),
         }
         snapshot = AnimeFranchiseSnapshot(
             root_node=nodes["10"],
@@ -580,6 +617,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = SatellitesImportProfile().select(snapshot)
@@ -607,6 +645,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
             has_series_line=True,
             fallback_anchor_media_id="10",
             canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
         )
 
         selection = CompleteImportProfile().select(snapshot)

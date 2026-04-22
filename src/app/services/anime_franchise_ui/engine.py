@@ -16,7 +16,21 @@ class RulePipeline:
         for pack in self.packs:
             for rule in pack.rules:
                 for candidate in candidates:
+                    previous_section = candidate.section_key
                     if rule.when(candidate, context):
                         for action in rule.actions:
                             action(candidate, context)
+
+                    current_section = candidate.section_key
+                    if current_section != previous_section:
+                        trail = candidate.metadata.setdefault("placement_trace", [])
+                        trail.append(
+                            {
+                                "pack": pack.key,
+                                "rule": rule.key,
+                                "from": previous_section,
+                                "to": current_section,
+                                "kind": "initial" if previous_section is None else "override",
+                            }
+                        )
         return context

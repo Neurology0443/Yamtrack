@@ -13,7 +13,12 @@ from typing import Any
 
 @dataclass
 class UiCandidate:
-    """Secondary UI candidate derived from snapshot entries outside `Series`."""
+    """Secondary UI candidate derived from snapshot entries outside `Series`.
+
+    `relation_type` is a convenience facade using one representative relation.
+    For ambiguous candidates, rules should prefer richer signals in
+    `relation_types` and `metadata["origins"]`.
+    """
 
     media_id: str
     title: str

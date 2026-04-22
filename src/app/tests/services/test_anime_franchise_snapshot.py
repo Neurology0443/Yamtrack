@@ -228,6 +228,48 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
             [("100", "200", "sequel")],
         )
 
+    def test_series_root_promotes_transitive_non_tv_continuity_chain_for_ui(self):
+        nodes = {
+            "100": AnimeNode("100", "Season 1", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("100", "101", "sequel")]),
+            "101": AnimeNode(
+                "101",
+                "Season 2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "200", "sequel")],
+            ),
+            "200": AnimeNode(
+                "200",
+                "Movie 1",
+                "mal",
+                "movie",
+                "img",
+                date(2022, 1, 1),
+                [AnimeRelation("200", "101", "prequel"), AnimeRelation("200", "201", "sequel")],
+            ),
+            "201": AnimeNode(
+                "201",
+                "Movie 2",
+                "mal",
+                "movie",
+                "img",
+                date(2023, 1, 1),
+                [AnimeRelation("201", "200", "prequel"), AnimeRelation("201", "202", "sequel")],
+            ),
+            "202": AnimeNode("202", "Movie 3", "mal", "movie", "img", date(2024, 1, 1), [AnimeRelation("202", "201", "prequel")]),
+        }
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("101")
+
+        self.assertEqual([node.media_id for node in snapshot.series_line], ["100", "101"])
+        self.assertEqual(
+            [(rel.source_media_id, rel.target_media_id, rel.relation_type) for rel in snapshot.direct_candidates],
+            [("101", "200", "sequel")],
+        )
+        promoted_targets = {rel.target_media_id for rel in snapshot.promoted_continuity_candidates}
+        self.assertEqual(promoted_targets, {"200", "201", "202"})
+
 
 class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_parse_runtime_minutes_variants(self):

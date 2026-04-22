@@ -8,9 +8,16 @@
 
 Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.
 
-## 🔀 This fork (`dev-test`)
+## 🔀 This fork
 
 Compared to upstream Yamtrack, this fork adds MAL anime franchise grouping/import automation, incremental scan-state scheduling, and entry-added notifications.
+
+For MAL anime details pages, the current grouping product behavior is:
+
+- a fixed **Series** block built from franchise continuity TV line data,
+- plus dynamic secondary sections (`Main Story Extras`, `Specials`, `Related Series`) assigned by ordered rule packs.
+
+This keeps the page behavior stable for continuity while allowing section placement policy to evolve without changing templates.
 
 Detailed docs are in `docs/`:
 
@@ -18,6 +25,7 @@ Detailed docs are in `docs/`:
 - [Anime franchise grouping](docs/anime-franchise-grouping.md)
 - [Anime franchise import](docs/anime-franchise-import.md)
 - [Anime franchise customization](docs/anime-franchise-customization.md)
+- [Anime franchise debugging runbook](docs/anime-franchise-debugging.md)
 - [Testing runbook](docs/testing-runbook.md)
 
 ## 🚀 Demo
@@ -40,10 +48,8 @@ You can try the app at [yamtrack.fuzzygrim.com](https://yamtrack.fuzzygrim.com) 
 - 🦀 Integration with [Jellyfin](https://jellyfin.org/), [Plex](https://plex.tv/) and [Emby](https://emby.media/) to automatically track new media watched.
 - 📥 Import from [Trakt](https://trakt.tv/), [Simkl](https://simkl.com/), [MyAnimeList](https://myanimelist.net/), [AniList](https://anilist.co/) and [Kitsu](https://kitsu.app/) with support for periodic automatic imports.
 - 📊 Export all your tracked media to a CSV file and import it back.
-- 🧩 MAL anime franchise grouping with dedicated sections: `Series`, `Main Story Extras`, `Specials`, and `Related Series` (MAL anime scope only). See docs:
-  - [Anime franchise grouping](docs/anime-franchise-grouping.md)
-  - [Anime franchise debugging runbook](docs/anime-franchise-debugging.md)
-- 🧭 MAL anime franchise import profiles (`continuity`, `satellites`, `complete`) with shared snapshot logic and incremental scan-state scheduling/backoff.
+- 🧩 MAL anime franchise grouping with fixed `Series` plus dynamic secondary sections in an ordered rule pipeline (MAL anime scope only).
+- 🧭 MAL anime franchise import profiles (`continuity`, `satellites`, `complete`) that reuse the canonical franchise snapshot.
 - ⚙️ Celery automation for profile-based anime franchise imports, plus a dedicated `import_anime_franchise` management command.
 - 🔔 Optional “entry added” notifications sent asynchronously after commit (manual add + automated import), with user-level opt-in settings.
 - 📨 Persistent in-app user messages with periodic cleanup.

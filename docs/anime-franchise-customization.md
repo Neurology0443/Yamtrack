@@ -1,93 +1,131 @@
 # Anime Franchise Customization Guide
 
-Use this guide to change behavior without breaking the architecture.
+Use this guide to change behavior safely while staying aligned with the current architecture.
+
+## Architecture reminder before editing
+
+- Main UI grouping path: `AnimeFranchiseService -> AnimeFranchiseUiPipeline`.
+- `Series` is fixed from `snapshot.series_line`.
+- Secondary sections are rule-driven.
+- `layout.py` is structural-only.
+- `adapter.py` is compatibility-only.
+- `views.py` + `anime_franchise_footer.py` are integration/presentation enrichment.
 
 ## Where to change what
 
-### Section rules (UI grouping)
+### 1) UI grouping rule packs (main path)
 
-- File: `src/app/services/anime_franchise_rules.py`
-- Use for:
-  - section keys/titles,
-  - match filters (`relation_type`, media type, predicate),
-  - ordering priority,
-  - sort mode and visibility.
+Directory: `src/app/services/anime_franchise_ui/rules/`
 
-### Import heuristics and profile behavior
+Use for:
 
-- File: `src/app/services/anime_franchise_import_profiles.py`
-- Use for:
-  - continuity/satellite/complete selection,
-  - runtime/episode heuristics,
-  - eligible relation types,
-  - seed mode constraints.
+- `base_facts.py`
+  - add/update normalized candidate facts used by later packs,
+  - tune relation/provenance-derived helper signals.
+- `base_placement.py`
+  - declare section definitions,
+  - set initial fallback placement for unclassified candidates.
+- `relation_rules.py`
+  - relation-based section assignment/refinement.
+- `anchor_rules.py`
+  - directness/fallback-anchor gating behavior.
+- `format_rules.py`
+  - conservative format/runtime gating and exclusions.
+- `section_rules.py`
+  - metadata policy only (titles/order/hidden); no candidate moves.
 
-### Scan scheduling/backoff
+Also relevant:
 
-- File: `src/app/services/anime_import_state.py`
-- Use for:
-  - due selection policy,
-  - fingerprint semantics,
-  - stable/error backoff,
-  - `mark_due_now` profile list.
+- `src/app/services/anime_franchise_ui/presets/default.py` for pack order.
+- `src/app/services/anime_franchise_ui/engine.py` for override trace behavior.
 
-### Task/scheduler automation
+### 2) Import heuristics and profile behavior
 
-- Files:
-  - `src/app/tasks.py`
-  - `src/app/schedules.py`
-  - `src/config/settings.py`
-- Use for:
-  - task lock policy,
-  - beat schedule wiring,
-  - environment setting defaults.
+File: `src/app/services/anime_franchise_import_profiles.py`
 
-### Notification behavior
+Use for:
 
-- Files:
-  - `src/events/notifications.py`
-  - `src/events/tasks.py`
-  - `src/users/models.py`
-  - `src/users/forms.py`
-  - `src/templates/users/notifications.html`
-- Use for:
-  - notification trigger payload,
-  - post-commit async dispatch,
-  - user opt-in setting (`entry_added_notifications_enabled`),
-  - Apprise URL validation and settings UI copy.
+- tuning `continuity` / `satellites` / `complete` profile semantics,
+- changing profile eligibility/selection logic,
+- adjusting how snapshot facts map to import decisions.
 
-### Rendering and footer badges
+### 3) Scan scheduling/backoff
 
-- Files:
-  - `src/app/views.py`
-  - `src/app/anime_franchise_footer.py`
-  - `src/templates/app/media_details.html`
-- Use for:
-  - series labels (`Season N`),
-  - footer relation/format labels,
-  - section rendering layout.
+File: `src/app/services/anime_import_state.py`
 
-## Do / Don’t
+Use for:
+
+- retry/backoff windows,
+- error-state progression,
+- incremental rescan cadence and state transitions.
+
+### 4) Task/scheduler automation
+
+Files:
+
+- `src/app/tasks.py`
+- `src/app/schedules.py`
+- `src/config/settings.py`
+
+Use for:
+
+- Celery task trigger cadence,
+- automation on/off and periodic schedule wiring,
+- operational defaults for franchise import jobs.
+
+### 5) Notification behavior
+
+Files:
+
+- `src/events/notifications.py`
+- `src/events/tasks.py`
+- `src/users/models.py`
+- `src/users/forms.py`
+- `src/templates/users/notifications.html`
+
+Use for:
+
+- opt-in settings,
+- async dispatch behavior,
+- payload formatting and endpoint delivery policy.
+
+### 6) Rendering and footer badges
+
+Files:
+
+- `src/app/views.py`
+- `src/app/anime_franchise_footer.py`
+- `src/templates/app/media_details.html`
+
+Use for:
+
+- integration shape between service payload and page context,
+- `series_label` and footer relation/format badge presentation,
+- template-level display structure.
+
+Do not use this area to implement new grouping placement policy.
+
+## Practical guardrails (Do / Don’t)
 
 ### Do
 
-- Do keep franchise business logic in services.
-- Do keep `AnimeFranchiseSnapshot` as canonical input for both UI and import.
-- Do keep first-match-wins rule order explicit and tested.
-- Do update tests and runbook when profile/rule behavior changes.
-- Do keep MAL scope explicit for grouping behavior.
+- Keep grouping business logic in rule packs.
+- Keep snapshot semantics canonical for both UI and import projections.
+- Keep `Series` exclusively sourced from `snapshot.series_line`.
+- Keep override behavior explicit and debuggable (`placement_trace`).
+- Update tests + docs in the same change when behavior shifts.
 
 ### Don’t
 
-- Don’t add classification logic to templates or JavaScript.
-- Don’t duplicate graph/snapshot logic in import or views.
-- Don’t bypass `notify_entry_added_after_commit` for entry-added events.
-- Don’t silently change seed eligibility/backoff rules without updating docs/tests.
-- Don’t reintroduce legacy `related_anime` display alongside grouped sections.
+- Don’t move placement rules into `layout.py`, adapter, or templates.
+- Don’t document legacy UI logic as active runtime path.
+- Don’t mix import projection decisions into UI placement documentation.
+- Don’t overstate provenance fields (`metadata["origins"]`) as fully mature policy drivers unless code truly does that.
 
 ## Safe change checklist
 
-1. Update one layer only (rules, import profile, or scheduler) per change.
-2. Validate impact on both UI and import flows.
-3. Run targeted tests from `docs/testing-runbook.md`.
-4. Update docs for any changed behavior.
+1. Identify the concern: facts, placement, relation, anchor, format, metadata, or integration display.
+2. Patch the minimal layer that owns that concern.
+3. Run targeted tests from `docs/testing-runbook.md` and franchise debug checks.
+4. Validate no regressions in fallback no-series behavior.
+5. Update architecture/grouping/debug docs to match actual runtime behavior.

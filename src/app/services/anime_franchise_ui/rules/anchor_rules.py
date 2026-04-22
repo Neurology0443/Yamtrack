@@ -7,6 +7,14 @@ from app.services.anime_franchise_ui.rule_types import Rule, RulePack
 
 
 def _is_direct_or_fallback_anchor(candidate, context) -> bool:
+    # Keep this exception tightly scoped: promoted continuity candidates only
+    # bypass indirect filtering after they are explicitly placed in
+    # `continuity_extras` by earlier placement rules.
+    if (
+        candidate.metadata.get("is_promoted_continuity")
+        and candidate.section_key == "continuity_extras"
+    ):
+        return True
     if candidate.has_series_line_origin:
         return True
     if (

@@ -41,11 +41,16 @@ Default profile values:
 ### `satellites`
 
 - Direct-only satellites from `direct_candidates`.
-- Eligible relations: `spin_off`, `alternative_version`, `side_story`, `parent_story`.
+- Does **not** consume `promoted_continuity_candidates` (UI-only projection).
+- No additional transitive expansion is applied for satellites selection.
+- Eligible relations: `spin_off`, `alternative_version`, `side_story`.
+- Explicitly excludes `parent_story`.
 - Excludes `cm` and `pv`.
 - Applies runtime/episode heuristics:
   - `tv_special` requires runtime and must be `> 15`.
-  - non-specials reject very short one-episode entries (`<= 30`).
+  - non-`tv_special` entries require known runtime.
+  - non-`tv_special` entries reject runtime `< 15`.
+  - non-`tv_special` one-shot entries reject `episode_count == 1` and runtime `<= 30`.
 - Seed mode is `canonical_only` (seed must be known canonical root).
 
 Default profile values:
@@ -55,12 +60,13 @@ Default profile values:
 - `satellites_mode`: `direct_only`
 - `component_root_mode`: `canonical_component_root`
 - `ignored_media_types`: `{"cm", "pv"}`
-- `include_relation_types`: `{"spin_off", "alternative_version", "side_story", "parent_story"}`
+- `include_relation_types`: `{"spin_off", "alternative_version", "side_story"}`
 - `min_runtime_minutes`: `15`
 
 ### `complete`
 
 - Union of `continuity` and `satellites` selections.
+- Continues to inherit `satellites` direct-only behavior from `direct_candidates` only.
 
 Default profile values:
 

@@ -1,184 +1,203 @@
 # Anime Franchise Grouping Debugging Runbook
 
-This runbook documents practical commands for debugging MAL anime franchise grouping in both Docker and host environments.
+This runbook targets the **current** MAL anime franchise UI grouping system.
 
-## 1) Preconditions
+It is organized by practical debug steps and keeps host/Docker workflows aligned.
 
-- Feature scope: MAL anime detail pages only.
+## 1) Preconditions and scope
+
+- Scope: MAL anime detail pages only (`source=mal`, `media_type=anime`).
 - Feature flag: `ANIME_FRANCHISE_GROUPING_ENABLED=True`.
-- Repository layout: `manage.py` is under `src/` on host.
+- Repo layout: `manage.py` is under `src/`.
+- Active grouping path:
+  `AnimeFranchiseService -> AnimeFranchiseUiPipeline -> SeriesBuilder -> UiCandidateAssembler -> RulePipeline -> LayoutCompiler -> ViewModelAdapter -> views.py`.
 
-## 2) Host-native workflow
-
-From repository root:
-
-```bash
-python -m pip install -U -r requirements-dev.txt
-cd src
-python manage.py migrate
-python manage.py runserver
-```
-
-Optional Redis for local cache behavior:
-
-```bash
-docker run -d --name redis -p 6379:6379 --restart unless-stopped redis:8-alpine
-```
-
-## 3) Docker-native workflow
-
-The compose service is `yamtrack`.
-
-Start stack:
-
-```bash
-docker compose up -d
-```
-
-View logs:
-
-```bash
-docker compose logs -f yamtrack
-```
-
-Open shell in app container:
-
-```bash
-docker compose exec yamtrack sh
-```
-
-In container shell (working directory is `/yamtrack`):
-
-```bash
-python manage.py shell
-```
-
-## 4) Targeted tests
+## 2) Targeted tests (fast confidence pass)
 
 ### Host
 
 ```bash
 cd src
+python manage.py test app.tests.services.test_anime_franchise_ui_pipeline
 python manage.py test app.tests.services.test_anime_franchise
+python manage.py test app.tests.services.test_anime_franchise_snapshot
 python manage.py test app.tests.views.test_media_details
-python manage.py test app.tests.services.test_anime_franchise app.tests.views.test_media_details
 ```
 
 ### Docker
 
 ```bash
+docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_ui_pipeline"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.views.test_media_details"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests"
 ```
 
-## 5) Inspect service output in Django shell
+## 3) Inspect principal service payload (adapter output)
 
-Host:
+Use this to inspect what the modern pipeline returns before view enrichment:
 
 ```bash
 cd src
 python manage.py shell
 ```
 
-Then:
-
 ```python
 from pprint import pprint
 from app.services.anime_franchise import AnimeFranchiseService
 
-vm = AnimeFranchiseService().build("5114")  # replace with target MAL anime id
-print("root:", vm.root_media_id, vm.display_title)
-print("series_line:", [entry["media_id"] for entry in vm.series_line_entries])
-for section in vm.sections:
-    print(section.key, len(section.entries))
+payload = AnimeFranchiseService().build("5114")
+print("root:", payload.root_media_id, payload.display_title)
+print("series entries:", [entry["media_id"] for entry in payload.series["entries"]])
+
+for section in payload.sections:
+    print(section["key"], section["title"], len(section["entries"]))
     pprint([
-        (
-            entry["media_id"],
-            entry.get("anime_media_type"),
-            entry.get("relation_type"),
-            entry.get("linked_series_line_index"),
-        )
-        for entry in section.entries
+        {
+            "media_id": entry["media_id"],
+            "anime_media_type": entry.get("anime_media_type"),
+            "relation_type": entry.get("relation_type"),
+            "linked_index": entry.get("linked_series_line_index"),
+            "badges": entry.get("badges", []),
+        }
+        for entry in section["entries"]
     ])
 ```
 
-## 6) Validate fallback behavior when `series_line` is empty
+## 4) Inspect view-level context shaping (post-adapter)
 
-Expected behavior:
+The view currently rebuilds `anime_franchise` context and enriches entries.
 
-- `Series` is empty.
-- Seed is used only as an internal fallback anchor.
-- Direct seed neighbors can still match direct-only rules.
+Quick checks in `media_details` response context:
 
-Quick shell check:
+- `series_label` exists on series entries,
+- section entries include footer presentation fields,
+- `related_anime` removed from legacy related block when grouping is enabled.
+
+Tip: use `app.tests.views.test_media_details` as baseline assertions for this layer.
+
+## 5) Inspect internal placement trace (pipeline-level)
+
+`placement_trace` is internal candidate metadata. It is not part of the final template payload.
 
 ```python
-from app.services.anime_franchise import AnimeFranchiseService
+from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_franchise_ui.rule_types import RuleContext
 
-vm = AnimeFranchiseService().build("<non-tv-seed-id>")
-print(vm.series_line_entries)  # should be []
-for section in vm.sections:
-    print(section.key, [entry["media_id"] for entry in section.entries])
+snapshot = AnimeFranchiseSnapshotService().build("5114")
+pipeline = AnimeFranchiseUiPipeline()
+candidates = pipeline.candidate_assembler.build(snapshot)
+context = RuleContext(snapshot=snapshot)
+pipeline.rule_pipeline.run(candidates=candidates, context=context)
+
+for candidate in candidates:
+    trace = candidate.metadata.get("placement_trace")
+    if trace:
+        print(candidate.media_id, trace)
 ```
 
-## 7) Verify MAL relation data and normalization
+Interpretation:
+
+- `kind="initial"`: first section assignment.
+- `kind="override"`: later pack changed section.
+
+## 6) Rule-order troubleshooting and overrides
+
+Current ordered packs:
+
+1. `base_facts`
+2. `base_placement`
+3. `relation_rules`
+4. `anchor_rules`
+5. `format_rules`
+6. `section_rules`
+
+Current behavior:
+
+- not global first-match-wins,
+- later packs can override `section_key`,
+- `section_rules` is metadata-only.
+
+If a candidate lands in an unexpected section:
+
+1. inspect `relation_types` and `metadata["relation_facts"]`,
+2. inspect `placement_trace` transitions,
+3. verify anchor flags (`has_series_line_origin`, `has_root_origin`),
+4. verify format gates (`cm`, `pv`, and section-specific exclusions).
+
+## 7) Fallback no-series-line verification
+
+Expected current behavior:
+
+- `snapshot.has_series_line == False`,
+- `Series` block empty,
+- fallback/root anchor still drives candidate gathering,
+- fallback placement (`related_series`) used only when no earlier rule assigned section.
+
+Use `app.tests.services.test_anime_franchise_snapshot` + `test_anime_franchise_ui_pipeline` when adjusting this behavior.
+
+## 8) Relation normalization check
+
+When relation labels look wrong, verify normalization quickly:
 
 ```python
 from app.providers import mal
-
-data = mal.anime("5114")
-for rel in data.get("related", {}).get("related_anime", []):
-    print(rel["media_id"], rel.get("relation_type"), rel["title"])
-
-print(mal.normalize_relation_type("Side Story"))   # side_story
-print(mal.normalize_relation_type("full-story"))   # full_story
+print(mal.normalize_relation_type("Side Story"))
+print(mal.normalize_relation_type("full-story"))
 ```
 
-## 8) Verify graph extraction
+Also run:
+
+```bash
+cd src
+python manage.py test app.tests.services.test_anime_franchise -k normalize_relation
+```
+
+## 9) Graph extraction / snapshot check
+
+If anchors or continuity are suspicious, inspect snapshot fields directly:
 
 ```python
-from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 
-graph = AnimeFranchiseGraphBuilder().build("5114")
-print("nodes:", sorted(graph.keys()))
-for node_id, node in graph.items():
-    for rel in node.relations:
-        print(node_id, "->", rel.target_media_id, rel.relation_type)
+snapshot = AnimeFranchiseSnapshotService().build("5114")
+print("has_series_line:", snapshot.has_series_line)
+print("canonical_root_media_id:", snapshot.canonical_root_media_id)
+print("fallback_anchor_media_id:", snapshot.fallback_anchor_media_id)
+print("series_line:", [node.media_id for node in snapshot.series_line])
+print("direct_anchors:", [node.media_id for node in snapshot.direct_anchors])
+print("direct_candidates:", len(snapshot.direct_candidates))
 ```
 
-## 9) Validate legacy related de-duplication
+## 10) Legacy related de-duplication check
 
-With franchise grouping active on MAL anime details:
+When grouping is enabled, page related items should not duplicate franchise items via `related_anime`.
 
-- `anime_franchise` must be present in context.
-- `media.related.related_anime` must be removed.
-- other legacy sections (for example `recommendations`) must remain.
+Run:
 
-This is covered by view tests in `app.tests.views.test_media_details`.
-
-## 10) Cache checks
-
-MAL anime cache key pattern:
-
-- `mal_anime_<id>`
-
-In shell:
-
-```python
-from django.core.cache import cache
-
-cache.get("mal_anime_5114")
-cache.delete("mal_anime_5114")
+```bash
+cd src
+python manage.py test app.tests.views.test_media_details -k related_anime
 ```
 
-## 11) Rule priority troubleshooting
+## 11) Cache and refresh checks
 
-Matching order (first match wins):
+For stale grouping output:
 
-1. `ignored`
-2. `continuity_extras`
-3. `specials`
-4. `related_series`
+- compare normal build vs `refresh_cache=True` path at service/snapshot level,
+- run snapshot cache tests:
 
-If an entry disappears from UI, confirm it is not consumed by `ignored` first.
+```bash
+cd src
+python manage.py test app.tests.services.test_anime_franchise_snapshot -k cache
+```
+
+## 12) Suggested troubleshooting order
+
+1. Reproduce with targeted test(s).
+2. Inspect snapshot semantics.
+3. Inspect pipeline payload (adapter output).
+4. Inspect `placement_trace` for overrides.
+5. Inspect view-level enrichment/output shaping.
+6. Confirm template is only displaying provided context.
+7. Validate cache freshness if behavior appears inconsistent.

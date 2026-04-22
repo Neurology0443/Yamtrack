@@ -29,6 +29,7 @@ from app.services.anime_franchise_ui.predicates import (
     runtime_minutes_gte,
     runtime_minutes_lt,
     runtime_minutes_lte,
+    run_once,
 )
 from app.services.anime_franchise_ui.rule_types import (
     CompiledSection,
@@ -68,6 +69,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             series_line=[series_1, series_2],
             direct_anchors=[series_1, series_2],
             direct_candidates=direct_candidates,
+            promoted_continuity_candidates=[],
             has_series_line=True,
             fallback_anchor_media_id="200",
             canonical_root_media_id="100",
@@ -156,6 +158,19 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(specials["title"], "Specials")
         self.assertIn("media_type", payload.series["entries"][0])
         self.assertIn("anime_media_type", payload.series["entries"][0])
+
+    def test_pipeline_prefers_relation_types_for_ambiguous_candidates(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [AnimeRelation("200", "300", "other"), AnimeRelation("200", "300", "side_story")]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["specials"]["entries"]],
+            ["300"],
+        )
+        self.assertNotIn("ignored", sections)
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
@@ -405,6 +420,27 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(definition.order, 10)
         self.assertTrue(definition.hidden_if_empty)
 
+    def test_run_once_predicate_runs_once_per_state_key(self):
+        context = RuleContext(snapshot=self._snapshot())
+        candidate = UiCandidate(
+            media_id="910",
+            title="Set State",
+            image="img",
+            source="mal",
+            media_type="movie",
+            relation_type="other",
+            start_date=None,
+            runtime_minutes=None,
+            episode_count=None,
+            linked_series_line_media_id=None,
+            linked_series_line_index=None,
+        )
+
+        predicate = run_once("my_once")
+
+        self.assertTrue(predicate(candidate, context))
+        self.assertFalse(predicate(candidate, context))
+
     def test_rule_pipeline_rule_can_read_snapshot_from_context(self):
         snapshot = self._snapshot()
         context = RuleContext(snapshot=snapshot)
@@ -449,3 +485,77 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         pipeline.run(candidates=[candidate], context=context)
 
         self.assertEqual(candidate.section_key, "snapshot_driven")
+
+    def test_rule_pipeline_tracks_section_key_overrides(self):
+        context = RuleContext(snapshot=self._snapshot())
+        candidate = UiCandidate(
+            media_id="501",
+            title="Trace Target",
+            image="img",
+            source="mal",
+            media_type="movie",
+            relation_type="other",
+            relation_types=["other", "side_story"],
+            start_date=None,
+            runtime_minutes=None,
+            episode_count=None,
+            linked_series_line_media_id="200",
+            linked_series_line_index=1,
+            metadata={"origins": []},
+        )
+
+        pipeline = RulePipeline(
+            packs=[
+                RulePack(
+                    key="pack_one",
+                    rules=(
+                        Rule(
+                            key="initial_rule",
+                            when=lambda *_args: True,
+                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "related_series"),),
+                        ),
+                    ),
+                ),
+                RulePack(
+                    key="pack_two",
+                    rules=(
+                        Rule(
+                            key="override_rule",
+                            when=lambda *_args: True,
+                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "specials"),),
+                        ),
+                    ),
+                ),
+            ]
+        )
+
+        pipeline.run(candidates=[candidate], context=context)
+
+        self.assertEqual(candidate.section_key, "specials")
+        self.assertEqual(
+            candidate.metadata["placement_trace"],
+            [
+                {
+                    "pack": "pack_one",
+                    "rule": "initial_rule",
+                    "from": None,
+                    "to": "related_series",
+                    "kind": "initial",
+                },
+                {
+                    "pack": "pack_two",
+                    "rule": "override_rule",
+                    "from": "related_series",
+                    "to": "specials",
+                    "kind": "override",
+                },
+            ],
+        )
+
+    def test_internal_placement_trace_is_not_exposed_by_adapter_payload(self):
+        payload = AnimeFranchiseUiPipeline().run(self._snapshot())
+        all_entries = payload.series["entries"] + [
+            entry for section in payload.sections for entry in section["entries"]
+        ]
+        for entry in all_entries:
+            self.assertNotIn("placement_trace", entry)
