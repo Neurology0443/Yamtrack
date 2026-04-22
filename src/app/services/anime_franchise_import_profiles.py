@@ -104,6 +104,7 @@ class SatellitesImportProfile(BaseImportProfile):
     include_relation_types = frozenset(
         {"spin_off", "alternative_version", "side_story"}
     )
+    excluded_media_ids = frozenset({"33372"})
     min_runtime_minutes = 15
 
     def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
@@ -117,8 +118,6 @@ class SatellitesImportProfile(BaseImportProfile):
         if runtime_minutes is None:
             return False
         if runtime_minutes < self.min_runtime_minutes:
-            return False
-        if target_node.episode_count == 1 and runtime_minutes <= 30:
             return False
         return True
 
