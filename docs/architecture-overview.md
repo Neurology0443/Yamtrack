@@ -74,7 +74,7 @@ Notes on the added refinement phase:
   - TV `side_story` entries are reclassified from `specials` to `related_series`,
   - very short `side_story` entries (known runtime < 15) are reclassified from `specials` to `related_series`,
   - `alternative_version` / `alternative_setting` move to `alternatives`,
-  - long TV spin-offs (runtime > 40 minutes) move from `related_series` to `spin_offs`.
+  - TV spin-offs move from `related_series` to `spin_offs`.
 - Section order is intentionally `spin_offs`, then `alternatives`, then residual `related_series`.
 - `alternatives` ordering is rule-driven with candidate metadata (`section_sort_rank`), and layout applies only a generic structural sort when that metadata exists.
 - `related_series` remains the residual fallback for related entries that do not match refinement rules.
