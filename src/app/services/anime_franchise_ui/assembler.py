@@ -70,13 +70,13 @@ class UiCandidateAssembler:
                 source_id for source_id in source_media_ids if source_id not in series_ids
             ]
 
-            linked_series_line_media_id = self._pick_series_anchor(
-                series_line_sources,
-                series_index,
-            )
             promoted_metadata = promoted_target_metadata.get(target_media_id, {})
-            if linked_series_line_media_id is None and promoted_metadata.get("series_anchor_media_id"):
-                linked_series_line_media_id = promoted_metadata["series_anchor_media_id"]
+            linked_series_line_media_id = self._resolve_best_series_anchor(
+                series_line_sources=series_line_sources,
+                series_index=series_index,
+                promoted_anchor_media_id=promoted_metadata.get("series_anchor_media_id"),
+                promoted_depth=promoted_metadata.get("depth"),
+            )
             if linked_series_line_media_id is None and not snapshot.has_series_line:
                 linked_series_line_media_id = snapshot.fallback_anchor_media_id
             linked_root_media_id = root_media_id if root_sources else None
@@ -138,16 +138,36 @@ class UiCandidateAssembler:
         return list(dict.fromkeys(values))
 
     @staticmethod
-    def _pick_series_anchor(
+    def _resolve_best_series_anchor(
+        *,
         series_line_sources: list[str],
         series_index: dict[str, int],
+        promoted_anchor_media_id: str | None,
+        promoted_depth: int | None,
     ) -> str | None:
-        if not series_line_sources:
+        """Resolve the best anchor across direct and promoted continuity origins.
+
+        Direct series-line origins are normalized as depth `0`.
+        Promoted anchor metadata is considered alongside direct origins.
+        Final tie-break rank is: earliest `series_index`, then lowest depth.
+        """
+        anchor_candidates: list[tuple[str, int]] = [
+            (source_id, 0)
+            for source_id in series_line_sources
+        ]
+        if promoted_anchor_media_id is not None and promoted_depth is not None:
+            anchor_candidates.append((promoted_anchor_media_id, promoted_depth))
+
+        if not anchor_candidates:
             return None
+
         return min(
-            series_line_sources,
-            key=lambda media_id: series_index.get(media_id, 999999),
-        )
+            anchor_candidates,
+            key=lambda candidate: (
+                series_index.get(candidate[0], 999999),
+                candidate[1],
+            ),
+        )[0]
 
     def _derive_promoted_target_metadata(
         self,
