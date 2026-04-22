@@ -22,7 +22,11 @@ if TYPE_CHECKING:
 
 
 class AnimeFranchiseUiPipeline:
-    """Execute fixed-Series + dynamic-secondary pipeline without import coupling."""
+    """Execute fixed-Series + dynamic-secondary UI projection from snapshot.
+
+    Returns adapter-shaped payload for view compatibility; placement business logic
+    remains in rule packs, not in adapter/template layers.
+    """
 
     def __init__(self, *, preset: tuple[RulePack, ...] = DefaultUiPreset):
         self.series_builder = SeriesBuilder()

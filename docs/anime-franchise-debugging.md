@@ -1,14 +1,18 @@
 # Anime Franchise Grouping Debugging Runbook
 
-This runbook documents practical commands for debugging MAL anime franchise grouping in host or Docker environments.
+This runbook targets the **current** MAL anime franchise UI grouping system.
 
-## 1) Preconditions
+It is organized by practical debug steps and keeps host/Docker workflows aligned.
 
-- Scope: MAL anime detail pages only.
+## 1) Preconditions and scope
+
+- Scope: MAL anime detail pages only (`source=mal`, `media_type=anime`).
 - Feature flag: `ANIME_FRANCHISE_GROUPING_ENABLED=True`.
-- Host repo layout: `manage.py` is under `src/`.
+- Repo layout: `manage.py` is under `src/`.
+- Active grouping path:
+  `AnimeFranchiseService -> AnimeFranchiseUiPipeline -> SeriesBuilder -> UiCandidateAssembler -> RulePipeline -> LayoutCompiler -> ViewModelAdapter -> views.py`.
 
-## 2) Targeted tests
+## 2) Targeted tests (fast confidence pass)
 
 ### Host
 
@@ -16,17 +20,21 @@ This runbook documents practical commands for debugging MAL anime franchise grou
 cd src
 python manage.py test app.tests.services.test_anime_franchise_ui_pipeline
 python manage.py test app.tests.services.test_anime_franchise
+python manage.py test app.tests.services.test_anime_franchise_snapshot
 python manage.py test app.tests.views.test_media_details
 ```
 
 ### Docker
 
 ```bash
+docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_ui_pipeline"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.views.test_media_details"
 ```
 
-## 3) Inspect service payload shape
+## 3) Inspect principal service payload (adapter output)
+
+Use this to inspect what the modern pipeline returns before view enrichment:
 
 ```bash
 cd src
@@ -39,7 +47,8 @@ from app.services.anime_franchise import AnimeFranchiseService
 
 payload = AnimeFranchiseService().build("5114")
 print("root:", payload.root_media_id, payload.display_title)
-print("series:", [entry["media_id"] for entry in payload.series["entries"]])
+print("series entries:", [entry["media_id"] for entry in payload.series["entries"]])
+
 for section in payload.sections:
     print(section["key"], section["title"], len(section["entries"]))
     pprint([
@@ -54,9 +63,21 @@ for section in payload.sections:
     ])
 ```
 
-## 4) Inspect internal placement trace (pipeline-level)
+## 4) Inspect view-level context shaping (post-adapter)
 
-`placement_trace` is internal metadata on candidates during pipeline execution; it is not exposed in final adapter payload.
+The view currently rebuilds `anime_franchise` context and enriches entries.
+
+Quick checks in `media_details` response context:
+
+- `series_label` exists on series entries,
+- section entries include footer presentation fields,
+- `related_anime` removed from legacy related block when grouping is enabled.
+
+Tip: use `app.tests.views.test_media_details` as baseline assertions for this layer.
+
+## 5) Inspect internal placement trace (pipeline-level)
+
+`placement_trace` is internal candidate metadata. It is not part of the final template payload.
 
 ```python
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
@@ -70,21 +91,19 @@ context = RuleContext(snapshot=snapshot)
 pipeline.rule_pipeline.run(candidates=candidates, context=context)
 
 for candidate in candidates:
-    if candidate.metadata.get("placement_trace"):
-        print(candidate.media_id, candidate.metadata["placement_trace"])
+    trace = candidate.metadata.get("placement_trace")
+    if trace:
+        print(candidate.media_id, trace)
 ```
 
-## 5) Validate fallback behavior when `series_line` is empty
+Interpretation:
 
-Expected behavior:
+- `kind="initial"`: first section assignment.
+- `kind="override"`: later pack changed section.
 
-- `Series` is empty.
-- Root/seed is used as fallback anchor for direct candidates.
-- Section fallback (`related_series`) applies only if no earlier rule classified the candidate.
+## 6) Rule-order troubleshooting and overrides
 
-## 6) Rule-order troubleshooting
-
-Packs are executed in this order:
+Current ordered packs:
 
 1. `base_facts`
 2. `base_placement`
@@ -93,4 +112,92 @@ Packs are executed in this order:
 5. `format_rules`
 6. `section_rules`
 
-Placement is not global first-match-wins: later packs may override `section_key`, and those changes are recorded in `placement_trace`.
+Current behavior:
+
+- not global first-match-wins,
+- later packs can override `section_key`,
+- `section_rules` is metadata-only.
+
+If a candidate lands in an unexpected section:
+
+1. inspect `relation_types` and `metadata["relation_facts"]`,
+2. inspect `placement_trace` transitions,
+3. verify anchor flags (`has_series_line_origin`, `has_root_origin`),
+4. verify format gates (`cm`, `pv`, and section-specific exclusions).
+
+## 7) Fallback no-series-line verification
+
+Expected current behavior:
+
+- `snapshot.has_series_line == False`,
+- `Series` block empty,
+- fallback/root anchor still drives candidate gathering,
+- fallback placement (`related_series`) used only when no earlier rule assigned section.
+
+Use `app.tests.services.test_anime_franchise_snapshot` + `test_anime_franchise_ui_pipeline` when adjusting this behavior.
+
+## 8) Relation normalization check
+
+When relation labels look wrong, verify normalization quickly:
+
+```python
+from app.providers import mal
+print(mal.normalize_relation_type("Side Story"))
+print(mal.normalize_relation_type("full-story"))
+```
+
+Also run:
+
+```bash
+cd src
+python manage.py test app.tests.services.test_anime_franchise -k normalize_relation
+```
+
+## 9) Graph extraction / snapshot check
+
+If anchors or continuity are suspicious, inspect snapshot fields directly:
+
+```python
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+
+snapshot = AnimeFranchiseSnapshotService().build("5114")
+print("has_series_line:", snapshot.has_series_line)
+print("canonical_root_media_id:", snapshot.canonical_root_media_id)
+print("fallback_anchor_media_id:", snapshot.fallback_anchor_media_id)
+print("series_line:", [node.media_id for node in snapshot.series_line])
+print("direct_anchors:", [node.media_id for node in snapshot.direct_anchors])
+print("direct_candidates:", len(snapshot.direct_candidates))
+```
+
+## 10) Legacy related de-duplication check
+
+When grouping is enabled, page related items should not duplicate franchise items via `related_anime`.
+
+Run:
+
+```bash
+cd src
+python manage.py test app.tests.views.test_media_details -k related_anime
+```
+
+## 11) Cache and refresh checks
+
+For stale grouping output:
+
+- compare normal build vs `refresh_cache=True` path at service/snapshot level,
+- run snapshot cache tests:
+
+```bash
+cd src
+python manage.py test app.tests.services.test_anime_franchise_snapshot -k cache
+```
+
+## 12) Suggested troubleshooting order
+
+1. Reproduce with targeted test(s).
+2. Inspect snapshot semantics.
+3. Inspect pipeline payload (adapter output).
+4. Inspect `placement_trace` for overrides.
+5. Inspect view-level enrichment/output shaping.
+6. Confirm template is only displaying provided context.
+7. Validate cache freshness if behavior appears inconsistent.
