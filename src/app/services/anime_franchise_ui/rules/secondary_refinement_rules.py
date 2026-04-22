@@ -18,6 +18,15 @@ def _is_specials_tv_side_story(candidate, _context) -> bool:
     )
 
 
+def _is_short_side_story_special(candidate, _context) -> bool:
+    return (
+        candidate.section_key == "specials"
+        and "side_story" in candidate.relation_types
+        and candidate.runtime_minutes is not None
+        and candidate.runtime_minutes < 15
+    )
+
+
 def _is_long_tv_spin_off_related(candidate, context) -> bool:
     return (
         _is_related_series_candidate(candidate, context)
@@ -46,6 +55,16 @@ SecondaryRefinementRules = RulePack(
     key="secondary_refinement_rules",
     rules=(
         Rule(
+            key="tv_side_story_from_specials_to_related_series",
+            when=_is_specials_tv_side_story,
+            actions=(place_in("related_series"),),
+        ),
+        Rule(
+            key="short_side_story_from_specials_to_related_series",
+            when=_is_short_side_story_special,
+            actions=(place_in("related_series"),),
+        ),
+        Rule(
             key="alternative_version_to_alternatives",
             when=_is_alternative_version_related,
             actions=(
@@ -60,11 +79,6 @@ SecondaryRefinementRules = RulePack(
                 place_in("alternatives"),
                 set_candidate_metadata("section_sort_rank", 1),
             ),
-        ),
-        Rule(
-            key="tv_side_story_from_specials_to_related_series",
-            when=_is_specials_tv_side_story,
-            actions=(place_in("related_series"),),
         ),
         Rule(
             key="long_tv_spinoff_to_spin_offs",
