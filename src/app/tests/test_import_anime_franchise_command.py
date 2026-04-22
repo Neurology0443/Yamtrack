@@ -68,6 +68,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             has_series_line=True,
             fallback_anchor_media_id="100",
             canonical_root_media_id="100",
+            promoted_continuity_candidates=[],
         )
         mock_anime_minimal.return_value = {
             "media_id": "100",
@@ -147,6 +148,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             has_series_line=True,
             fallback_anchor_media_id="100",
             canonical_root_media_id="99",
+            promoted_continuity_candidates=[],
         )
         mock_anime_minimal.return_value = {
             "media_id": "101",

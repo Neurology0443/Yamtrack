@@ -35,6 +35,7 @@ Current fields and meaning:
 - `direct_anchors`: anchors used for direct-neighbor harvesting.
 - `direct_candidates`: direct normalized relations collected from anchors.
 - `promoted_continuity_candidates`: UI-only continuity projection that extends direct non-TV continuity seeds transitively for `Main Story Extras`.
+- `promoted_continuity_candidates` is not an import input; import profiles continue to read only their own selection inputs.
 - `canonical_root_media_id`: stable root ID for the continuity component.
 - `fallback_anchor_media_id`: fallback direct anchor when there is no `series_line`.
 - `has_series_line`: convenience flag for TV continuity availability.
