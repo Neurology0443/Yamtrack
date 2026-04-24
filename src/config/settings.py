@@ -361,10 +361,12 @@ TVDB_API = config(
 
 MAL_API = config(
     "MAL_API",
-    default=secret(
-        "MAL_API_FILE",
-        "25b5581dafd15b3e7d583bb79e9a1691",
-    ),
+    default=secret("MAL_API_FILE", default=""),
+)
+MAL_RATE_LIMIT_PER_MINUTE = config(
+    "MAL_RATE_LIMIT_PER_MINUTE",
+    default=100,
+    cast=int,
 )
 MAL_NSFW = config("MAL_NSFW", default=False, cast=bool)
 ANIME_FRANCHISE_GROUPING_ENABLED = config(

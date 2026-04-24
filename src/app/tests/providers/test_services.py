@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import requests
+from django.conf import settings
 from django.test import TestCase
 
 from app.models import MediaTypes, Sources
@@ -17,6 +18,11 @@ mock_path = Path(__file__).resolve().parent.parent / "mock_data"
 
 class ServicesTests(TestCase):
     """Test the services module functions."""
+
+    def test_mal_rate_limit_setting_default(self):
+        """MAL rate limit setting should be available with default value."""
+        self.assertTrue(hasattr(settings, "MAL_RATE_LIMIT_PER_MINUTE"))
+        self.assertEqual(settings.MAL_RATE_LIMIT_PER_MINUTE, 100)
 
     @patch("app.providers.services.session.get")
     def test_api_request_get(self, mock_get):
