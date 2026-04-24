@@ -15,6 +15,10 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
 
+from django.conf import settings
+
+from app.models import Sources
+
 from .candidates import UiCandidate
 
 if TYPE_CHECKING:
@@ -59,9 +63,13 @@ class UiCandidateAssembler:
         candidates: list[UiCandidate] = []
         for target_media_id, relations in grouped_relations.items():
             node = snapshot.nodes_by_media_id.get(target_media_id)
-            if node is None:
-                continue
-
+            light_metadata = self._resolve_light_target_metadata(relations)
+            candidate_is_light = node is None
+            route_media_type = (
+                light_metadata["route_media_type"] or "anime"
+                if candidate_is_light
+                else "anime"
+            )
             relation_types = self._ordered_unique([relation.relation_type for relation in relations])
             source_media_ids = self._ordered_unique([relation.source_media_id for relation in relations])
             series_line_sources = [source_id for source_id in source_media_ids if source_id in series_ids]
@@ -89,18 +97,19 @@ class UiCandidateAssembler:
                 in promoted_relation_keys
                 for relation in relations
             )
-
             candidates.append(
                 UiCandidate(
-                    media_id=node.media_id,
-                    title=node.title,
-                    image=node.image,
-                    source=node.source,
-                    media_type=node.media_type,
+                    media_id=target_media_id,
+                    title=node.title if node else (light_metadata["title"] or target_media_id),
+                    image=node.image if node else (light_metadata["image"] or settings.IMG_NONE),
+                    source=node.source if node else (light_metadata["source"] or Sources.MAL.value),
+                    media_type=node.media_type if node else "",
+                    is_light=candidate_is_light,
+                    route_media_type=route_media_type,
                     relation_type=relation_types[0] if relation_types else "unknown",
-                    start_date=node.start_date,
-                    runtime_minutes=node.runtime_minutes,
-                    episode_count=node.episode_count,
+                    start_date=node.start_date if node else None,
+                    runtime_minutes=node.runtime_minutes if node else None,
+                    episode_count=node.episode_count if node else None,
                     linked_series_line_media_id=linked_series_line_media_id,
                     linked_series_line_index=(
                         series_index.get(linked_series_line_media_id, 0)
@@ -113,8 +122,10 @@ class UiCandidateAssembler:
                     has_series_line_origin=bool(series_line_sources),
                     has_root_origin=bool(root_sources),
                     has_non_series_origin=bool(non_series_sources),
-                    is_current=node.media_id == snapshot.root_node.media_id,
+                    is_current=target_media_id == snapshot.root_node.media_id,
                     metadata={
+                        "is_light": candidate_is_light,
+                        "route_media_type": route_media_type,
                         "is_promoted_continuity": is_promoted_continuity,
                         "promoted_from_series_line_media_id": promoted_metadata.get("series_anchor_media_id"),
                         "promoted_depth": promoted_metadata.get("depth"),
@@ -136,6 +147,31 @@ class UiCandidateAssembler:
     @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
+
+    @staticmethod
+    def _resolve_light_target_metadata(relations: list[AnimeRelation]) -> dict[str, str | None]:
+        return {
+            "title": next(
+                (relation.target_title for relation in relations if relation.target_title),
+                None,
+            ),
+            "image": next(
+                (relation.target_image for relation in relations if relation.target_image),
+                None,
+            ),
+            "source": next(
+                (relation.target_source for relation in relations if relation.target_source),
+                None,
+            ),
+            "route_media_type": next(
+                (
+                    relation.target_route_media_type
+                    for relation in relations
+                    if relation.target_route_media_type
+                ),
+                None,
+            ),
+        }
 
     @staticmethod
     def _resolve_best_series_anchor(

@@ -101,6 +101,10 @@ class AnimeFranchiseGraphBuilder:
                     source_media_id=media_id,
                     target_media_id=target_id,
                     relation_type=relation_type,
+                    target_title=relation.get("title"),
+                    target_image=relation.get("image"),
+                    target_source=relation.get("source"),
+                    target_route_media_type=relation.get("media_type"),
                 )
             )
         return normalized_relations

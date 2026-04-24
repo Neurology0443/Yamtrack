@@ -70,9 +70,6 @@ class AnimeFranchiseSnapshotService:
                     continue
                 seen_candidates.add(key)
                 direct_candidates.append(relation)
-                nodes_by_media_id[relation.target_media_id] = self.graph_builder.ensure_node(
-                    relation.target_media_id
-                )
 
         promoted_continuity_candidates = self._derive_promoted_continuity_candidates(
             series_line=series_line,

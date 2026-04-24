@@ -4,6 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 from unittest import TestCase
 
+from app.models import Sources
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 from app.services.anime_franchise_ui.actions import (
@@ -145,6 +146,42 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
+    def test_candidate_assembler_emits_light_candidate_when_target_node_is_missing(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation("200", "901", "spin_off"),
+            AnimeRelation(
+                "201",
+                "901",
+                "side_story",
+                target_title="Satellite 901",
+                target_image="img-901",
+                target_source=Sources.MAL.value,
+            ),
+        ]
+        snapshot.nodes_by_media_id.pop("901", None)
+
+        candidates = UiCandidateAssembler().build(snapshot)
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+
+        self.assertEqual(candidate.media_id, "901")
+        self.assertEqual(candidate.title, "Satellite 901")
+        self.assertEqual(candidate.image, "img-901")
+        self.assertEqual(candidate.source, Sources.MAL.value)
+        self.assertEqual(candidate.media_type, "")
+        self.assertTrue(candidate.is_light)
+        self.assertEqual(candidate.route_media_type, "anime")
+        self.assertIsNone(candidate.start_date)
+        self.assertIsNone(candidate.runtime_minutes)
+        self.assertIsNone(candidate.episode_count)
+        self.assertEqual(candidate.relation_type, "spin_off")
+        self.assertEqual(candidate.relation_types, ["spin_off", "side_story"])
+        self.assertEqual(candidate.source_media_ids, ["200", "201"])
+        self.assertEqual(candidate.linked_series_line_media_id, "200")
+        self.assertEqual(candidate.metadata["is_light"], True)
+        self.assertEqual(candidate.metadata["route_media_type"], "anime")
+
     def test_pipeline_output_contains_root_display_and_expected_sections(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
 
@@ -171,6 +208,140 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ["300"],
         )
         self.assertNotIn("ignored", sections)
+
+    def test_unknown_media_type_in_specials_is_not_ignored(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "902",
+                "side_story",
+                target_title="Unknown Format Special",
+                target_image="img-902",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("902", None)
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertIn("specials", sections)
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["specials"]["entries"]],
+            ["902"],
+        )
+
+    def test_light_candidate_keeps_route_media_type_and_empty_anime_media_type(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "903",
+                "side_story",
+                target_title="Light Candidate",
+                target_image="img-903",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("903", None)
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        specials = next(section for section in payload.sections if section["key"] == "specials")
+        entry = next(entry for entry in specials["entries"] if entry["media_id"] == "903")
+
+        self.assertEqual(entry["media_type"], "anime")
+        self.assertEqual(entry["anime_media_type"], "")
+        self.assertTrue(entry["is_light"])
+
+    def test_candidate_assembler_non_light_candidate_has_known_format(self):
+        snapshot = self._snapshot()
+        candidates = UiCandidateAssembler().build(snapshot)
+        movie_candidate = next(candidate for candidate in candidates if candidate.media_id == "300")
+
+        self.assertFalse(movie_candidate.is_light)
+        self.assertEqual(movie_candidate.route_media_type, "anime")
+        self.assertEqual(movie_candidate.media_type, "movie")
+
+    def test_specials_known_tv_format_is_ignored(self):
+        snapshot = self._snapshot()
+        snapshot.nodes_by_media_id["905"] = AnimeNode(
+            "905",
+            "TV Special Candidate",
+            Sources.MAL.value,
+            "tv",
+            "img-905",
+            date(2022, 7, 1),
+            [],
+        )
+        snapshot.direct_candidates = [AnimeRelation("200", "905", "side_story")]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertNotIn(
+            "905",
+            [entry["media_id"] for entry in sections["specials"]["entries"]],
+        )
+        self.assertIn(
+            "905",
+            [entry["media_id"] for entry in sections["ignored"]["entries"]],
+        )
+
+    def test_demon_slayer_movie_chain_light_candidates_remain_visible(self):
+        season_1 = AnimeNode("100", "Season 1", Sources.MAL.value, "tv", "img-100", date(2020, 1, 1), [])
+        season_2 = AnimeNode("101", "Season 2", Sources.MAL.value, "tv", "img-101", date(2021, 1, 1), [])
+        snapshot = SimpleNamespace(
+            root_node=season_2,
+            nodes_by_media_id={"100": season_1, "101": season_2},
+            all_normalized_relations=[],
+            continuity_component=[season_1, season_2],
+            series_line=[season_1, season_2],
+            direct_anchors=[season_1, season_2],
+            direct_candidates=[
+                AnimeRelation(
+                    "101",
+                    "200",
+                    "sequel",
+                    target_title="Movie 1",
+                    target_image="img-200",
+                    target_source=Sources.MAL.value,
+                ),
+            ],
+            promoted_continuity_candidates=[
+                AnimeRelation(
+                    "200",
+                    "201",
+                    "sequel",
+                    target_title="Movie 2",
+                    target_image="img-201",
+                    target_source=Sources.MAL.value,
+                ),
+                AnimeRelation(
+                    "201",
+                    "202",
+                    "sequel",
+                    target_title="Movie 3",
+                    target_image="img-202",
+                    target_source=Sources.MAL.value,
+                ),
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="101",
+            canonical_root_media_id="100",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+        related_series_ids = [
+            entry["media_id"]
+            for entry in sections["related_series"]["entries"]
+        ]
+        self.assertEqual(related_series_ids, ["200", "201", "202"])
+        for entry in sections["related_series"]["entries"]:
+            self.assertEqual(entry["media_type"], "anime")
+            self.assertEqual(entry["anime_media_type"], "")
+            self.assertTrue(entry["is_light"])
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
