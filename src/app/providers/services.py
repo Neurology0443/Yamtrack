@@ -48,7 +48,7 @@ session.mount("https://", HTTPAdapter(max_retries=3))
 
 session.mount(
     "https://api.myanimelist.net/v2",
-    LimiterAdapter(per_minute=30),
+    LimiterAdapter(per_minute=settings.MAL_RATE_LIMIT_PER_MINUTE),
 )
 session.mount(
     "https://graphql.anilist.co",

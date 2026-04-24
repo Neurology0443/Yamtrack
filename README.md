@@ -131,6 +131,7 @@ Create a `.env` file in the root directory and add the following variables.
 ```bash
 TMDB_API=API_KEY
 MAL_API=API_KEY
+MAL_RATE_LIMIT_PER_MINUTE=100
 IGDB_ID=IGDB_ID
 IGDB_SECRET=IGDB_SECRET
 STEAM_API_KEY=STEAM_API_SECRET
