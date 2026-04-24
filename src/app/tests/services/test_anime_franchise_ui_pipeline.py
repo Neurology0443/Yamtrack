@@ -410,6 +410,213 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertNotIn("991", [entry["media_id"] for entry in sections["specials"]["entries"]])
         self.assertIn("991", [entry["media_id"] for entry in sections["related_series"]["entries"]])
 
+    def test_light_sequel_non_promoted_is_not_classification_enriched(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "999",
+                "700",
+                "sequel",
+                target_title="Loose Sequel 700",
+                target_image="img-700",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.promoted_continuity_candidates = []
+        snapshot.nodes_by_media_id.pop("700", None)
+        pipeline, graph_builder = self._pipeline(
+            {
+                "700": AnimeNode(
+                    "700",
+                    "Loose Sequel 700",
+                    Sources.MAL.value,
+                    "movie",
+                    "img-700",
+                    date(2024, 3, 1),
+                    [],
+                    runtime_minutes=110,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        related_series = next(section for section in payload.sections if section["key"] == "related_series")
+        entry = next(entry for entry in related_series["entries"] if entry["media_id"] == "700")
+
+        self.assertEqual(graph_builder.ensure_classification_node_calls, [])
+        self.assertTrue(entry["is_light"])
+        self.assertEqual(entry["anime_media_type"], "")
+
+    def test_light_promoted_sequel_is_classification_enriched(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = []
+        snapshot.promoted_continuity_candidates = [
+            AnimeRelation(
+                "200",
+                "201",
+                "sequel",
+                target_title="Movie 2",
+                target_image="img-201",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("201", None)
+        pipeline, graph_builder = self._pipeline(
+            {
+                "201": AnimeNode(
+                    "201",
+                    "Movie 2",
+                    Sources.MAL.value,
+                    "movie",
+                    "img-201",
+                    date(2023, 1, 1),
+                    [],
+                    runtime_minutes=120,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        related_series = next(section for section in payload.sections if section["key"] == "related_series")
+        entry = next(entry for entry in related_series["entries"] if entry["media_id"] == "201")
+
+        self.assertIn("201", graph_builder.ensure_classification_node_calls)
+        self.assertEqual(entry["anime_media_type"], "movie")
+        self.assertEqual(entry["runtime_minutes"], 120)
+        self.assertTrue(entry["is_light"])
+
+    def test_light_spin_off_placeholder_image_is_replaced_by_classification_image(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "810",
+                "spin_off",
+                target_title="Spin Off 810",
+                target_image=None,
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("810", None)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "810": AnimeNode(
+                    "810",
+                    "Spin Off 810",
+                    Sources.MAL.value,
+                    "tv",
+                    "real-img",
+                    date(2026, 1, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        spin_offs = next(section for section in payload.sections if section["key"] == "spin_offs")
+        entry = next(entry for entry in spin_offs["entries"] if entry["media_id"] == "810")
+        self.assertEqual(entry["image"], "real-img")
+
+    def test_light_spin_off_real_image_is_preserved(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "811",
+                "spin_off",
+                target_title="Spin Off 811",
+                target_image="light-img",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("811", None)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "811": AnimeNode(
+                    "811",
+                    "Spin Off 811",
+                    Sources.MAL.value,
+                    "tv",
+                    "real-img",
+                    date(2026, 1, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        spin_offs = next(section for section in payload.sections if section["key"] == "spin_offs")
+        entry = next(entry for entry in spin_offs["entries"] if entry["media_id"] == "811")
+        self.assertEqual(entry["image"], "light-img")
+
+    def test_light_spin_off_fallback_title_is_replaced_by_classification_title(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "812",
+                "spin_off",
+                target_title=None,
+                target_image="img-812",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("812", None)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "812": AnimeNode(
+                    "812",
+                    "Real Title",
+                    Sources.MAL.value,
+                    "tv",
+                    "img-812",
+                    date(2026, 1, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        spin_offs = next(section for section in payload.sections if section["key"] == "spin_offs")
+        entry = next(entry for entry in spin_offs["entries"] if entry["media_id"] == "812")
+        self.assertEqual(entry["title"], "Real Title")
+
+    def test_light_spin_off_real_title_is_preserved(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "813",
+                "spin_off",
+                target_title="Light Title",
+                target_image="img-813",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("813", None)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "813": AnimeNode(
+                    "813",
+                    "Real Title",
+                    Sources.MAL.value,
+                    "tv",
+                    "img-813",
+                    date(2026, 1, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        spin_offs = next(section for section in payload.sections if section["key"] == "spin_offs")
+        entry = next(entry for entry in spin_offs["entries"] if entry["media_id"] == "813")
+        self.assertEqual(entry["title"], "Light Title")
+
     def test_demon_slayer_movie_chain_light_candidates_remain_visible(self):
         season_1 = AnimeNode("100", "Season 1", Sources.MAL.value, "tv", "img-100", date(2020, 1, 1), [])
         season_2 = AnimeNode("101", "Season 2", Sources.MAL.value, "tv", "img-101", date(2021, 1, 1), [])
@@ -453,7 +660,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             canonical_root_media_id="100",
         )
 
-        pipeline, _graph_builder = self._pipeline(
+        pipeline, graph_builder = self._pipeline(
             {
                 "200": AnimeNode("200", "Movie 1", Sources.MAL.value, "movie", "img-200", date(2022, 1, 1), [], runtime_minutes=117),
                 "201": AnimeNode("201", "Movie 2", Sources.MAL.value, "movie", "img-201", date(2023, 1, 1), [], runtime_minutes=122),
@@ -467,10 +674,16 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             for entry in sections["related_series"]["entries"]
         ]
         self.assertEqual(related_series_ids, ["200", "201", "202"])
-        for entry in sections["related_series"]["entries"]:
-            self.assertEqual(entry["media_type"], "anime")
-            self.assertEqual(entry["anime_media_type"], "movie")
-            self.assertTrue(entry["is_light"])
+        entries_by_id = {entry["media_id"]: entry for entry in sections["related_series"]["entries"]}
+        self.assertEqual(entries_by_id["200"]["anime_media_type"], "")
+        self.assertEqual(entries_by_id["201"]["anime_media_type"], "movie")
+        self.assertEqual(entries_by_id["202"]["anime_media_type"], "movie")
+        self.assertEqual(entries_by_id["201"]["runtime_minutes"], 122)
+        self.assertEqual(entries_by_id["202"]["runtime_minutes"], 125)
+        self.assertTrue(entries_by_id["200"]["is_light"])
+        self.assertTrue(entries_by_id["201"]["is_light"])
+        self.assertTrue(entries_by_id["202"]["is_light"])
+        self.assertEqual(graph_builder.ensure_classification_node_calls, ["201", "202"])
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())

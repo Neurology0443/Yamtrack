@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.conf import settings
+
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 
 if TYPE_CHECKING:
@@ -25,9 +27,9 @@ class UiCandidateClassificationEnricher:
             candidate.media_type = node.media_type
             candidate.runtime_minutes = node.runtime_minutes
             candidate.start_date = node.start_date
-            if not candidate.image:
+            if not candidate.image or candidate.image == settings.IMG_NONE:
                 candidate.image = node.image
-            if not candidate.title:
+            if not candidate.title or candidate.title == candidate.media_id:
                 candidate.title = node.title
             if not candidate.source:
                 candidate.source = node.source
@@ -45,8 +47,13 @@ class UiCandidateClassificationEnricher:
         if not candidate.is_light:
             return False
         relation_types = set(candidate.relation_types)
-        if "alternative_version" in relation_types or "alternative_setting" in relation_types:
+        if relation_types & {"alternative_version", "alternative_setting"}:
             return False
-        return bool(
-            relation_types & {"spin_off", "side_story", "summary", "full_story", "prequel", "sequel"}
-        )
+        if relation_types & {"spin_off", "side_story", "summary", "full_story"}:
+            return True
+        if relation_types & {"prequel", "sequel"}:
+            return (
+                candidate.metadata.get("is_promoted_continuity") is True
+                or candidate.section_key == "continuity_extras"
+            )
+        return False
