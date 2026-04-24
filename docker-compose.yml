@@ -9,6 +9,10 @@ services:
       - TZ=Europe/Berlin
       - SECRET=longstring
       - REDIS_URL=redis://redis:6379
+      - MAL_API=API_KEY
+      # MyAnimeList API rate limit per minute.
+      # Lower this if you receive HTTP 429 responses.
+      - MAL_RATE_LIMIT_PER_MINUTE=100
     volumes:
       - ./db:/yamtrack/db
     ports:
