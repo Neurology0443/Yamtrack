@@ -675,15 +675,68 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         ]
         self.assertEqual(related_series_ids, ["200", "201", "202"])
         entries_by_id = {entry["media_id"]: entry for entry in sections["related_series"]["entries"]}
-        self.assertEqual(entries_by_id["200"]["anime_media_type"], "")
+        self.assertEqual(entries_by_id["200"]["anime_media_type"], "movie")
         self.assertEqual(entries_by_id["201"]["anime_media_type"], "movie")
         self.assertEqual(entries_by_id["202"]["anime_media_type"], "movie")
+        self.assertEqual(entries_by_id["200"]["runtime_minutes"], 117)
         self.assertEqual(entries_by_id["201"]["runtime_minutes"], 122)
         self.assertEqual(entries_by_id["202"]["runtime_minutes"], 125)
         self.assertTrue(entries_by_id["200"]["is_light"])
         self.assertTrue(entries_by_id["201"]["is_light"])
         self.assertTrue(entries_by_id["202"]["is_light"])
-        self.assertEqual(graph_builder.ensure_classification_node_calls, ["201", "202"])
+        self.assertEqual(graph_builder.ensure_classification_node_calls, ["200", "201", "202"])
+
+    def test_light_direct_continuity_entrypoint_is_classification_enriched(self):
+        season_1 = AnimeNode("100", "Season 1", Sources.MAL.value, "tv", "img-100", date(2020, 1, 1), [])
+        season_2 = AnimeNode("101", "Season 2", Sources.MAL.value, "tv", "img-101", date(2021, 1, 1), [])
+        snapshot = SimpleNamespace(
+            root_node=season_2,
+            nodes_by_media_id={"100": season_1, "101": season_2},
+            all_normalized_relations=[],
+            continuity_component=[season_1, season_2],
+            series_line=[season_1, season_2],
+            direct_anchors=[season_1, season_2],
+            direct_candidates=[
+                AnimeRelation(
+                    "101",
+                    "200",
+                    "sequel",
+                    target_title="Movie 1",
+                    target_image="img-200",
+                    target_source=Sources.MAL.value,
+                ),
+            ],
+            promoted_continuity_candidates=[
+                AnimeRelation(
+                    "200",
+                    "201",
+                    "sequel",
+                    target_title="Movie 2",
+                    target_image="img-201",
+                    target_source=Sources.MAL.value,
+                ),
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="101",
+            canonical_root_media_id="100",
+        )
+        assembled = UiCandidateAssembler().build(snapshot)
+        movie_1 = next(candidate for candidate in assembled if candidate.media_id == "200")
+        self.assertTrue(movie_1.metadata["is_promoted_continuity_entrypoint"])
+        self.assertTrue(movie_1.metadata["is_continuity_enrichment_candidate"])
+
+        pipeline, graph_builder = self._pipeline(
+            {
+                "200": AnimeNode("200", "Movie 1", Sources.MAL.value, "movie", "img-200", date(2022, 1, 1), [], runtime_minutes=117),
+                "201": AnimeNode("201", "Movie 2", Sources.MAL.value, "movie", "img-201", date(2023, 1, 1), [], runtime_minutes=122),
+            }
+        )
+        payload = pipeline.run(snapshot)
+        related_series = next(section for section in payload.sections if section["key"] == "related_series")
+        entries_by_id = {entry["media_id"]: entry for entry in related_series["entries"]}
+
+        self.assertEqual(entries_by_id["200"]["anime_media_type"], "movie")
+        self.assertIn("200", graph_builder.ensure_classification_node_calls)
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())

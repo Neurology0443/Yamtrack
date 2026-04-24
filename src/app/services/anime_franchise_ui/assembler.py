@@ -39,6 +39,10 @@ class UiCandidateAssembler:
             (relation.source_media_id, relation.target_media_id, relation.relation_type)
             for relation in promoted_relations
         }
+        promoted_source_ids = {
+            relation.source_media_id
+            for relation in promoted_relations
+        }
         promoted_target_metadata = self._derive_promoted_target_metadata(
             promoted_relations=promoted_relations,
             series_ids=series_ids,
@@ -97,6 +101,15 @@ class UiCandidateAssembler:
                 in promoted_relation_keys
                 for relation in relations
             )
+            is_promoted_continuity_entrypoint = any(
+                relation.target_media_id in promoted_source_ids
+                and relation.relation_type in {"prequel", "sequel"}
+                for relation in relations
+            )
+            is_continuity_enrichment_candidate = (
+                is_promoted_continuity
+                or is_promoted_continuity_entrypoint
+            )
             candidates.append(
                 UiCandidate(
                     media_id=target_media_id,
@@ -127,6 +140,8 @@ class UiCandidateAssembler:
                         "is_light": candidate_is_light,
                         "route_media_type": route_media_type,
                         "is_promoted_continuity": is_promoted_continuity,
+                        "is_promoted_continuity_entrypoint": is_promoted_continuity_entrypoint,
+                        "is_continuity_enrichment_candidate": is_continuity_enrichment_candidate,
                         "promoted_from_series_line_media_id": promoted_metadata.get("series_anchor_media_id"),
                         "promoted_depth": promoted_metadata.get("depth"),
                         "origins": [

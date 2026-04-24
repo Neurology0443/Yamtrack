@@ -53,7 +53,9 @@ class UiCandidateClassificationEnricher:
             return True
         if relation_types & {"prequel", "sequel"}:
             return (
-                candidate.metadata.get("is_promoted_continuity") is True
+                candidate.metadata.get("is_continuity_enrichment_candidate") is True
+                or candidate.metadata.get("is_promoted_continuity") is True
+                or candidate.metadata.get("is_promoted_continuity_entrypoint") is True
                 or candidate.section_key == "continuity_extras"
             )
         return False
