@@ -76,6 +76,25 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             canonical_root_media_id="100",
         )
 
+    class _FakeClassificationGraphBuilder:
+        def __init__(self, nodes_by_media_id: dict[str, AnimeNode] | None = None):
+            self.nodes_by_media_id = nodes_by_media_id or {}
+            self.ensure_classification_node_calls: list[str] = []
+            self.ensure_node_calls: list[str] = []
+
+        def ensure_classification_node(self, media_id: str) -> AnimeNode:
+            media_id = str(media_id)
+            self.ensure_classification_node_calls.append(media_id)
+            return self.nodes_by_media_id[media_id]
+
+        def ensure_node(self, media_id: str):  # pragma: no cover - guard only
+            self.ensure_node_calls.append(str(media_id))
+            raise AssertionError("ensure_node() must not be called for classification enrichment")
+
+    def _pipeline(self, classification_nodes: dict[str, AnimeNode] | None = None):
+        graph_builder = self._FakeClassificationGraphBuilder(classification_nodes)
+        return AnimeFranchiseUiPipeline(classification_graph_builder=graph_builder), graph_builder
+
     def test_series_builder_uses_fixed_key_and_title(self):
         snapshot = self._snapshot()
         block = SeriesBuilder().build(snapshot)
@@ -222,8 +241,21 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             )
         ]
         snapshot.nodes_by_media_id.pop("902", None)
-
-        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        pipeline, graph_builder = self._pipeline(
+            {
+                "902": AnimeNode(
+                    "902",
+                    "Unknown Format Special",
+                    Sources.MAL.value,
+                    "",
+                    "img-902",
+                    date(2022, 8, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+        payload = pipeline.run(snapshot)
         sections = {section["key"]: section for section in payload.sections}
 
         self.assertIn("specials", sections)
@@ -231,28 +263,47 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             [entry["media_id"] for entry in sections["specials"]["entries"]],
             ["902"],
         )
+        self.assertEqual(graph_builder.ensure_classification_node_calls, ["902"])
 
-    def test_light_candidate_keeps_route_media_type_and_empty_anime_media_type(self):
+    def test_light_spin_off_candidate_is_classification_enriched_and_promoted_to_spin_offs(self):
         snapshot = self._snapshot()
         snapshot.direct_candidates = [
             AnimeRelation(
                 "200",
-                "903",
-                "side_story",
-                target_title="Light Candidate",
-                target_image="img-903",
+                "51958",
+                "spin_off",
+                target_title="Spin Off 51958",
+                target_image="img-51958",
                 target_source=Sources.MAL.value,
             )
         ]
-        snapshot.nodes_by_media_id.pop("903", None)
+        snapshot.nodes_by_media_id.pop("51958", None)
+        pipeline, graph_builder = self._pipeline(
+            {
+                "51958": AnimeNode(
+                    "51958",
+                    "Spin Off 51958",
+                    Sources.MAL.value,
+                    "tv",
+                    "img-51958",
+                    date(2023, 5, 1),
+                    [],
+                    runtime_minutes=24,
+                    episode_count=None,
+                )
+            }
+        )
+        payload = pipeline.run(snapshot)
+        spin_offs = next(section for section in payload.sections if section["key"] == "spin_offs")
+        entry = next(entry for entry in spin_offs["entries"] if entry["media_id"] == "51958")
 
-        payload = AnimeFranchiseUiPipeline().run(snapshot)
-        specials = next(section for section in payload.sections if section["key"] == "specials")
-        entry = next(entry for entry in specials["entries"] if entry["media_id"] == "903")
-
+        self.assertEqual(graph_builder.ensure_classification_node_calls, ["51958"])
+        self.assertEqual(graph_builder.ensure_node_calls, [])
         self.assertEqual(entry["media_type"], "anime")
-        self.assertEqual(entry["anime_media_type"], "")
+        self.assertEqual(entry["anime_media_type"], "tv")
+        self.assertEqual(entry["runtime_minutes"], 24)
         self.assertTrue(entry["is_light"])
+        self.assertIsNone(entry["episode_count"])
 
     def test_candidate_assembler_non_light_candidate_has_known_format(self):
         snapshot = self._snapshot()
@@ -287,6 +338,77 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             "905",
             [entry["media_id"] for entry in sections["ignored"]["entries"]],
         )
+
+    def test_light_alternative_candidate_is_not_classification_enriched(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "990",
+                "alternative_version",
+                target_title="Alternative 990",
+                target_image="img-990",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("990", None)
+        pipeline, graph_builder = self._pipeline(
+            {
+                "990": AnimeNode(
+                    "990",
+                    "Alternative 990",
+                    Sources.MAL.value,
+                    "tv",
+                    "img-990",
+                    date(2025, 1, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        alternatives = next(section for section in payload.sections if section["key"] == "alternatives")
+        entry = alternatives["entries"][0]
+
+        self.assertEqual(entry["media_id"], "990")
+        self.assertEqual(entry["anime_media_type"], "")
+        self.assertTrue(entry["is_light"])
+        self.assertEqual(graph_builder.ensure_classification_node_calls, [])
+        self.assertEqual(graph_builder.ensure_node_calls, [])
+
+    def test_light_side_story_with_known_tv_format_is_filtered_from_specials(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [
+            AnimeRelation(
+                "200",
+                "991",
+                "side_story",
+                target_title="Side Story 991",
+                target_image="img-991",
+                target_source=Sources.MAL.value,
+            )
+        ]
+        snapshot.nodes_by_media_id.pop("991", None)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "991": AnimeNode(
+                    "991",
+                    "Side Story 991",
+                    Sources.MAL.value,
+                    "tv",
+                    "img-991",
+                    date(2024, 2, 1),
+                    [],
+                    runtime_minutes=24,
+                )
+            }
+        )
+
+        payload = pipeline.run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+        self.assertNotIn("991", [entry["media_id"] for entry in sections["specials"]["entries"]])
+        self.assertIn("991", [entry["media_id"] for entry in sections["related_series"]["entries"]])
 
     def test_demon_slayer_movie_chain_light_candidates_remain_visible(self):
         season_1 = AnimeNode("100", "Season 1", Sources.MAL.value, "tv", "img-100", date(2020, 1, 1), [])
@@ -331,7 +453,14 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             canonical_root_media_id="100",
         )
 
-        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        pipeline, _graph_builder = self._pipeline(
+            {
+                "200": AnimeNode("200", "Movie 1", Sources.MAL.value, "movie", "img-200", date(2022, 1, 1), [], runtime_minutes=117),
+                "201": AnimeNode("201", "Movie 2", Sources.MAL.value, "movie", "img-201", date(2023, 1, 1), [], runtime_minutes=122),
+                "202": AnimeNode("202", "Movie 3", Sources.MAL.value, "movie", "img-202", date(2024, 1, 1), [], runtime_minutes=125),
+            }
+        )
+        payload = pipeline.run(snapshot)
         sections = {section["key"]: section for section in payload.sections}
         related_series_ids = [
             entry["media_id"]
@@ -340,7 +469,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(related_series_ids, ["200", "201", "202"])
         for entry in sections["related_series"]["entries"]:
             self.assertEqual(entry["media_type"], "anime")
-            self.assertEqual(entry["anime_media_type"], "")
+            self.assertEqual(entry["anime_media_type"], "movie")
             self.assertTrue(entry["is_light"])
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):

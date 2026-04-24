@@ -34,6 +34,43 @@ class Metadata(TestCase):
         self.assertEqual(response["details"]["status"], "Finished")
         self.assertEqual(response["details"]["episodes"], 26)
 
+    @patch("app.providers.mal.cache.set")
+    @patch("app.providers.mal.cache.get")
+    @patch("app.providers.mal.services.api_request")
+    def test_anime_classification_metadata_requests_minimal_fields(
+        self,
+        mock_api_request,
+        mock_cache_get,
+        _mock_cache_set,
+    ):
+        mock_cache_get.return_value = None
+        mock_api_request.return_value = {
+            "id": 51958,
+            "title": "Test Classification Anime",
+            "media_type": "tv",
+            "start_date": "2026-01-01",
+            "average_episode_duration": 1440,
+            "main_picture": {"large": "https://example.com/image.jpg"},
+        }
+
+        metadata = mal.anime_classification_metadata("51958")
+
+        self.assertEqual(metadata["media_id"], "51958")
+        self.assertEqual(metadata["details"]["raw_media_type"], "tv")
+        self.assertEqual(metadata["details"]["start_date"], "2026-01-01")
+        self.assertEqual(metadata["details"]["runtime"], "24 min")
+        _, kwargs = mock_api_request.call_args
+        fields = kwargs["params"]["fields"]
+        self.assertIn("media_type", fields)
+        self.assertIn("start_date", fields)
+        self.assertIn("average_episode_duration", fields)
+        self.assertNotIn("related_anime", fields)
+        self.assertNotIn("recommendations", fields)
+        self.assertNotIn("synopsis", fields)
+        self.assertNotIn("genres", fields)
+        self.assertNotIn("studios", fields)
+        self.assertNotIn("num_episodes", fields)
+
     @patch("requests.Session.get")
     def test_anime_unknown(self, mock_data):
         """Test the metadata method for anime with mostly unknown data."""
