@@ -172,6 +172,47 @@ def anime_minimal(media_id, *, refresh_cache=False):
     }
 
 
+def anime_classification_metadata(media_id, *, refresh_cache=False):
+    """Return MAL anime metadata limited to UI classification fields."""
+    cache_key = (
+        f"{Sources.MAL.value}_{MediaTypes.ANIME.value}_{media_id}_classification"
+    )
+    data = None if refresh_cache else cache.get(cache_key)
+
+    if data is None:
+        url = f"{base_url}/anime/{media_id}"
+        params = {
+            "fields": "media_type,start_date,average_episode_duration",
+        }
+
+        try:
+            response = services.api_request(
+                Sources.MAL.value,
+                "GET",
+                url,
+                params=params,
+                headers={"X-MAL-CLIENT-ID": settings.MAL_API},
+            )
+        except requests.exceptions.HTTPError as error:
+            handle_error(error)
+
+        data = {
+            "media_id": str(media_id),
+            "source": Sources.MAL.value,
+            "media_type": MediaTypes.ANIME.value,
+            "title": response["title"],
+            "image": get_image_url(response),
+            "details": {
+                "raw_media_type": response.get("media_type"),
+                "start_date": response.get("start_date"),
+                "runtime": get_runtime(response),
+            },
+        }
+        cache.set(cache_key, data)
+
+    return data
+
+
 def anime_relations(mal_id, *, refresh_cache=False):
     """Return normalized relation edges for a MAL anime id."""
     metadata = anime(mal_id, refresh_cache=refresh_cache)

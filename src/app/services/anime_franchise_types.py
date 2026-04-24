@@ -17,6 +17,10 @@ class AnimeRelation:
     source_media_id: str
     target_media_id: str
     relation_type: str
+    target_title: str | None = None
+    target_image: str | None = None
+    target_source: str | None = None
+    target_route_media_type: str | None = None
 
 
 @dataclass

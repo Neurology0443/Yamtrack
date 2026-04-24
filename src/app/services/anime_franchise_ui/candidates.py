@@ -37,6 +37,8 @@ class UiCandidate:
     has_series_line_origin: bool = False
     has_root_origin: bool = False
     has_non_series_origin: bool = False
+    is_light: bool = False
+    route_media_type: str = "anime"
     is_current: bool = False
     section_key: str | None = None
     hidden: bool = False

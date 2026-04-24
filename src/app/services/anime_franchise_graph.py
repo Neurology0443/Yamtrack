@@ -23,6 +23,7 @@ class AnimeFranchiseGraphBuilder:
         self.metadata_fetcher = metadata_fetcher or mal.anime
         self.refresh_cache = refresh_cache
         self._node_cache: dict[str, AnimeNode] = {}
+        self._classification_node_cache: dict[str, AnimeNode] = {}
 
     def build(self, root_media_id: str) -> dict[str, AnimeNode]:
         """Build the MAL anime graph around sequel/prequel continuity."""
@@ -48,6 +49,33 @@ class AnimeFranchiseGraphBuilder:
     def ensure_node(self, media_id: str) -> AnimeNode:
         """Ensure a node exists in cache and return it."""
         return self._get_node(media_id)
+
+    def ensure_classification_node(self, media_id: str) -> AnimeNode:
+        """Return a partial node containing only classification-ready metadata."""
+        media_id = str(media_id)
+        cached = self._classification_node_cache.get(media_id)
+        if cached:
+            return cached
+
+        metadata = mal.anime_classification_metadata(
+            media_id,
+            refresh_cache=self.refresh_cache,
+        )
+        node = AnimeNode(
+            media_id=str(metadata["media_id"]),
+            title=metadata["title"],
+            source=metadata["source"],
+            media_type=metadata["details"].get("raw_media_type", ""),
+            image=metadata["image"],
+            start_date=self._parse_start_date(metadata["details"].get("start_date")),
+            relations=[],
+            runtime_minutes=self._parse_runtime_minutes(
+                metadata["details"].get("runtime"),
+            ),
+            episode_count=None,
+        )
+        self._classification_node_cache[media_id] = node
+        return node
 
     def _get_node(self, media_id: str) -> AnimeNode:
         media_id = str(media_id)
@@ -101,6 +129,10 @@ class AnimeFranchiseGraphBuilder:
                     source_media_id=media_id,
                     target_media_id=target_id,
                     relation_type=relation_type,
+                    target_title=relation.get("title"),
+                    target_image=relation.get("image"),
+                    target_source=relation.get("source"),
+                    target_route_media_type=relation.get("media_type"),
                 )
             )
         return normalized_relations

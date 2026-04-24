@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from .adapter import AnimeFranchiseUiPayload, ViewModelAdapter
 from .assembler import UiCandidateAssembler
 from .engine import RulePipeline
+from .enricher import UiCandidateClassificationEnricher
 from .layout import LayoutCompiler
 from .presets import DefaultUiPreset
 from .rule_types import RuleContext, RulePack
@@ -28,9 +29,17 @@ class AnimeFranchiseUiPipeline:
     remains in rule packs, not in adapter/template layers.
     """
 
-    def __init__(self, *, preset: tuple[RulePack, ...] = DefaultUiPreset):
+    def __init__(
+        self,
+        *,
+        preset: tuple[RulePack, ...] = DefaultUiPreset,
+        classification_graph_builder=None,
+    ):
         self.series_builder = SeriesBuilder()
         self.candidate_assembler = UiCandidateAssembler()
+        self.candidate_enricher = UiCandidateClassificationEnricher(
+            graph_builder=classification_graph_builder,
+        )
         self.rule_pipeline = RulePipeline(list(preset))
         self.layout_compiler = LayoutCompiler()
         self.adapter = ViewModelAdapter()
@@ -39,6 +48,7 @@ class AnimeFranchiseUiPipeline:
         series_block = self.series_builder.build(snapshot)
         candidates = self.candidate_assembler.build(snapshot)
         context = RuleContext(snapshot=snapshot)
+        self.candidate_enricher.enrich(candidates, context)
         self.rule_pipeline.run(candidates=candidates, context=context)
         sections = self.layout_compiler.compile(candidates=candidates, context=context)
         return self.adapter.adapt(

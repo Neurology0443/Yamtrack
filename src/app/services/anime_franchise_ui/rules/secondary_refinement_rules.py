@@ -27,7 +27,7 @@ def _is_short_side_story_special(candidate, _context) -> bool:
     )
 
 
-def _is_long_tv_spin_off_related(candidate, context) -> bool:
+def _is_classification_enriched_long_tv_spin_off_related(candidate, context) -> bool:
     return (
         _is_related_series_candidate(candidate, context)
         and "spin_off" in candidate.relation_types
@@ -80,8 +80,8 @@ SecondaryRefinementRules = RulePack(
             ),
         ),
         Rule(
-            key="long_tv_spinoff_to_spin_offs",
-            when=_is_long_tv_spin_off_related,
+            key="classification_long_tv_spinoff_to_spin_offs",
+            when=_is_classification_enriched_long_tv_spin_off_related,
             actions=(place_in("spin_offs"),),
         ),
     ),

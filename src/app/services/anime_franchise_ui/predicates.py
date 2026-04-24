@@ -47,6 +47,10 @@ def media_type_in(media_types: Iterable[str]) -> CandidatePredicate:
     return lambda candidate, _context: candidate.media_type in media_types
 
 
+def has_known_anime_format() -> CandidatePredicate:
+    return lambda candidate, _context: bool(candidate.media_type)
+
+
 def relation_type_in(relation_types: Iterable[str]) -> CandidatePredicate:
     relation_types = set(relation_types)
     return lambda candidate, _context: candidate.relation_type in relation_types

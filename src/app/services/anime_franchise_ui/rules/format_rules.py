@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from app.services.anime_franchise_ui.actions import place_in
-from app.services.anime_franchise_ui.predicates import media_type_in
+from app.services.anime_franchise_ui.predicates import has_known_anime_format, media_type_in
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
+
+known_anime_format = has_known_anime_format()
 
 FormatRules = RulePack(
     key="format_rules",
@@ -26,6 +28,7 @@ FormatRules = RulePack(
             key="specials_require_specific_formats",
             when=lambda candidate, _context: (
                 candidate.section_key == "specials"
+                and known_anime_format(candidate, _context)
                 and candidate.media_type not in {"ova", "movie", "special", "tv_special"}
             ),
             actions=(place_in("ignored"),),

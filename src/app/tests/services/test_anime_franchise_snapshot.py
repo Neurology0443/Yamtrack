@@ -3,6 +3,7 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
+from app.models import Sources
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -270,6 +271,63 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         promoted_targets = {rel.target_media_id for rel in snapshot.promoted_continuity_candidates}
         self.assertEqual(promoted_targets, {"200", "201", "202"})
 
+    def test_direct_satellite_outside_continuity_is_not_hydrated(self):
+        class SpyGraphBuilder:
+            def __init__(self):
+                self.ensure_node_calls = []
+                self.continuity_nodes = {
+                    "100": AnimeNode(
+                        "100",
+                        "Season 1",
+                        "mal",
+                        "tv",
+                        "img",
+                        date(2020, 1, 1),
+                        [
+                            AnimeRelation("100", "101", "sequel"),
+                            AnimeRelation(
+                                "100",
+                                "900",
+                                "spin_off",
+                                target_title="Spin Off 900",
+                                target_image="img-900",
+                                target_source=Sources.MAL.value,
+                            ),
+                        ],
+                    ),
+                    "101": AnimeNode(
+                        "101",
+                        "Season 2",
+                        "mal",
+                        "tv",
+                        "img",
+                        date(2021, 1, 1),
+                        [AnimeRelation("101", "100", "prequel")],
+                    ),
+                }
+                self.extras = {
+                    "900": AnimeNode("900", "Spin Off 900", "mal", "movie", "img-900", date(2021, 6, 1), []),
+                }
+
+            def build(self, root_media_id):  # noqa: ARG002
+                return self.continuity_nodes
+
+            def get_direct_neighbors(self, media_id):
+                if media_id in self.continuity_nodes:
+                    return self.continuity_nodes[media_id].relations
+                return self.extras[media_id].relations
+
+            def ensure_node(self, media_id):
+                self.ensure_node_calls.append(str(media_id))
+                return self.extras[str(media_id)]
+
+        graph_builder = SpyGraphBuilder()
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=graph_builder).build("100")
+
+        self.assertEqual([relation.target_media_id for relation in snapshot.direct_candidates], ["900"])
+        self.assertNotIn("900", snapshot.nodes_by_media_id)
+        self.assertEqual(graph_builder.ensure_node_calls, [])
+
 
 class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_parse_runtime_minutes_variants(self):
@@ -288,3 +346,35 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
         self.assertIsNone(parser(None))
         self.assertIsNone(parser(""))
         self.assertIsNone(parser("unknown"))
+
+    def test_normalize_relations_keeps_light_target_metadata(self):
+        metadata = {
+            "media_id": "42",
+            "title": "Series",
+            "source": "mal",
+            "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+            "image": "img-42",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "43",
+                        "relation_type": "side_story",
+                        "title": "Satellite 43",
+                        "image": "img-43",
+                        "source": "mal",
+                        "media_type": "anime",
+                    }
+                ]
+            },
+        }
+
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata,  # noqa: ARG005
+        )
+        node = builder.ensure_node("42")
+        relation = node.relations[0]
+
+        self.assertEqual(relation.target_title, "Satellite 43")
+        self.assertEqual(relation.target_image, "img-43")
+        self.assertEqual(relation.target_source, "mal")
+        self.assertEqual(relation.target_route_media_type, "anime")

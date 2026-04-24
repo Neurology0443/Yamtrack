@@ -118,14 +118,14 @@ class MediaDetailsViewTests(TestCase):
                     {
                         "media_id": "101",
                         "media_type": "anime",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "title": "Legacy Related",
                         "image": "http://example.com/legacy.jpg",
                     },
                     {
                         "media_id": "150",
                         "media_type": "anime",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "title": "Spin Off Alpha",
                         "image": "http://example.com/spinoff.jpg",
                         "relation_type": "spin_off",
@@ -135,7 +135,7 @@ class MediaDetailsViewTests(TestCase):
                     {
                         "media_id": "102",
                         "media_type": "anime",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "title": "Legacy Recommendation",
                         "image": "http://example.com/reco.jpg",
                     }
@@ -198,7 +198,7 @@ class MediaDetailsViewTests(TestCase):
                     {
                         "media_id": "101",
                         "media_type": "anime",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "title": "Legacy Related",
                         "image": "http://example.com/legacy.jpg",
                     }
@@ -207,7 +207,7 @@ class MediaDetailsViewTests(TestCase):
                     {
                         "media_id": "102",
                         "media_type": "anime",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "title": "Legacy Recommendation",
                         "image": "http://example.com/reco.jpg",
                     }
@@ -223,7 +223,7 @@ class MediaDetailsViewTests(TestCase):
                 "series": {"key": "series", "title": "Series", "entries": [
                     {
                         "media_id": "100",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "media_type": "anime",
                         "anime_media_type": "tv",
                         "title": "Test Anime",
@@ -235,7 +235,7 @@ class MediaDetailsViewTests(TestCase):
                     },
                     {
                         "media_id": "101",
-                        "source": "mal",
+                        "source": Sources.MAL.value,
                         "media_type": "anime",
                         "anime_media_type": "tv",
                         "title": "Test Anime Season 2",
@@ -253,7 +253,7 @@ class MediaDetailsViewTests(TestCase):
                         "entries": [
                             {
                                 "media_id": "150",
-                                "source": "mal",
+                                "source": Sources.MAL.value,
                                 "media_type": "anime",
                                 "anime_media_type": "tv",
                                 "title": "Spin Off Alpha",
@@ -302,6 +302,99 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-active="true"', count=0)
         self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.views.helpers.enrich_items_with_user_data")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_grouping_renders_light_satellite_card_without_format_badge(
+        self,
+        mock_get_metadata,
+        mock_enrich_items,
+        mock_anime_franchise_service,
+    ):
+        mock_enrich_items.side_effect = (
+            lambda request, items, section_name: [  # noqa: ARG005
+                {"item": item, "media": None} for item in items
+            ]
+        )
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "related": {"related_anime": []},
+        }
+        mock_anime_franchise_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "100",
+                "display_title": "Test Anime",
+                "series": {"key": "series", "title": "Series", "entries": [
+                    {
+                        "media_id": "100",
+                        "source": Sources.MAL.value,
+                        "media_type": "anime",
+                        "anime_media_type": "tv",
+                        "title": "Test Anime",
+                        "image": "http://example.com/image.jpg",
+                        "relation_type": "",
+                        "linked_series_line_media_id": None,
+                        "linked_series_line_index": 0,
+                        "is_current": True,
+                    }
+                ]},
+                "sections": [
+                    {
+                        "key": "related_series",
+                        "title": "Related Series",
+                        "entries": [
+                            {
+                                "media_id": "150",
+                                "source": Sources.MAL.value,
+                                "media_type": "anime",
+                                "anime_media_type": "",
+                                "title": "Spin Off Light",
+                                "image": "http://example.com/spinoff-light.jpg",
+                                "relation_type": "spin_off",
+                                "linked_series_line_media_id": "100",
+                                "linked_series_line_index": 0,
+                                "is_current": False,
+                            }
+                        ],
+                        "visible_in_ui": True,
+                        "hidden_if_empty": True,
+                    }
+                ],
+            },
+        )()
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Test Anime")
+        self.assertContains(response, "Spin Off Light")
+        self.assertContains(response, "/details/mal/anime/150/spin-off-light")
+        html = response.content.decode()
+        light_title_index = html.index("Spin Off Light")
+        light_card_region = html[
+            max(0, light_title_index - 2000):light_title_index + 2000
+        ]
+        self.assertIn('data-franchise-badge-type="relation"', light_card_region)
+        self.assertIn('data-franchise-badge-value="spin_off"', light_card_region)
+        self.assertNotIn('data-franchise-badge-type="format"', light_card_region)
 
     @patch("app.views.AnimeFranchiseService")
     @patch("app.providers.services.get_media_metadata")
