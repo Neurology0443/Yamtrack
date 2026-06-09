@@ -6,6 +6,9 @@ from app.services.anime_franchise_ui.actions import place_in, set_candidate_meta
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
 
 
+LONG_TV_SPIN_OFF_MIN_RUNTIME_MINUTES = 30
+
+
 def _is_related_series_candidate(candidate, _context) -> bool:
     return candidate.section_key == "related_series"
 
@@ -27,12 +30,13 @@ def _is_short_side_story_special(candidate, _context) -> bool:
     )
 
 
-def _is_long_tv_spin_off_related(candidate, context) -> bool:
+def _is_long_tv_spin_off_related(candidate, _context) -> bool:
     return (
-        _is_related_series_candidate(candidate, context)
+        candidate.section_key in {"related_series", "alternatives"}
         and "spin_off" in candidate.relation_types
         and candidate.media_type == "tv"
         and candidate.runtime_minutes is not None
+        and candidate.runtime_minutes > LONG_TV_SPIN_OFF_MIN_RUNTIME_MINUTES
     )
 
 
