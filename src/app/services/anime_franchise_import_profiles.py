@@ -105,6 +105,7 @@ class SatellitesImportProfile(BaseImportProfile):
         {"spin_off", "alternative_version", "side_story"}
     )
     min_runtime_minutes = 15
+    single_episode_max_runtime_minutes = 30
 
     def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
         runtime_minutes = target_node.runtime_minutes
@@ -117,6 +118,11 @@ class SatellitesImportProfile(BaseImportProfile):
         if runtime_minutes is None:
             return False
         if runtime_minutes < self.min_runtime_minutes:
+            return False
+        if (
+            target_node.episode_count == 1
+            and runtime_minutes <= self.single_episode_max_runtime_minutes
+        ):
             return False
         return True
 
