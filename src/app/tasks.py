@@ -176,22 +176,39 @@ def build_mal_anime_franchise_payload(media_id):
             graph_builder=graph_builder,
         ).build(media_id)
         truncated = bool(graph_builder.truncated)
+        aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
+        can_use_aliases = aliases_enabled and not truncated
         truncation_reason = graph_builder.truncation_reason or ""
         node_count = graph_builder.node_count
         serialized_payload = serialize_franchise_payload(
             franchise_payload,
             root_media_id=media_id,
         )
+        canonical_payload, canonical_media_id, _aliasable_media_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                serialized_payload,
+                build_seed_media_id=media_id,
+                truncated=truncated,
+                aliases_enabled=aliases_enabled,
+            )
+        )
         duration = time.monotonic() - started_at
         anime_franchise_cache.save_payload(
-            media_id,
-            serialized_payload,
+            canonical_media_id,
+            canonical_payload,
             fetched_at=timezone.now(),
             node_count=node_count,
             build_duration_seconds=duration,
             truncated=truncated,
             truncation_reason=truncation_reason,
         )
+        alias_count = 0
+        if can_use_aliases:
+            alias_count = anime_franchise_cache.replace_aliases(
+                canonical_media_id,
+                canonical_payload,
+                truncated=False,
+            )
         if truncated:
             logger.info(
                 "MAL anime franchise build truncated for media_id=%s max_nodes=%s",
@@ -199,20 +216,24 @@ def build_mal_anime_franchise_payload(media_id):
                 settings.ANIME_FRANCHISE_MAX_NODES,
             )
         logger.info(
-            "MAL anime franchise build completed for media_id=%s nodes=%s "
-            "duration=%s truncated=%s",
+            "MAL anime franchise build completed for media_id=%s canonical_media_id=%s "
+            "nodes=%s duration=%s truncated=%s aliases=%s",
             media_id,
+            canonical_media_id,
             node_count,
             round(duration, 3),
             truncated,
+            alias_count,
         )
         return {  # noqa: TRY300 - task returns structured success payloads
             "media_id": media_id,
+            "canonical_media_id": canonical_media_id,
             "built": True,
             "node_count": node_count,
             "duration": duration,
             "truncated": truncated,
             "truncation_reason": truncation_reason,
+            "alias_count": alias_count,
         }
     except Exception as error:  # noqa: BLE001 - background task must isolate failures
         error_message = str(error) or error.__class__.__name__

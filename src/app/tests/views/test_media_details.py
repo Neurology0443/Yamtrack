@@ -95,13 +95,13 @@ class MediaDetailsViewTests(TestCase):
             schedule_stale_refresh=False,
         )
 
-    @patch("app.views.anime_franchise_cache.load_payload")
+    @patch("app.views.anime_franchise_cache.load_payload_for_media")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
     def test_anime_franchise_not_enabled_for_non_mal_or_non_anime(
         self,
         mock_get_metadata,
-        mock_load_payload,
+        mock_load_payload_for_media,
     ):
         """Anime franchise grouping should only run for MAL anime details."""
         mock_get_metadata.return_value = {
@@ -127,7 +127,7 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["anime_franchise"])
-        mock_load_payload.assert_not_called()
+        mock_load_payload_for_media.assert_not_called()
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.views.build_series_line_fallback_payload", return_value=None)
@@ -901,6 +901,222 @@ class MediaDetailsViewTests(TestCase):
         mock_build_delay.assert_not_called()
 
 
+
+    def _canonical_alias_payload(self):
+        return {
+            "root_media_id": "223",
+            "display_title": "Dragon Ball",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "223",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Dragon Ball",
+                        "image": "img",
+                    },
+                    {
+                        "media_id": "269",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Dragon Ball GT",
+                        "image": "img",
+                    },
+                ],
+            },
+            "sections": [],
+            "aliasable_media_ids": ["223", "269"],
+        }
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.views.build_series_line_fallback_payload")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_alias_hit_displays_payload_without_fallback(
+        self,
+        mock_get_metadata,
+        mock_fallback_payload,
+        mock_build_delay,
+    ):
+        """Alias hits should render complete payloads without fallback/build."""
+        mock_get_metadata.return_value = {
+            "media_id": "269",
+            "title": "Dragon Ball GT",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "223",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Dragon Ball",
+                        "image": "img",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_alias_payload()
+        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.replace_aliases("223", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "269",
+                    "title": "dragon-ball-gt",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context["anime_franchise"])
+        mock_fallback_payload.assert_not_called()
+        mock_build_delay.assert_not_called()
+        self.assertNotIn("related_anime", response.context["media"]["related"])
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_stale_alias_hit_refreshes_canonical_id(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Stale alias hits should enqueue refreshes for canonical IDs."""
+        mock_get_metadata.return_value = {
+            "media_id": "269",
+            "title": "Dragon Ball GT",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {},
+        }
+        payload = self._canonical_alias_payload()
+        anime_franchise_cache.save_payload(
+            "223",
+            payload,
+            fetched_at=timezone.now() - timedelta(days=31),
+        )
+        anime_franchise_cache.replace_aliases("223", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "269",
+                    "title": "dragon-ball-gt",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_build_delay.assert_called_once_with("223")
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_alias_hit_recomputes_current_entry_from_visited_page(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Alias-rendered payloads should not trust cached is_current flags."""
+        mock_get_metadata.return_value = {
+            "media_id": "269",
+            "title": "Dragon Ball GT",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {},
+        }
+        payload = self._canonical_alias_payload()
+        payload["series"]["entries"][0]["is_current"] = True
+        payload["series"]["entries"][1]["is_current"] = False
+        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.replace_aliases("223", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "269",
+                    "title": "dragon-ball-gt",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        entries = response.context["anime_franchise"]["series"]["entries"]
+        self.assertFalse(entries[0]["item"]["is_current"])
+        self.assertTrue(entries[1]["item"]["is_current"])
+        mock_build_delay.assert_not_called()
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.views.build_series_line_fallback_payload")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_broken_alias_resumes_cache_miss_flow(
+        self,
+        mock_get_metadata,
+        mock_fallback_payload,
+        mock_build_delay,
+    ):
+        """Broken aliases should be deleted and fall back to requested IDs."""
+        mock_get_metadata.return_value = {
+            "media_id": "269",
+            "title": "Dragon Ball GT",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "223",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Dragon Ball",
+                        "image": "img",
+                        "relation_type": "prequel",
+                    },
+                ],
+            },
+        }
+        mock_fallback_payload.return_value = None
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "269",
+                    "title": "dragon-ball-gt",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_fallback_payload.assert_called_once()
+        mock_build_delay.assert_called_once_with("269")
+
     @patch("app.views.anime_franchise_cache.maybe_schedule_build")
     @patch("app.views.prepare_anime_franchise_context")
     @patch("app.providers.services.get_media_metadata")
@@ -972,13 +1188,13 @@ class MediaDetailsViewTests(TestCase):
         self.assertIn("related_anime", response.context["media"]["related"])
         mock_maybe_schedule_build.assert_called_once()
 
-    @patch("app.views.anime_franchise_cache.load_payload")
+    @patch("app.views.anime_franchise_cache.load_payload_for_media")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=False)
     def test_anime_franchise_disabled_by_setting(
         self,
         mock_get_metadata,
-        mock_load_payload,
+        mock_load_payload_for_media,
     ):
         """Feature should remain disabled when the setting is false."""
         mock_get_metadata.return_value = {
@@ -1004,7 +1220,7 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["anime_franchise"])
-        mock_load_payload.assert_not_called()
+        mock_load_payload_for_media.assert_not_called()
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.views.build_series_line_fallback_payload", return_value=None)

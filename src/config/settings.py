@@ -407,6 +407,11 @@ ANIME_FRANCHISE_CACHE_TTL_DAYS = config(
     default=365,
     cast=int,
 )
+ANIME_FRANCHISE_CACHE_ALIASES_ENABLED = config(
+    "ANIME_FRANCHISE_CACHE_ALIASES_ENABLED",
+    default=True,
+    cast=bool,
+)
 ANIME_FRANCHISE_CACHE_FRESH_DAYS = config(
     "ANIME_FRANCHISE_CACHE_FRESH_DAYS",
     default=30,

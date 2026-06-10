@@ -208,6 +208,17 @@ Yamtrack keeps the existing MAL anime metadata cache for individual anime record
 
 Detail pages no longer synchronously build a complete missing franchise payload. On a cache miss, the page queues `build_mal_anime_franchise_payload` in Celery. On a cache hit, the cached payload is enriched with the current user's data and `related_anime` is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.
 
+### Canonical franchise aliases
+
+After a complete, non-truncated Celery build, Yamtrack may store lightweight alias keys so entries from the same franchise can reuse the canonical complete payload. Alias keys use `mal_anime_franchise_alias_<id>` and point to a canonical `mal_anime_franchise_<canonical_id>` payload. Aliases are never created from first-visit fallback payloads and are ignored if the canonical payload is missing, invalid, or does not explicitly cover the requested media ID.
+
+Aliases are only created for complete, non-truncated payloads when `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` is enabled. Aliasable IDs are limited to entries in the main series line. Section-only entries are considered covered for diagnostics but are not alias targets.
+
+If an alias is created for an ID, any older direct payload for that aliased ID is removed so the canonical payload can be used. Broken or stale aliases are ignored and cleaned up safely.
+
+Alias key: `mal_anime_franchise_alias_<id>`
+Alias index: `mal_anime_franchise_<canonical_id>:aliases`
+
 ### First-visit series-line fallback
 
 On a complete franchise cache miss, Yamtrack queues the complete Celery build first. It may then render a bounded, temporary TV prequel/sequel `series_line` fallback. The fallback uses stale individual MAL metadata when available, does not schedule additional stale refreshes, is never written to the complete franchise cache, and falls back to direct MAL `related_anime` if unavailable or not displayable.
@@ -233,6 +244,8 @@ Payload key: mal_anime_franchise_223
 Meta key: mal_anime_franchise_223:meta
 Queue lock: mal_anime_franchise_223:queue_lock
 Task lock: mal_anime_franchise_223:task_lock
+Alias key: mal_anime_franchise_alias_<id>
+Alias index: mal_anime_franchise_223:aliases
 ```
 
 Expected log messages include:

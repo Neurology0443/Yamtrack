@@ -348,6 +348,161 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
 
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_from_noncanonical_saves_canonical(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "269",
+                "display_title": "Dragon Ball GT",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "223",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball",
+                        },
+                        {
+                            "media_id": "269",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball GT",
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("269")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["media_id"], "269")
+        self.assertEqual(result["canonical_media_id"], "223")
+        self.assertGreaterEqual(result["alias_count"], 1)
+        payload, _meta = anime_franchise_cache.load_payload("223")
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["root_media_id"], "223")
+        self.assertIn("269", payload["aliasable_media_ids"])
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "223")
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_truncated_build_skips_aliases(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = True
+        mock_graph_builder.truncation_reason = "max_nodes"
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "269",
+                "display_title": "Dragon Ball GT",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "223",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball",
+                        },
+                        {
+                            "media_id": "269",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball GT",
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("269")
+
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["canonical_media_id"], "269")
+        self.assertEqual(result["alias_count"], 0)
+        payload, _meta = anime_franchise_cache.load_payload("269")
+        self.assertIsNotNone(payload)
+        canonical_payload, _canonical_meta = anime_franchise_cache.load_payload("223")
+        self.assertIsNone(canonical_payload)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_aliases_disabled_saves_under_seed(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 2
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "269",
+                "display_title": "Dragon Ball GT",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "223",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball",
+                        },
+                        {
+                            "media_id": "269",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Dragon Ball GT",
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("269")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["canonical_media_id"], "269")
+        self.assertEqual(result["alias_count"], 0)
+        payload, _meta = anime_franchise_cache.load_payload("269")
+        self.assertIsNotNone(payload)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+        canonical_payload, _canonical_meta = anime_franchise_cache.load_payload("223")
+        self.assertIsNone(canonical_payload)
+
     @patch("app.tasks.AnimeFranchiseService")
     def test_build_mal_anime_franchise_payload_preserves_previous_payload_on_error(
         self,
