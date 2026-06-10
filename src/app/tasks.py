@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import timedelta
 
 import requests
@@ -9,6 +10,10 @@ from django.utils import timezone
 
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
+from app.services import anime_franchise_cache
+from app.services.anime_franchise import AnimeFranchiseService
+from app.services.anime_franchise_context import serialize_franchise_payload
+from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_import import AnimeFranchiseImportService
 
 logger = logging.getLogger(__name__)
@@ -137,3 +142,91 @@ def import_anime_franchise(
         return result
     finally:
         cache.delete(lock_key)
+
+
+@shared_task(name="Build MAL anime franchise payload")
+def build_mal_anime_franchise_payload(media_id):
+    """Build and cache the complete MAL anime franchise payload in the background."""
+    media_id = str(media_id)
+    task_lock_key = anime_franchise_cache.get_task_lock_key(media_id)
+    acquired = cache.add(
+        task_lock_key,
+        "1",
+        timeout=anime_franchise_cache.get_task_lock_ttl_seconds(),
+    )
+    if not acquired:
+        logger.info(
+            "MAL anime franchise build already running for media_id=%s",
+            media_id,
+        )
+        return {
+            "media_id": media_id,
+            "built": False,
+            "skipped": True,
+            "reason": "already_running",
+        }
+
+    started_at = time.monotonic()
+    try:
+        anime_franchise_cache.mark_attempt(media_id)
+        graph_builder = AnimeFranchiseGraphBuilder(
+            max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
+        )
+        franchise_payload = AnimeFranchiseService(
+            graph_builder=graph_builder,
+        ).build(media_id)
+        truncated = bool(graph_builder.truncated)
+        truncation_reason = graph_builder.truncation_reason or ""
+        node_count = graph_builder.node_count
+        serialized_payload = serialize_franchise_payload(
+            franchise_payload,
+            root_media_id=media_id,
+        )
+        duration = time.monotonic() - started_at
+        anime_franchise_cache.save_payload(
+            media_id,
+            serialized_payload,
+            fetched_at=timezone.now(),
+            node_count=node_count,
+            build_duration_seconds=duration,
+            truncated=truncated,
+            truncation_reason=truncation_reason,
+        )
+        if truncated:
+            logger.info(
+                "MAL anime franchise build truncated for media_id=%s max_nodes=%s",
+                media_id,
+                settings.ANIME_FRANCHISE_MAX_NODES,
+            )
+        logger.info(
+            "MAL anime franchise build completed for media_id=%s nodes=%s "
+            "duration=%s truncated=%s",
+            media_id,
+            node_count,
+            round(duration, 3),
+            truncated,
+        )
+        return {  # noqa: TRY300 - task returns structured success payloads
+            "media_id": media_id,
+            "built": True,
+            "node_count": node_count,
+            "duration": duration,
+            "truncated": truncated,
+            "truncation_reason": truncation_reason,
+        }
+    except Exception as error:  # noqa: BLE001 - background task must isolate failures
+        error_message = str(error) or error.__class__.__name__
+        anime_franchise_cache.mark_error(media_id, error_message)
+        logger.warning(
+            "MAL anime franchise build failed for media_id=%s: %s",
+            media_id,
+            error_message,
+        )
+        return {
+            "media_id": media_id,
+            "built": False,
+            "error": error_message[:250],
+        }
+    finally:
+        cache.delete(task_lock_key)
+        cache.delete(anime_franchise_cache.get_queue_lock_key(media_id))

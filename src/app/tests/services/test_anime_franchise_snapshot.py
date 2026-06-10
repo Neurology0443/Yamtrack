@@ -288,3 +288,156 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
         self.assertIsNone(parser(None))
         self.assertIsNone(parser(""))
         self.assertIsNone(parser("unknown"))
+
+    def test_graph_builder_truncates_at_max_nodes_without_exception(self):
+        metadata_map = {
+            "100": {
+                "media_id": "100",
+                "title": "S1",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+                "image": "s1",
+                "related": {"related_anime": [{"media_id": "200", "relation_type": "sequel"}]},
+            },
+            "200": {
+                "media_id": "200",
+                "title": "S2",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2021-01-01"},
+                "image": "s2",
+                "related": {"related_anime": [{"media_id": "300", "relation_type": "sequel"}]},
+            },
+            "300": {
+                "media_id": "300",
+                "title": "S3",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2022-01-01"},
+                "image": "s3",
+                "related": {"related_anime": []},
+            },
+        }
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=2,
+        )
+
+        graph = builder.build("100")
+
+        self.assertEqual(set(graph), {"100", "200"})
+        self.assertTrue(builder.truncated)
+        self.assertEqual(builder.truncation_reason, "max_nodes")
+
+    def test_direct_candidate_missing_from_node_limit_is_ignored(self):
+        metadata_map = {
+            "100": {
+                "media_id": "100",
+                "title": "S1",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "200", "relation_type": "spin_off"},
+                    ],
+                },
+            },
+            "200": {
+                "media_id": "200",
+                "title": "Spin",
+                "source": "mal",
+                "details": {"raw_media_type": "movie", "start_date": "2021-01-01"},
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+        }
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=1,
+        )
+        service = AnimeFranchiseSnapshotService(graph_builder=builder)
+
+        snapshot = service.build("100")
+
+        self.assertEqual(set(snapshot.nodes_by_media_id), {"100"})
+        self.assertEqual(snapshot.direct_candidates, [])
+        self.assertTrue(builder.truncated)
+        self.assertEqual(builder.truncation_reason, "max_nodes")
+
+    def test_graph_builder_max_nodes_zero_is_unlimited(self):
+        metadata_map = self._chain_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=0,
+        )
+
+        graph = builder.build("100")
+
+        self.assertEqual(set(graph), {"100", "200", "300"})
+        self.assertFalse(builder.truncated)
+
+    def test_graph_builder_max_nodes_negative_is_unlimited(self):
+        metadata_map = self._chain_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=-1,
+        )
+
+        graph = builder.build("100")
+
+        self.assertEqual(set(graph), {"100", "200", "300"})
+        self.assertFalse(builder.truncated)
+
+    def test_graph_builder_max_nodes_one_keeps_root(self):
+        metadata_map = self._chain_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=1,
+        )
+
+        graph = builder.build("100")
+
+        self.assertEqual(set(graph), {"100"})
+        self.assertEqual(builder.node_count, 1)
+        self.assertTrue(builder.truncated)
+        self.assertEqual(builder.truncation_reason, "max_nodes")
+
+    def test_ensure_node_returns_cached_node_even_when_limit_reached(self):
+        metadata_map = self._chain_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            max_nodes=1,
+        )
+        graph = builder.build("100")
+
+        self.assertIs(builder.ensure_node("100"), graph["100"])
+        self.assertIsNone(builder.ensure_node("200"))
+        self.assertTrue(builder.truncated)
+
+    @staticmethod
+    def _chain_metadata_map():
+        return {
+            "100": {
+                "media_id": "100",
+                "title": "S1",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+                "image": "s1",
+                "related": {"related_anime": [{"media_id": "200", "relation_type": "sequel"}]},
+            },
+            "200": {
+                "media_id": "200",
+                "title": "S2",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2021-01-01"},
+                "image": "s2",
+                "related": {"related_anime": [{"media_id": "300", "relation_type": "sequel"}]},
+            },
+            "300": {
+                "media_id": "300",
+                "title": "S3",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2022-01-01"},
+                "image": "s3",
+                "related": {"related_anime": []},
+            },
+        }

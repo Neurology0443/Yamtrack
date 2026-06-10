@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -10,8 +11,10 @@ from django.utils import timezone
 
 from app.models import UserMessage, UserMessageLevel
 from app.providers import mal_cache
+from app.services import anime_franchise_cache
 from app.services.anime_franchise_import import FranchiseImportStats
 from app.tasks import (
+    build_mal_anime_franchise_payload,
     cleanup_user_messages,
     import_anime_franchise,
     refresh_mal_anime_metadata,
@@ -285,3 +288,176 @@ class RefreshMALAnimeMetadataTaskTests(TestCase):
 
         self.assertFalse(result["refreshed"])
         self.assertIsNone(cache.get(mal_cache.get_anime_cache_meta_key(self.media_id)))
+
+
+class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_saves_payload_and_meta(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 2
+        mock_graph_builder.truncated = True
+        mock_graph_builder.truncation_reason = "max_nodes"
+        cache.add(anime_franchise_cache.get_queue_lock_key("100"), "1", timeout=60)
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "100",
+                "display_title": "Root",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "100",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Root",
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("100")
+
+        self.assertTrue(result["built"])
+        payload, meta = anime_franchise_cache.load_payload("100")
+        self.assertEqual(payload["root_media_id"], "100")
+        self.assertEqual(meta["last_error_message"], "")
+        self.assertEqual(meta["node_count"], 2)
+        self.assertTrue(meta["truncated"])
+        self.assertEqual(meta["truncation_reason"], "max_nodes")
+        mock_graph_builder_class.assert_called_once_with(
+            max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
+        )
+        mock_service.assert_called_once_with(graph_builder=mock_graph_builder)
+        mock_service.return_value.build.assert_called_once_with("100")
+        self.assertEqual(result["node_count"], 2)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["truncation_reason"], "max_nodes")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
+
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_preserves_previous_payload_on_error(
+        self,
+        mock_service,
+    ):
+        previous_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": "100",
+            "display_title": "Previous",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "100",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Previous",
+                    },
+                ],
+            },
+            "sections": [],
+            "truncated": False,
+            "node_count": 1,
+        }
+        anime_franchise_cache.save_payload("100", previous_payload)
+        mock_service.return_value.build.side_effect = RuntimeError("boom")
+
+        result = build_mal_anime_franchise_payload("100")
+
+        self.assertFalse(result["built"])
+        payload, meta = anime_franchise_cache.load_payload("100")
+        self.assertEqual(payload["display_title"], "Previous")
+        self.assertEqual(meta["last_error_message"], "boom")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
+
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_task_preserves_previous_payload_when_save_payload_rejects_invalid_payload(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        previous_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": "100",
+            "display_title": "Previous",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "100",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Previous",
+                    },
+                ],
+            },
+            "sections": [],
+            "truncated": False,
+            "node_count": 1,
+        }
+        anime_franchise_cache.save_payload("100", previous_payload)
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 1
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "100",
+                "display_title": "Broken",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "100",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Broken",
+                            "bad": object(),
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("100")
+
+        self.assertFalse(result["built"])
+        payload, meta = anime_franchise_cache.load_payload("100")
+        self.assertEqual(payload["display_title"], "Previous")
+        self.assertTrue(meta["last_error_message"])
+        self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
+
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_task_lock_skips_duplicate(
+        self,
+        mock_service,
+    ):
+        cache.add(anime_franchise_cache.get_task_lock_key("100"), "1", timeout=60)
+
+        result = build_mal_anime_franchise_payload("100")
+
+        self.assertTrue(result["skipped"])
+        mock_service.assert_not_called()

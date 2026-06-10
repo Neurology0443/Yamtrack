@@ -81,3 +81,32 @@ docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test event
   - run import/state/task/schedule/command tests.
 - Changed entry-added notification behavior:
   - run `events.tests.test_notification` and `events.tests.test_tasks`.
+
+## Async MAL anime franchise payload cache checks
+
+From repo root, run the targeted async franchise cache suite with `uv`:
+
+```bash
+uv run --directory . python src/manage.py test \
+  app.tests.services.test_anime_franchise_cache \
+  app.tests.services.test_anime_franchise_context \
+  app.tests.test_tasks.BuildMALAnimeFranchisePayloadTaskTests \
+  app.tests.views.test_media_details \
+  app.tests.services.test_anime_franchise_snapshot
+```
+
+Run lint for the affected files:
+
+```bash
+uv run --directory . ruff check \
+  src/app/services/anime_franchise_cache.py \
+  src/app/services/anime_franchise_context.py \
+  src/app/services/anime_franchise_graph.py \
+  src/app/services/anime_franchise_snapshot.py \
+  src/app/tasks.py \
+  src/app/views.py \
+  src/app/tests/services/test_anime_franchise_cache.py \
+  src/app/tests/services/test_anime_franchise_context.py \
+  src/app/tests/test_tasks.py \
+  src/app/tests/views/test_media_details.py
+```
