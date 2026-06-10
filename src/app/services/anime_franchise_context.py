@@ -48,6 +48,12 @@ def _copy_entries(entries):
     return [dict(entry) for entry in entries if isinstance(entry, dict)]
 
 
+def _with_current_entry(entry: dict, current_media_id: str) -> dict:
+    entry = dict(entry)
+    entry["is_current"] = str(entry.get("media_id")) == current_media_id
+    return entry
+
+
 def has_displayable_franchise_entries(anime_franchise: dict | None) -> bool:
     """Return whether a prepared franchise context has entries to render."""
     if not isinstance(anime_franchise, dict):
@@ -73,12 +79,16 @@ def prepare_anime_franchise_context(
     media_metadata: dict,
 ):
     """Enrich a cached franchise payload with request-specific user data."""
+    current_media_id = str(media_metadata.get("media_id") or "")
     series_payload = franchise_payload.get("series", {})
     prepared_series_entries = [
-        {
-            **entry,
-            "series_label": entry.get("series_label") or f"Season {index}",
-        }
+        _with_current_entry(
+            {
+                **entry,
+                "series_label": entry.get("series_label") or f"Season {index}",
+            },
+            current_media_id,
+        )
         for index, entry in enumerate(
             _copy_entries(series_payload.get("entries", [])),
             start=1,
@@ -99,7 +109,10 @@ def prepare_anime_franchise_context(
                 "entries": helpers.enrich_items_with_user_data(
                     request,
                     enrich_franchise_entries_for_footer(
-                        _copy_entries(section.get("entries", [])),
+                        [
+                            _with_current_entry(entry, current_media_id)
+                            for entry in _copy_entries(section.get("entries", []))
+                        ],
                         media_metadata,
                     ),
                     section_key,

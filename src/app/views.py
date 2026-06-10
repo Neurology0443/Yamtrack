@@ -397,7 +397,10 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_refresh_considered = False
-        franchise_payload, franchise_meta = anime_franchise_cache.load_payload(media_id)
+        franchise_lookup = anime_franchise_cache.load_payload_for_media(media_id)
+        franchise_payload = franchise_lookup.payload
+        franchise_meta = franchise_lookup.meta
+        franchise_cache_media_id = franchise_lookup.canonical_media_id
         if franchise_payload is not None:
             logger.info("MAL anime franchise cache hit for media_id=%s", media_id)
             try:
@@ -413,13 +416,13 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                     media_id,
                 )
                 anime_franchise_cache.mark_error(
-                    media_id,
+                    franchise_cache_media_id,
                     f"cached payload render failed: {error}",
                 )
                 anime_franchise = None
                 franchise_refresh_considered = True
                 anime_franchise_cache.maybe_schedule_build(
-                    media_id,
+                    franchise_cache_media_id,
                     franchise_meta,
                     has_payload=False,
                 )
@@ -434,7 +437,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 and not anime_franchise_cache.is_fresh(franchise_meta)
             ):
                 anime_franchise_cache.maybe_schedule_build(
-                    media_id,
+                    franchise_cache_media_id,
                     franchise_meta,
                     has_payload=True,
                 )

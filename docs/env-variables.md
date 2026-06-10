@@ -119,6 +119,7 @@ These settings control the complete assembled MAL anime franchise payload cache.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `ANIME_FRANCHISE_CACHE_TTL_DAYS` | `365` | Redis/cache TTL for complete franchise payloads and sidecar metadata. |
+| `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` | `true` | Enables lightweight canonical cache aliases for complete MAL anime franchise payloads. Aliases point related MAL anime IDs to one canonical payload and do not duplicate the cached payload. |
 | `ANIME_FRANCHISE_CACHE_FRESH_DAYS` | `30` | Logical freshness window before a stale payload may be refreshed in the background. |
 | `ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS` | `24` | Minimum time between successful build enqueue attempts for the same franchise. |
 | `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS` | `12` | Cooldown before retrying after a build error. |

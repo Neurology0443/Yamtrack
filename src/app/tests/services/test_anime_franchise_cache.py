@@ -18,6 +18,7 @@ from app.services import anime_franchise_cache
     ANIME_FRANCHISE_QUEUE_LOCK_MINUTES=30,
     ANIME_FRANCHISE_TASK_LOCK_MINUTES=60,
     ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION=1,
+    ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True,
 )
 class AnimeFranchiseCacheTests(TestCase):
     def setUp(self):
@@ -49,6 +50,352 @@ class AnimeFranchiseCacheTests(TestCase):
             "truncated": False,
             "node_count": 2,
         }
+
+
+    def _dragon_ball_payload(self):
+        return {
+            "schema_version": 1,
+            "root_media_id": "223",
+            "display_title": "Dragon Ball",
+            "series": {
+                "key": "series_line",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "223",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Dragon Ball",
+                    },
+                    {
+                        "media_id": "813",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Dragon Ball Z",
+                    },
+                    {
+                        "media_id": "269",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Dragon Ball GT",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "extras",
+                    "title": "Extras",
+                    "entries": [
+                        {
+                            "media_id": "225",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Special",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def test_extract_payload_media_ids_from_series_and_sections(self):
+        payload = self._dragon_ball_payload()
+        payload["series"]["entries"] = payload["series"]["entries"][:2]
+
+        self.assertEqual(
+            anime_franchise_cache.extract_payload_media_ids(payload),
+            {"223", "813", "225"},
+        )
+
+    def test_extract_series_media_ids_only_reads_series_entries(self):
+        payload = self._dragon_ball_payload()
+
+        self.assertEqual(
+            anime_franchise_cache.extract_series_media_ids(payload),
+            {"223", "813", "269"},
+        )
+        self.assertIn("225", anime_franchise_cache.extract_payload_media_ids(payload))
+        self.assertNotIn("225", anime_franchise_cache.extract_series_media_ids(payload))
+
+    def test_determine_canonical_media_id_from_series_line(self):
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(
+                self._dragon_ball_payload(),
+                "269",
+            ),
+            "223",
+        )
+
+    def test_prepare_payload_for_aliasing_adds_internal_metadata(self):
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                self._dragon_ball_payload(),
+                build_seed_media_id="269",
+                truncated=False,
+            )
+        )
+
+        self.assertEqual(canonical_id, "223")
+        self.assertEqual(prepared["root_media_id"], "223")
+        self.assertEqual(prepared["canonical_root_media_id"], "223")
+        self.assertIn("269", prepared["aliasable_media_ids"])
+        self.assertIn("269", aliasable_ids)
+        self.assertIn("225", prepared["covered_media_ids"])
+        self.assertNotIn("225", prepared["aliasable_media_ids"])
+        self.assertEqual(prepared["display_title"], "Dragon Ball")
+
+    def test_prepare_payload_for_aliasing_truncated_keeps_seed_as_canonical(self):
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                self._dragon_ball_payload(),
+                build_seed_media_id="269",
+                truncated=True,
+                aliases_enabled=True,
+            )
+        )
+
+        self.assertEqual(canonical_id, "269")
+        self.assertEqual(prepared["root_media_id"], "269")
+        self.assertEqual(prepared["canonical_root_media_id"], "269")
+        self.assertEqual(prepared["aliasable_media_ids"], ["269"])
+        self.assertIn("225", prepared["covered_media_ids"])
+        self.assertEqual(aliasable_ids, {"269"})
+
+    def test_prepare_payload_for_aliasing_aliases_disabled_keeps_seed_as_canonical(
+        self,
+    ):
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                self._dragon_ball_payload(),
+                build_seed_media_id="269",
+                truncated=False,
+                aliases_enabled=False,
+            )
+        )
+
+        self.assertEqual(canonical_id, "269")
+        self.assertEqual(prepared["root_media_id"], "269")
+        self.assertEqual(prepared["canonical_root_media_id"], "269")
+        self.assertEqual(prepared["aliasable_media_ids"], ["269"])
+        self.assertEqual(aliasable_ids, {"269"})
+
+    def test_prepare_payload_for_aliasing_does_not_invent_seed_coverage(self):
+        payload = self._dragon_ball_payload()
+        payload["series"]["entries"] = payload["series"]["entries"][:2]
+
+        prepared, _canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="269",
+                truncated=False,
+            )
+        )
+
+        self.assertNotIn("269", prepared["aliasable_media_ids"])
+        self.assertNotIn("269", aliasable_ids)
+
+    def test_replace_aliases_creates_lightweight_records_after_save_payload(self):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223", "813", "269"]
+        anime_franchise_cache.save_payload("223", payload)
+
+        count = anime_franchise_cache.replace_aliases("223", payload, truncated=False)
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_alias_key("813"))["canonical_media_id"],
+            "223",
+        )
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_alias_key("269"))["canonical_media_id"],
+            "223",
+        )
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("223")))
+
+    def test_replace_aliases_does_not_create_section_only_aliases(self):
+        prepared, canonical_id, _aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                self._dragon_ball_payload(),
+                build_seed_media_id="223",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+        anime_franchise_cache.save_payload(canonical_id, prepared)
+
+        count = anime_franchise_cache.replace_aliases(canonical_id, prepared)
+
+        self.assertEqual(count, 2)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("225")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    def test_replace_aliases_deletes_old_direct_payload_for_aliased_id(self):
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "269"
+        direct_payload["display_title"] = "Dragon Ball GT"
+        direct_payload["series"]["entries"][0]["media_id"] = "269"
+        anime_franchise_cache.save_payload("269", direct_payload)
+        payload = self._dragon_ball_payload()
+        prepared, canonical_id, _aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="223",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+        anime_franchise_cache.save_payload(canonical_id, prepared)
+
+        anime_franchise_cache.replace_aliases(canonical_id, prepared)
+
+        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("269")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_meta_key("269")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("223")))
+
+    def test_delete_aliases_for_canonical_preserves_alias_owned_by_other_canonical(
+        self,
+    ):
+        cache.set(
+            anime_franchise_cache.get_alias_index_key("111"),
+            ["269"],
+            timeout=60,
+        )
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+            timeout=60,
+        )
+
+        anime_franchise_cache.delete_aliases_for_canonical("111")
+
+        alias = cache.get(anime_franchise_cache.get_alias_key("269"))
+        self.assertEqual(alias["canonical_media_id"], "223")
+
+    def test_replace_aliases_skips_truncated_payload(self):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223", "269"]
+        cache.set(
+            anime_franchise_cache.get_alias_index_key("223"),
+            ["269"],
+            timeout=60,
+        )
+        cache.set(anime_franchise_cache.get_alias_key("269"), {"bad": "alias"})
+
+        count = anime_franchise_cache.replace_aliases("223", payload, truncated=True)
+
+        self.assertEqual(count, 0)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    def test_load_payload_for_media_prefers_direct_payload_over_alias(self):
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "269"
+        direct_payload["display_title"] = "Dragon Ball GT"
+        direct_payload["series"]["entries"][0]["media_id"] = "269"
+        anime_franchise_cache.save_payload("269", direct_payload)
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "269")
+        self.assertEqual(lookup.payload["root_media_id"], "269")
+
+    def test_load_payload_for_media_alias_hit_loads_canonical_payload(self):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223", "269"]
+        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.replace_aliases("223", payload)
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.requested_media_id, "269")
+        self.assertEqual(lookup.canonical_media_id, "223")
+        self.assertEqual(lookup.payload["root_media_id"], "223")
+
+    def test_load_payload_for_media_deletes_broken_alias_without_payload(self):
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    def test_load_payload_for_media_deletes_alias_when_payload_does_not_cover_request(
+        self,
+    ):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223"]
+        anime_franchise_cache.save_payload("223", payload)
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    def test_load_payload_for_media_deletes_alias_with_mismatched_aliased_media_id(
+        self,
+    ):
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="999",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
+    def test_load_payload_for_media_ignores_alias_when_disabled(self):
+        prepared, canonical_id, _aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                self._dragon_ball_payload(),
+                build_seed_media_id="223",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+        anime_franchise_cache.save_payload(canonical_id, prepared)
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
 
     def test_save_and_load_payload_updates_access_metadata(self):
         anime_franchise_cache.save_payload("100", self.payload, node_count=1)
