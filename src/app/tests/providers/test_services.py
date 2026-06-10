@@ -179,7 +179,67 @@ class ServicesTests(TestCase):
 
         self.assertEqual(result, {"title": "Test Anime"})
 
-        mock_anime.assert_called_once_with("1")
+        mock_anime.assert_called_once_with(
+            "1",
+            allow_stale=False,
+            schedule_stale_refresh=False,
+        )
+
+    @patch("app.providers.mal.anime")
+    def test_get_media_metadata_anime_passes_requested_stale_options(self, mock_anime):
+        """Test anime metadata stale cache options are passed when requested."""
+        mock_anime.return_value = {"title": "Test Anime"}
+
+        result = services.get_media_metadata(
+            MediaTypes.ANIME.value,
+            "1",
+            Sources.MAL.value,
+            allow_stale=True,
+            schedule_stale_refresh=True,
+        )
+
+        self.assertEqual(result, {"title": "Test Anime"})
+        mock_anime.assert_called_once_with(
+            "1",
+            allow_stale=True,
+            schedule_stale_refresh=True,
+        )
+
+    @patch("app.providers.mal.anime")
+    def test_get_media_metadata_non_mal_anime_disables_stale_options(self, mock_anime):
+        """Test stale cache options are guarded by MAL anime source."""
+        mock_anime.return_value = {"title": "Test Anime"}
+
+        result = services.get_media_metadata(
+            MediaTypes.ANIME.value,
+            "1",
+            Sources.TMDB.value,
+            allow_stale=True,
+            schedule_stale_refresh=True,
+        )
+
+        self.assertEqual(result, {"title": "Test Anime"})
+        mock_anime.assert_called_once_with(
+            "1",
+            allow_stale=False,
+            schedule_stale_refresh=False,
+        )
+
+    @patch("app.providers.tmdb.movie")
+    def test_get_media_metadata_movie_ignores_stale_options(self, mock_movie):
+        """Test non-MAL providers do not receive stale cache options."""
+        mock_movie.return_value = {"title": "Test Movie"}
+
+        result = services.get_media_metadata(
+            MediaTypes.MOVIE.value,
+            "1",
+            Sources.TMDB.value,
+            allow_stale=True,
+            schedule_stale_refresh=True,
+        )
+
+        self.assertEqual(result, {"title": "Test Movie"})
+        mock_movie.assert_called_once_with("1")
 
     @patch("app.providers.mangaupdates.manga")
     def test_get_media_metadata_manga_mangaupdates(self, mock_manga):
@@ -205,6 +265,8 @@ class ServicesTests(TestCase):
             MediaTypes.MANGA.value,
             "1",
             Sources.MAL.value,
+            allow_stale=True,
+            schedule_stale_refresh=True,
         )
 
         self.assertEqual(result, {"title": "Test Manga"})

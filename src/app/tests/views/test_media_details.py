@@ -59,6 +59,8 @@ class MediaDetailsViewTests(TestCase):
             MediaTypes.MOVIE.value,
             "238",
             Sources.TMDB.value,
+            allow_stale=False,
+            schedule_stale_refresh=False,
         )
 
     @patch("app.views.AnimeFranchiseService")
