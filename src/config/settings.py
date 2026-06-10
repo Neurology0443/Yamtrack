@@ -437,6 +437,16 @@ ANIME_FRANCHISE_MAX_NODES = config(
     default=50,
     cast=int,
 )
+ANIME_FRANCHISE_FALLBACK_ENABLED = config(
+    "ANIME_FRANCHISE_FALLBACK_ENABLED",
+    default=True,
+    cast=bool,
+)
+ANIME_FRANCHISE_FALLBACK_MAX_NODES = config(
+    "ANIME_FRANCHISE_FALLBACK_MAX_NODES",
+    default=15,
+    cast=int,
+)
 ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION = config(
     "ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION",
     default=1,

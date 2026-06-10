@@ -11,6 +11,8 @@ It describes what is executed today, how placement is decided, and where compati
 - Produces `anime_franchise` context consumed by `templates/app/media_details.html`.
 - Import projection is intentionally out of scope for this document.
 
+The first-visit fallback is not the complete franchise payload and is not the source of truth. It exists only to avoid showing the raw MAL `related_anime` melting pot while the complete payload is being built. Once a complete payload exists, the normal categorized franchise UI remains authoritative.
+
 ## 2) Principal runtime path (today)
 
 1. `AnimeFranchiseService` (`src/app/services/anime_franchise.py`)
