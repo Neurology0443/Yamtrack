@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
-from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+
+if TYPE_CHECKING:
+    from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
 @dataclass
@@ -30,6 +33,7 @@ class AnimeFranchiseSnapshotService:
     """Build the canonical franchise snapshot consumed by UI and import profiles."""
 
     def __init__(self, graph_builder: AnimeFranchiseGraphBuilder | None = None):
+        """Create the service with an optional graph builder."""
         self.graph_builder = graph_builder or AnimeFranchiseGraphBuilder()
 
     def build(
@@ -38,6 +42,7 @@ class AnimeFranchiseSnapshotService:
         *,
         refresh_cache: bool = False,
     ) -> AnimeFranchiseSnapshot:
+        """Build a normalized franchise snapshot for one MAL anime ID."""
         self.graph_builder.refresh_cache = refresh_cache
         root_media_id = str(media_id)
         nodes_by_media_id = dict(self.graph_builder.build(root_media_id))
@@ -69,10 +74,14 @@ class AnimeFranchiseSnapshotService:
                 if key in seen_candidates:
                     continue
                 seen_candidates.add(key)
+                if relation.target_media_id not in nodes_by_media_id:
+                    target_node = self.graph_builder.ensure_node(
+                        relation.target_media_id,
+                    )
+                    if target_node is None:
+                        continue
+                    nodes_by_media_id[relation.target_media_id] = target_node
                 direct_candidates.append(relation)
-                nodes_by_media_id[relation.target_media_id] = self.graph_builder.ensure_node(
-                    relation.target_media_id
-                )
 
         promoted_continuity_candidates = self._derive_promoted_continuity_candidates(
             series_line=series_line,
@@ -100,7 +109,7 @@ class AnimeFranchiseSnapshotService:
             canonical_root_media_id=canonical_root_media_id,
         )
 
-    def _derive_promoted_continuity_candidates(
+    def _derive_promoted_continuity_candidates(  # noqa: C901
         self,
         *,
         series_line: list[AnimeNode],
@@ -178,6 +187,8 @@ class AnimeFranchiseSnapshotService:
         target_node = nodes_by_media_id.get(relation.target_media_id)
         if target_node is None:
             target_node = self.graph_builder.ensure_node(relation.target_media_id)
+            if target_node is None:
+                return False
             nodes_by_media_id[relation.target_media_id] = target_node
         return target_node.media_type != "tv"
 
@@ -269,10 +280,17 @@ class AnimeFranchiseSnapshotService:
 
     @staticmethod
     def _date_sort_tuple(node: AnimeNode) -> tuple:
-        return (AnimeFranchiseSnapshotService._date_value(node.start_date), int(node.media_id))
+        return (
+            AnimeFranchiseSnapshotService._date_value(node.start_date),
+            int(node.media_id),
+        )
 
     @staticmethod
-    def _continuity_direction(source_id: str, target_id: str, relation_type: str) -> tuple[str, str]:
+    def _continuity_direction(
+        source_id: str,
+        target_id: str,
+        relation_type: str,
+    ) -> tuple[str, str]:
         if relation_type == "prequel":
             return target_id, source_id
         return source_id, target_id

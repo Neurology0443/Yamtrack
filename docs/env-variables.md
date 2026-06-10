@@ -111,3 +111,18 @@ YamTrack supports reading sensitive configuration values from Docker secrets fil
 | Name                 | Notes                                                                                                                                                                                                                                                                 |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REQUESTS_CA_BUNDLE` | Path to a custom CA certificate bundle file for SSL verification. Useful for self-hosted authentication providers with self-signed certificates (e.g., `/etc/ssl/certs/ca-certificates.crt`). This requires the CA certificate to be present in the host's CA bundle. |
+
+## MAL anime franchise payload cache
+
+These settings control the complete assembled MAL anime franchise payload cache. They do not replace or alter the existing individual MAL anime metadata cache settings.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ANIME_FRANCHISE_CACHE_TTL_DAYS` | `365` | Redis/cache TTL for complete franchise payloads and sidecar metadata. |
+| `ANIME_FRANCHISE_CACHE_FRESH_DAYS` | `30` | Logical freshness window before a stale payload may be refreshed in the background. |
+| `ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS` | `24` | Minimum time between successful build enqueue attempts for the same franchise. |
+| `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS` | `12` | Cooldown before retrying after a build error. |
+| `ANIME_FRANCHISE_QUEUE_LOCK_MINUTES` | `30` | Queue lock duration to avoid duplicate Celery enqueues. |
+| `ANIME_FRANCHISE_TASK_LOCK_MINUTES` | `60` | Worker task lock duration to avoid concurrent builds. |
+| `ANIME_FRANCHISE_MAX_NODES` | `50` | Maximum graph nodes to hydrate before saving a truncated partial payload; values `<= 0` are treated as unlimited. |
+| `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` | `1` | Schema version used to invalidate incompatible cached franchise payloads. |

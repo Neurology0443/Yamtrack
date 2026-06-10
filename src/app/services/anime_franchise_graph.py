@@ -6,6 +6,8 @@ import re
 from collections import deque
 from datetime import date
 
+from django.conf import settings
+
 from app.providers import mal
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
@@ -18,17 +20,35 @@ YEAR_MONTH_DAY_CHUNKS = 3
 class AnimeFranchiseGraphBuilder:
     """Discover MAL anime entries and normalize graph relations."""
 
-    def __init__(self, metadata_fetcher=None, *, refresh_cache=False):
-        """Create a graph builder with an optional metadata fetcher."""
+    def __init__(self, metadata_fetcher=None, *, refresh_cache=False, max_nodes=None):
+        """Create a graph builder with optional fetcher and node limit."""
         self.metadata_fetcher = metadata_fetcher or mal.anime
         self.refresh_cache = refresh_cache
+        self.max_nodes = (
+            max_nodes if max_nodes is not None else settings.ANIME_FRANCHISE_MAX_NODES
+        )
         self._node_cache: dict[str, AnimeNode] = {}
+        self.truncated = False
+        self.truncation_reason = ""
+
+    @property
+    def node_count(self) -> int:
+        """Return the number of hydrated graph nodes."""
+        return len(self._node_cache)
+
+    @property
+    def is_truncated(self) -> bool:
+        """Return whether graph discovery hit the configured node limit."""
+        return self.truncated
 
     def build(self, root_media_id: str) -> dict[str, AnimeNode]:
         """Build the MAL anime graph around sequel/prequel continuity."""
         self._node_cache = {}
+        self.truncated = False
+        self.truncation_reason = ""
         root_id = str(root_media_id)
         queue = deque([root_id])
+        queued = {root_id}
 
         while queue:
             node_id = queue.popleft()
@@ -36,18 +56,46 @@ class AnimeFranchiseGraphBuilder:
             for relation in node.relations:
                 if relation.relation_type in CONTINUITY_RELATIONS:
                     target_id = relation.target_media_id
-                    if target_id not in self._node_cache:
-                        queue.append(target_id)
+                    if target_id in self._node_cache or target_id in queued:
+                        continue
+                    if (
+                        not self._is_unlimited()
+                        and len(self._node_cache) + len(queue) >= self.max_nodes
+                    ):
+                        self._mark_truncated()
+                        break
+                    queue.append(target_id)
+                    queued.add(target_id)
 
         return self._node_cache
 
     def get_direct_neighbors(self, media_id: str) -> list[AnimeRelation]:
         """Return direct normalized relations for a given MAL anime entry."""
-        return self._get_node(media_id).relations
+        node = self.ensure_node(media_id)
+        if node is None:
+            return []
+        return node.relations
 
-    def ensure_node(self, media_id: str) -> AnimeNode:
-        """Ensure a node exists in cache and return it."""
+    def ensure_node(self, media_id: str) -> AnimeNode | None:
+        """Ensure a node exists in cache or return None when limited."""
+        media_id = str(media_id)
+        cached = self._node_cache.get(media_id)
+        if cached:
+            return cached
+        if not self._can_load_new_node():
+            self._mark_truncated()
+            return None
         return self._get_node(media_id)
+
+    def _is_unlimited(self) -> bool:
+        return self.max_nodes is None or self.max_nodes <= 0
+
+    def _can_load_new_node(self) -> bool:
+        return self._is_unlimited() or len(self._node_cache) < self.max_nodes
+
+    def _mark_truncated(self):
+        self.truncated = True
+        self.truncation_reason = "max_nodes"
 
     def _get_node(self, media_id: str) -> AnimeNode:
         media_id = str(media_id)
