@@ -206,7 +206,11 @@ python manage.py test app.tests.services.test_anime_franchise_snapshot -k cache
 
 Yamtrack keeps the existing MAL anime metadata cache for individual anime records and adds a separate long-lived cache for the assembled franchise payload. The payload cache uses `mal_anime_franchise_<id>` plus `:meta`, `:queue_lock`, and `:task_lock` side keys. It stores a schema-versioned, user-agnostic dict that can be enriched during page rendering.
 
-Detail pages no longer synchronously build a missing franchise payload. On a cache miss, the page keeps `media.related.related_anime` visible as a lightweight fallback and queues `build_mal_anime_franchise_payload` in Celery. On a cache hit, the cached payload is enriched with the current user's data and `related_anime` is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.
+Detail pages no longer synchronously build a complete missing franchise payload. On a cache miss, the page queues `build_mal_anime_franchise_payload` in Celery. On a cache hit, the cached payload is enriched with the current user's data and `related_anime` is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.
+
+### First-visit series-line fallback
+
+On a complete franchise cache miss, Yamtrack queues the complete Celery build first. It may then render a bounded, temporary TV prequel/sequel `series_line` fallback. The fallback uses stale individual MAL metadata when available, does not schedule additional stale refreshes, is never written to the complete franchise cache, and falls back to direct MAL `related_anime` if unavailable or not displayable.
 
 Useful settings:
 
@@ -216,6 +220,8 @@ Useful settings:
 - `ANIME_FRANCHISE_QUEUE_LOCK_MINUTES` prevents duplicate task enqueueing.
 - `ANIME_FRANCHISE_TASK_LOCK_MINUTES` prevents concurrent worker builds.
 - `ANIME_FRANCHISE_MAX_NODES` limits graph discovery during build and produces a partial payload when reached.
+- `ANIME_FRANCHISE_FALLBACK_ENABLED` toggles the bounded first-visit `series_line` fallback.
+- `ANIME_FRANCHISE_FALLBACK_MAX_NODES` limits only the first-visit synchronous mini graph fallback; values `<= 0` disable it and values above the internal hard cap are clamped.
 - `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` invalidates incompatible cached payload shapes.
 
 ### Debug keys and logs
