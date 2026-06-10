@@ -277,7 +277,17 @@ def media_search(request):
 @require_GET
 def media_details(request, source, media_type, media_id, title):  # noqa: ARG001 title for URL
     """Return the details page for a media item."""
-    media_metadata = services.get_media_metadata(media_type, media_id, source)
+    use_mal_anime_stale_cache = (
+        source == Sources.MAL.value
+        and media_type == MediaTypes.ANIME.value
+    )
+    media_metadata = services.get_media_metadata(
+        media_type,
+        media_id,
+        source,
+        allow_stale=use_mal_anime_stale_cache,
+        schedule_stale_refresh=use_mal_anime_stale_cache,
+    )
     user_medias = BasicMedia.objects.filter_media_prefetch(
         request.user,
         media_id,

@@ -8,7 +8,7 @@ from django.core.cache import cache
 
 from app import helpers
 from app.models import MediaTypes, Sources
-from app.providers import services
+from app.providers import mal_cache, services
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.myanimelist.net/v2"
@@ -90,69 +90,88 @@ def search(media_type, query, page):
     return data
 
 
-def anime(media_id, *, refresh_cache=False):
-    """Return the metadata for the selected anime or manga from MyAnimeList."""
-    cache_key = f"{Sources.MAL.value}_{MediaTypes.ANIME.value}_{media_id}"
-    data = None if refresh_cache else cache.get(cache_key)
+def _fetch_anime_from_api(media_id):
+    url = f"{base_url}/anime/{media_id}"
+    params = {
+        "fields": f"{base_fields},num_episodes,average_episode_duration,studios,start_season,broadcast,source,related_anime",  # noqa: E501
+    }
 
-    if data is None:
-        url = f"{base_url}/anime/{media_id}"
-        params = {
-            "fields": f"{base_fields},num_episodes,average_episode_duration,studios,start_season,broadcast,source,related_anime",  # noqa: E501
-        }
+    try:
+        response = services.api_request(
+            Sources.MAL.value,
+            "GET",
+            url,
+            params=params,
+            headers={"X-MAL-CLIENT-ID": settings.MAL_API},
+        )
+    except requests.exceptions.HTTPError as error:
+        handle_error(error)
 
-        try:
-            response = services.api_request(
-                Sources.MAL.value,
-                "GET",
-                url,
-                params=params,
-                headers={"X-MAL-CLIENT-ID": settings.MAL_API},
-            )
-        except requests.exceptions.HTTPError as error:
-            handle_error(error)
+    num_episodes = get_number_of_episodes(response)
 
-        num_episodes = get_number_of_episodes(response)
+    return {
+        "media_id": media_id,
+        "source": Sources.MAL.value,
+        "source_url": f"https://myanimelist.net/anime/{media_id}",
+        "media_type": MediaTypes.ANIME.value,
+        "title": response["title"],
+        "max_progress": num_episodes,
+        "image": get_image_url(response),
+        "synopsis": get_synopsis(response),
+        "genres": get_genres(response),
+        "score": get_score(response),
+        "score_count": get_score_count(response),
+        "details": {
+            "format": get_format(response),
+            "raw_media_type": response.get("media_type"),
+            "start_date": response.get("start_date"),
+            "end_date": response.get("end_date"),
+            "status": get_readable_status(response),
+            "episodes": num_episodes,
+            "runtime": get_runtime(response),
+            "studios": get_studios(response),
+            "season": get_season(response),
+            "broadcast": get_broadcast(response),
+            "source": get_source(response),
+        },
+        "related": {
+            "related_anime": get_related(
+                response.get("related_anime"),
+                MediaTypes.ANIME.value,
+            ),
+            "recommendations": get_related(
+                response.get("recommendations"),
+                MediaTypes.ANIME.value,
+            ),
+        },
+    }
 
-        data = {
-            "media_id": media_id,
-            "source": Sources.MAL.value,
-            "source_url": f"https://myanimelist.net/anime/{media_id}",
-            "media_type": MediaTypes.ANIME.value,
-            "title": response["title"],
-            "max_progress": num_episodes,
-            "image": get_image_url(response),
-            "synopsis": get_synopsis(response),
-            "genres": get_genres(response),
-            "score": get_score(response),
-            "score_count": get_score_count(response),
-            "details": {
-                "format": get_format(response),
-                "raw_media_type": response.get("media_type"),
-                "start_date": response.get("start_date"),
-                "end_date": response.get("end_date"),
-                "status": get_readable_status(response),
-                "episodes": num_episodes,
-                "runtime": get_runtime(response),
-                "studios": get_studios(response),
-                "season": get_season(response),
-                "broadcast": get_broadcast(response),
-                "source": get_source(response),
-            },
-            "related": {
-                "related_anime": get_related(
-                    response.get("related_anime"),
-                    MediaTypes.ANIME.value,
-                ),
-                "recommendations": get_related(
-                    response.get("recommendations"),
-                    MediaTypes.ANIME.value,
-                ),
-            },
-        }
 
-        cache.set(cache_key, data)
+def anime(
+    media_id,
+    *,
+    refresh_cache=False,
+    allow_stale=False,
+    schedule_stale_refresh=False,
+):
+    """Return the metadata for the selected anime from MyAnimeList."""
+    if refresh_cache:
+        data = _fetch_anime_from_api(media_id)
+        mal_cache.save_anime_cache(media_id, data)
+        return data
 
+    data, meta = mal_cache.load_anime_cache(media_id)
+    if data is not None:
+        meta = mal_cache.touch_anime_cache(media_id, payload=data, meta=meta)
+        if mal_cache.is_cache_fresh(meta):
+            return data
+        if allow_stale:
+            if schedule_stale_refresh:
+                mal_cache.maybe_schedule_refresh(media_id, meta=meta)
+            return data
+
+    data = _fetch_anime_from_api(media_id)
+    mal_cache.save_anime_cache(media_id, data)
     return data
 
 

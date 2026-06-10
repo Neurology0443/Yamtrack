@@ -375,6 +375,26 @@ MAL_RATE_LIMIT_PER_MINUTE = config(
     default=100,
     cast=int,
 )
+MAL_CACHE_FRESH_DAYS = config(
+    "MAL_CACHE_FRESH_DAYS",
+    default=7,
+    cast=int,
+)
+MAL_CACHE_KEEP_DAYS = config(
+    "MAL_CACHE_KEEP_DAYS",
+    default=365,
+    cast=int,
+)
+MAL_CACHE_RETRY_AFTER_ERROR_HOURS = config(
+    "MAL_CACHE_RETRY_AFTER_ERROR_HOURS",
+    default=12,
+    cast=int,
+)
+MAL_CACHE_REFRESH_MIN_INTERVAL_HOURS = config(
+    "MAL_CACHE_REFRESH_MIN_INTERVAL_HOURS",
+    default=24,
+    cast=int,
+)
 MAL_NSFW = config("MAL_NSFW", default=False, cast=bool)
 ANIME_FRANCHISE_GROUPING_ENABLED = config(
     "ANIME_FRANCHISE_GROUPING_ENABLED",
