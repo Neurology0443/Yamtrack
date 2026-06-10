@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.messages import get_messages
 from django.core.cache import cache
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -18,7 +17,6 @@ from app.models import (
     Status,
 )
 from app.services import anime_franchise_cache
-from app.views import _enrich_related_sections, _is_enrichable_related_items
 
 
 class MediaDetailsViewTests(TestCase):
@@ -30,31 +28,6 @@ class MediaDetailsViewTests(TestCase):
         self.user = get_user_model().objects.create_user(**self.credentials)
         self.client.login(**self.credentials)
         cache.clear()
-
-    def test_enrich_related_sections_ignores_non_dict_related(self):
-        """Non-dict related containers should be left untouched."""
-        media_metadata = {"related": None}
-
-        _enrich_related_sections(
-            self.client.request().wsgi_request,
-            media_metadata,
-            "100",
-        )
-
-        self.assertIsNone(media_metadata["related"])
-
-    def test_is_enrichable_related_items_validates_shape(self):
-        """Related sections must be list-based and contain enrichment keys."""
-        self.assertTrue(_is_enrichable_related_items([]))
-        self.assertTrue(
-            _is_enrichable_related_items(
-                [{"media_id": "1", "media_type": "anime", "source": "mal"}],
-            ),
-        )
-        self.assertFalse(_is_enrichable_related_items("bad"))
-        self.assertFalse(_is_enrichable_related_items({}))
-        self.assertFalse(_is_enrichable_related_items([{"media_id": "1"}]))
-        self.assertFalse(_is_enrichable_related_items([None]))
 
     @patch("app.providers.services.get_media_metadata")
     def test_media_details_view(self, mock_get_metadata):
@@ -130,7 +103,6 @@ class MediaDetailsViewTests(TestCase):
         mock_load_payload_for_media.assert_not_called()
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload", return_value=None)
     @patch("app.views.helpers.enrich_items_with_user_data")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -138,10 +110,9 @@ class MediaDetailsViewTests(TestCase):
         self,
         mock_get_metadata,
         mock_enrich_items,
-        mock_fallback_payload,
         mock_build_delay,
     ):
-        """Cache misses should keep legacy related_anime when fallback is empty."""
+        """Anime franchise grouping should be injected for MAL anime details."""
         mock_enrich_items.side_effect = (
             lambda request, items, section_name: [  # noqa: ARG005
                 {"item": item, "media": None} for item in items
@@ -199,108 +170,7 @@ class MediaDetailsViewTests(TestCase):
         mock_build_delay.assert_called_once_with("100")
         self.assertIn("related_anime", response.context["media"]["related"])
         self.assertIn("recommendations", response.context["media"]["related"])
-        recommendation = response.context["media"]["related"]["recommendations"][0]
-        self.assertIsInstance(recommendation, dict)
-        self.assertIn("item", recommendation)
-        self.assertIn("media", recommendation)
-        message_text = " ".join(
-            message.message for message in get_messages(response.wsgi_request)
-        )
-        self.assertIn("Franchise complète en préparation", message_text)
-        mock_fallback_payload.assert_called_once()
 
-    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload")
-    @patch("app.providers.services.get_media_metadata")
-    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
-    def test_mal_anime_cache_miss_displays_series_line_fallback(
-        self,
-        mock_get_metadata,
-        mock_fallback_payload,
-        mock_build_delay,
-    ):
-        """A displayable first-visit fallback should hide raw related_anime."""
-        mock_get_metadata.return_value = {
-            "media_id": "100",
-            "title": "Root",
-            "media_type": MediaTypes.ANIME.value,
-            "source": Sources.MAL.value,
-            "image": "img",
-            "related": {
-                "related_anime": [
-                    {
-                        "media_id": "101",
-                        "media_type": "anime",
-                        "source": "mal",
-                        "title": "Root Z",
-                        "image": "img",
-                        "relation_type": "sequel",
-                    },
-                ],
-                "recommendations": [
-                    {
-                        "media_id": "102",
-                        "media_type": "anime",
-                        "source": "mal",
-                        "title": "Legacy Recommendation",
-                        "image": "img",
-                    },
-                ],
-            },
-        }
-        mock_fallback_payload.return_value = {
-            "root_media_id": "100",
-            "display_title": "Root",
-            "series": {
-                "key": "series_line",
-                "title": "Series",
-                "entries": [
-                    {
-                        "media_id": "100",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Root",
-                        "image": "img",
-                    },
-                    {
-                        "media_id": "101",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Root Z",
-                        "image": "img",
-                    },
-                ],
-            },
-            "sections": [],
-            "fallback": True,
-        }
-
-        response = self.client.get(
-            reverse(
-                "media_details",
-                kwargs={
-                    "source": Sources.MAL.value,
-                    "media_type": MediaTypes.ANIME.value,
-                    "media_id": "100",
-                    "title": "root",
-                },
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(response.context["anime_franchise"])
-        self.assertNotIn("related_anime", response.context["media"]["related"])
-        self.assertIn("recommendations", response.context["media"]["related"])
-        mock_build_delay.assert_called_once_with("100")
-        mock_fallback_payload.assert_called_once()
-        message_text = " ".join(
-            message.message for message in get_messages(response.wsgi_request)
-        )
-        self.assertNotIn("Franchise complète en préparation", message_text)
-
-    @patch("app.views.build_series_line_fallback_payload")
     @patch("app.views.helpers.enrich_items_with_user_data")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -308,7 +178,6 @@ class MediaDetailsViewTests(TestCase):
         self,
         mock_get_metadata,
         mock_enrich_items,
-        mock_fallback_payload,
     ):
         """Regression guard for dedup between franchise and legacy related_anime."""
         mock_enrich_items.side_effect = (
@@ -432,9 +301,8 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-active="true"', count=0)
         self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
-        mock_fallback_payload.assert_not_called()
 
-    @patch("app.views.build_series_line_fallback_payload")
+
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -442,7 +310,6 @@ class MediaDetailsViewTests(TestCase):
         self,
         mock_get_metadata,
         mock_build_delay,
-        mock_fallback_payload,
     ):
         """Stale franchise payloads should render while refreshing in background."""
         mock_get_metadata.return_value = {
@@ -502,7 +369,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertIsNotNone(response.context["anime_franchise"])
         self.assertNotIn("related_anime", response.context["media"]["related"])
         mock_build_delay.assert_called_once_with("100")
-        mock_fallback_payload.assert_not_called()
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -615,93 +481,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertIn("related_anime", response.context["media"]["related"])
         mock_build_delay.assert_called_once_with("100")
 
-    @patch("app.views.anime_franchise_cache.mark_error")
-    @patch("app.views.prepare_anime_franchise_context")
-    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload")
-    @patch("app.providers.services.get_media_metadata")
-    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
-    def test_mal_anime_cache_miss_fallback_prepare_error_keeps_related_anime(
-        self,
-        mock_get_metadata,
-        mock_fallback_payload,
-        mock_build_delay,
-        mock_prepare_context,
-        mock_mark_error,
-    ):
-        """Fallback rendering errors should fail open without marking cache errors."""
-        mock_get_metadata.return_value = {
-            "media_id": "100",
-            "title": "Root",
-            "media_type": MediaTypes.ANIME.value,
-            "source": Sources.MAL.value,
-            "image": "img",
-            "related": {
-                "related_anime": [
-                    {
-                        "media_id": "101",
-                        "media_type": "anime",
-                        "source": "mal",
-                        "title": "Root Z",
-                        "image": "img",
-                        "relation_type": "sequel",
-                    },
-                ],
-            },
-        }
-        mock_fallback_payload.return_value = {
-            "root_media_id": "100",
-            "display_title": "Root",
-            "series": {
-                "key": "series_line",
-                "title": "Series",
-                "entries": [
-                    {
-                        "media_id": "100",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Root",
-                        "image": "img",
-                    },
-                    {
-                        "media_id": "101",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Root Z",
-                        "image": "img",
-                    },
-                ],
-            },
-            "sections": [],
-            "fallback": True,
-        }
-        mock_prepare_context.side_effect = RuntimeError("boom")
-
-        response = self.client.get(
-            reverse(
-                "media_details",
-                kwargs={
-                    "source": Sources.MAL.value,
-                    "media_type": MediaTypes.ANIME.value,
-                    "media_id": "100",
-                    "title": "root",
-                },
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["anime_franchise"])
-        self.assertIn("related_anime", response.context["media"]["related"])
-        mock_build_delay.assert_called_once_with("100")
-        mock_mark_error.assert_not_called()
-        message_text = " ".join(
-            message.message for message in get_messages(response.wsgi_request)
-        )
-        self.assertIn("Franchise complète en préparation", message_text)
-
-    @patch("app.views.build_series_line_fallback_payload")
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -709,7 +488,6 @@ class MediaDetailsViewTests(TestCase):
         self,
         mock_get_metadata,
         mock_build_delay,
-        mock_fallback_payload,
     ):
         """A valid but empty cached payload should not hide fallback relations."""
         mock_get_metadata.return_value = {
@@ -756,7 +534,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertIsNone(response.context["anime_franchise"])
         self.assertIn("related_anime", response.context["media"]["related"])
         mock_build_delay.assert_not_called()
-        mock_fallback_payload.assert_not_called()
 
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -931,13 +708,11 @@ class MediaDetailsViewTests(TestCase):
         }
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
     def test_mal_anime_alias_hit_displays_payload_without_fallback(
         self,
         mock_get_metadata,
-        mock_fallback_payload,
         mock_build_delay,
     ):
         """Alias hits should render complete payloads without fallback/build."""
@@ -1063,13 +838,11 @@ class MediaDetailsViewTests(TestCase):
         mock_build_delay.assert_not_called()
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
     def test_mal_anime_broken_alias_resumes_cache_miss_flow(
         self,
         mock_get_metadata,
-        mock_fallback_payload,
         mock_build_delay,
     ):
         """Broken aliases should be deleted and fall back to requested IDs."""
@@ -1221,142 +994,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["anime_franchise"])
         mock_load_payload_for_media.assert_not_called()
-
-    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload", return_value=None)
-    @patch("app.providers.services.get_media_metadata")
-    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
-    def test_mal_anime_invalid_related_section_non_list_is_ignored(
-        self,
-        mock_get_metadata,
-        mock_fallback_payload,
-        mock_build_delay,
-    ):
-        """Non-list related sections should be normalized to empty lists."""
-        mock_get_metadata.return_value = {
-            "media_id": "100",
-            "title": "Test Anime",
-            "media_type": MediaTypes.ANIME.value,
-            "source": Sources.MAL.value,
-            "image": "http://example.com/image.jpg",
-            "related": {
-                "related_anime": "bad",
-                "recommendations": [],
-            },
-        }
-
-        response = self.client.get(
-            reverse(
-                "media_details",
-                kwargs={
-                    "source": Sources.MAL.value,
-                    "media_type": MediaTypes.ANIME.value,
-                    "media_id": "100",
-                    "title": "test-anime",
-                },
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["anime_franchise"])
-        self.assertEqual(response.context["media"]["related"]["related_anime"], [])
-        self.assertEqual(response.context["media"]["related"]["recommendations"], [])
-        mock_build_delay.assert_called_once_with("100")
-        mock_fallback_payload.assert_called_once()
-        message_text = " ".join(
-            message.message for message in get_messages(response.wsgi_request)
-        )
-        self.assertNotIn("Franchise complète en préparation", message_text)
-
-    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload", return_value=None)
-    @patch("app.providers.services.get_media_metadata")
-    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
-    def test_mal_anime_invalid_related_section_items_are_ignored(
-        self,
-        mock_get_metadata,
-        mock_fallback_payload,
-        mock_build_delay,
-    ):
-        """Related sections with incomplete entries should be normalized to empty."""
-        mock_get_metadata.return_value = {
-            "media_id": "100",
-            "title": "Test Anime",
-            "media_type": MediaTypes.ANIME.value,
-            "source": Sources.MAL.value,
-            "image": "http://example.com/image.jpg",
-            "related": {
-                "related_anime": [
-                    {"media_id": "101"},
-                ],
-            },
-        }
-
-        response = self.client.get(
-            reverse(
-                "media_details",
-                kwargs={
-                    "source": Sources.MAL.value,
-                    "media_type": MediaTypes.ANIME.value,
-                    "media_id": "100",
-                    "title": "test-anime",
-                },
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context["anime_franchise"])
-        self.assertEqual(response.context["media"]["related"]["related_anime"], [])
-        mock_build_delay.assert_called_once_with("100")
-        mock_fallback_payload.assert_called_once()
-        message_text = " ".join(
-            message.message for message in get_messages(response.wsgi_request)
-        )
-        self.assertNotIn("Franchise complète en préparation", message_text)
-
-    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
-    @patch("app.views.build_series_line_fallback_payload", return_value=None)
-    @patch("app.providers.services.get_media_metadata")
-    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
-    def test_mal_anime_non_dict_related_metadata_does_not_crash(
-        self,
-        mock_get_metadata,
-        mock_fallback_payload,
-        mock_build_delay,
-    ):
-        """Unexpected related metadata shapes should not break detail pages."""
-        for related in (None, []):
-            with self.subTest(related=related):
-                cache.clear()
-                mock_build_delay.reset_mock()
-                mock_fallback_payload.reset_mock()
-                mock_fallback_payload.return_value = None
-                mock_get_metadata.return_value = {
-                    "media_id": "100",
-                    "title": "Test Anime",
-                    "media_type": MediaTypes.ANIME.value,
-                    "source": Sources.MAL.value,
-                    "image": "http://example.com/image.jpg",
-                    "related": related,
-                }
-
-                response = self.client.get(
-                    reverse(
-                        "media_details",
-                        kwargs={
-                            "source": Sources.MAL.value,
-                            "media_type": MediaTypes.ANIME.value,
-                            "media_id": "100",
-                            "title": "test-anime",
-                        },
-                    ),
-                )
-
-                self.assertEqual(response.status_code, 200)
-                self.assertIsNone(response.context["anime_franchise"])
-                self.assertEqual(response.context["media"]["related"], related)
-                mock_build_delay.assert_called_once_with("100")
-                mock_fallback_payload.assert_called_once()
 
     @patch("app.providers.services.get_media_metadata")
     @patch("app.providers.tmdb.process_episodes")
