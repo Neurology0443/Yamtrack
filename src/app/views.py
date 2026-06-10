@@ -37,10 +37,6 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
-from app.services.anime_franchise_fallback import (
-    build_series_line_fallback_payload,
-    get_related_anime,
-)
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
@@ -281,87 +277,6 @@ def media_search(request):
     return render(request, "app/search.html", context)
 
 
-def _remove_related_anime(media_metadata: dict):
-    """Remove raw MAL related anime entries while preserving other related sections."""
-    related = media_metadata.get("related")
-    if isinstance(related, dict):
-        related.pop("related_anime", None)
-
-
-def _is_enrichable_related_items(related_items) -> bool:
-    """Return whether a related section can be safely user-enriched."""
-    if not isinstance(related_items, list):
-        return False
-
-    return all(
-        isinstance(item, dict)
-        and item.get("media_id")
-        and item.get("media_type")
-        and item.get("source")
-        for item in related_items
-    )
-
-
-def _enrich_related_sections(request, media_metadata: dict, media_id):
-    """Safely enrich provider related sections with user tracking data."""
-    related_sections = media_metadata.get("related")
-    if not isinstance(related_sections, dict):
-        return
-
-    for section_name, related_items in list(related_sections.items()):
-        if not related_items:
-            related_sections[section_name] = []
-            continue
-
-        if not _is_enrichable_related_items(related_items):
-            logger.warning(
-                "Ignoring invalid related section %s for media_id=%s",
-                section_name,
-                media_id,
-            )
-            related_sections[section_name] = []
-            continue
-
-        related_sections[section_name] = helpers.enrich_items_with_user_data(
-            request,
-            related_items,
-            section_name,
-        )
-
-
-def _prepare_first_visit_anime_franchise_fallback(
-    request,
-    media_id,
-    media_metadata,
-):
-    """Prepare the bounded first-visit franchise fallback for display."""
-    fallback_payload = build_series_line_fallback_payload(
-        media_id,
-        media_metadata,
-    )
-    if fallback_payload is None:
-        return None
-
-    try:
-        prepared_fallback = prepare_anime_franchise_context(
-            request,
-            fallback_payload,
-            media_metadata,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to prepare MAL anime franchise fallback context "
-            "for media_id=%s",
-            media_id,
-        )
-        return None
-
-    if not has_displayable_franchise_entries(prepared_fallback):
-        return None
-
-    return prepared_fallback
-
-
 @require_GET
 def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912
     """Return the details page for a media item."""
@@ -429,7 +344,8 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
             else:
                 anime_franchise = prepared_franchise
                 if has_displayable_franchise_entries(anime_franchise):
-                    _remove_related_anime(media_metadata)
+                    if media_metadata.get("related"):
+                        media_metadata["related"].pop("related_anime", None)
                 else:
                     anime_franchise = None
             if (
@@ -447,26 +363,11 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 "background build",
                 media_id,
             )
-            related_anime = get_related_anime(media_metadata)
-            has_displayable_related_anime = bool(
-                related_anime,
-            ) and _is_enrichable_related_items(
-                related_anime,
-            )
-            scheduled = anime_franchise_cache.maybe_schedule_build(
-                media_id,
-                franchise_meta,
-            )
-
-            anime_franchise = _prepare_first_visit_anime_franchise_fallback(
-                request,
-                media_id,
-                media_metadata,
-            )
-
-            if anime_franchise is not None:
-                _remove_related_anime(media_metadata)
-            elif scheduled and has_displayable_related_anime:
+            related_anime = media_metadata.get("related", {}).get("related_anime")
+            if (
+                anime_franchise_cache.maybe_schedule_build(media_id, franchise_meta)
+                and related_anime
+            ):
                 messages.info(
                     request,
                     "Franchise complète en préparation. "
@@ -474,7 +375,14 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 )
 
     # Enrich related items with user tracking data
-    _enrich_related_sections(request, media_metadata, media_id)
+    if media_metadata.get("related"):
+        for section_name, related_items in media_metadata["related"].items():
+            if related_items:
+                media_metadata["related"][section_name] = (
+                    helpers.enrich_items_with_user_data(
+                        request, related_items, section_name
+                    )
+                )
 
     if media_type in ["tv", "movie"]:
         watch_providers = tmdb.filter_providers(

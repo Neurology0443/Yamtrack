@@ -125,7 +125,5 @@ These settings control the complete assembled MAL anime franchise payload cache.
 | `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS` | `12` | Cooldown before retrying after a build error. |
 | `ANIME_FRANCHISE_QUEUE_LOCK_MINUTES` | `30` | Queue lock duration to avoid duplicate Celery enqueues. |
 | `ANIME_FRANCHISE_TASK_LOCK_MINUTES` | `60` | Worker task lock duration to avoid concurrent builds. |
-| `ANIME_FRANCHISE_MAX_NODES` | `50` | Maximum graph nodes to hydrate in the complete Celery-built franchise payload before saving a truncated partial payload; values `<= 0` are treated as unlimited. |
-| `ANIME_FRANCHISE_FALLBACK_ENABLED` | `true` | Enables the lightweight first-visit MAL anime franchise fallback based on the TV prequel/sequel series line while the complete payload is built in the background. |
-| `ANIME_FRANCHISE_FALLBACK_MAX_NODES` | `15` | Maximum MAL graph nodes hydrated only for the first-visit synchronous mini graph fallback. Values `<= 0` disable the fallback; values above the internal hard cap are clamped. |
+| `ANIME_FRANCHISE_MAX_NODES` | `50` | Maximum graph nodes to hydrate before saving a truncated partial payload; values `<= 0` are treated as unlimited. |
 | `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` | `1` | Schema version used to invalidate incompatible cached franchise payloads. |
