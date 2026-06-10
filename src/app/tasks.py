@@ -1,12 +1,14 @@
 import logging
 from datetime import timedelta
 
+import requests
 from celery import shared_task
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
 from app.models import UserMessage
+from app.providers import mal, mal_cache, services
 from app.services.anime_franchise_import import AnimeFranchiseImportService
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,58 @@ def cleanup_user_messages():
     return deleted_count
 
 
+@shared_task(name="Refresh MAL anime metadata")
+def refresh_mal_anime_metadata(media_id):
+    """Refresh MAL anime detail metadata in the background."""
+    task_lock_key = mal_cache.get_anime_refresh_task_lock_key(media_id)
+    task_lock_timeout = 60 * 30
+
+    acquired = cache.add(task_lock_key, "1", timeout=task_lock_timeout)
+    if not acquired:
+        logger.info(
+            "Skipping MAL anime metadata refresh for %s because another run is active.",
+            media_id,
+        )
+        return {
+            "media_type": "anime",
+            "media_id": str(media_id),
+            "refreshed": False,
+            "skipped": True,
+            "reason": "already_running",
+        }
+
+    try:
+        mal_cache.mark_refresh_attempt(media_id)
+        mal.anime(media_id, refresh_cache=True)
+        return {
+            "media_type": "anime",
+            "media_id": str(media_id),
+            "refreshed": True,
+        }
+    except (
+        requests.exceptions.Timeout,
+        requests.exceptions.ConnectionError,
+        requests.exceptions.HTTPError,
+        requests.exceptions.RequestException,
+        services.ProviderAPIError,
+    ) as error:
+        error_message = str(error) or error.__class__.__name__
+        mal_cache.mark_refresh_error(media_id, error_message)
+        logger.warning(
+            "MAL anime metadata refresh failed for %s: %s",
+            media_id,
+            error_message,
+        )
+        return {
+            "media_type": "anime",
+            "media_id": str(media_id),
+            "refreshed": False,
+            "error": error_message[:250],
+        }
+    finally:
+        cache.delete(task_lock_key)
+
+
 @shared_task(name="Import anime franchise")
 def import_anime_franchise(
     *,
@@ -42,7 +96,8 @@ def import_anime_franchise(
     acquired = cache.add(lock_key, "1", timeout=lock_timeout)
     if not acquired:
         logger.info(
-            "Skipping anime franchise import for profile=%s because another run is active.",
+            "Skipping anime franchise import for profile=%s because another run "
+            "is active.",
             profile_key,
         )
         return {

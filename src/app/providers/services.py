@@ -207,6 +207,9 @@ def get_media_metadata(
     source,
     season_numbers=None,
     episode_number=None,
+    *,
+    allow_stale=False,
+    schedule_stale_refresh=False,
 ):
     """Return the metadata for the selected media."""
     if source == Sources.MANUAL.value:
@@ -218,8 +221,18 @@ def get_media_metadata(
             media_type = MediaTypes.TV.value
         return manual.metadata(media_id, media_type)
 
+    use_mal_anime_stale_cache = (
+        source == Sources.MAL.value and media_type == MediaTypes.ANIME.value
+    )
+
     metadata_retrievers = {
-        MediaTypes.ANIME.value: lambda: mal.anime(media_id),
+        MediaTypes.ANIME.value: lambda: mal.anime(
+            media_id,
+            allow_stale=allow_stale and use_mal_anime_stale_cache,
+            schedule_stale_refresh=(
+                schedule_stale_refresh and use_mal_anime_stale_cache
+            ),
+        ),
         MediaTypes.MANGA.value: lambda: (
             mangaupdates.manga(media_id)
             if source == Sources.MANGAUPDATES.value
