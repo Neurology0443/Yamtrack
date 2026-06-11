@@ -15,6 +15,8 @@ from django.utils.dateparse import parse_datetime
 logger = logging.getLogger(__name__)
 
 _REQUIRED_ENTRY_KEYS = {"media_id", "source", "media_type", "title"}
+_ALIASABLE_SECTION_KEYS = {"continuity_extras"}
+
 _FORBIDDEN_ENTRY_KEYS = {
     "media",
     "item",
@@ -93,6 +95,18 @@ def _entry_media_id(entry) -> str | None:
     return str(media_id)
 
 
+def _extract_entry_media_ids(entries) -> set[str]:
+    media_ids = set()
+    if not isinstance(entries, list):
+        return media_ids
+
+    for entry in entries:
+        media_id = _entry_media_id(entry)
+        if media_id:
+            media_ids.add(media_id)
+    return media_ids
+
+
 def extract_series_media_ids(payload: dict) -> set[str]:
     """Return media IDs explicitly present in the main series line."""
     if not isinstance(payload, dict):
@@ -102,11 +116,25 @@ def extract_series_media_ids(payload: dict) -> set[str]:
     if not isinstance(series, dict):
         return set()
 
-    media_ids = set()
-    for entry in series.get("entries", []):
-        media_id = _entry_media_id(entry)
-        if media_id:
-            media_ids.add(media_id)
+    return _extract_entry_media_ids(series.get("entries", []))
+
+
+def extract_aliasable_media_ids(payload: dict) -> set[str]:
+    """Return media IDs allowed to resolve to a canonical franchise payload."""
+    if not isinstance(payload, dict):
+        return set()
+
+    media_ids = extract_series_media_ids(payload)
+
+    sections = payload.get("sections")
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            if section.get("key") not in _ALIASABLE_SECTION_KEYS:
+                continue
+            media_ids.update(_extract_entry_media_ids(section.get("entries", [])))
+
     return media_ids
 
 
@@ -122,10 +150,7 @@ def extract_payload_media_ids(payload: dict) -> set[str]:
         for section in sections:
             if not isinstance(section, dict):
                 continue
-            for entry in section.get("entries", []):
-                media_id = _entry_media_id(entry)
-                if media_id:
-                    media_ids.add(media_id)
+            media_ids.update(_extract_entry_media_ids(section.get("entries", [])))
 
     return media_ids
 
@@ -198,7 +223,7 @@ def prepare_payload_for_aliasing(
         fallback_media_id=build_seed_media_id,
     )
 
-    aliasable_media_ids = extract_series_media_ids(payload)
+    aliasable_media_ids = extract_aliasable_media_ids(payload)
     covered_media_ids = extract_payload_media_ids(payload)
 
     if canonical_media_id not in aliasable_media_ids:
@@ -206,6 +231,9 @@ def prepare_payload_for_aliasing(
 
     if canonical_media_id not in covered_media_ids:
         covered_media_ids.add(canonical_media_id)
+
+    if build_seed_media_id == canonical_media_id:
+        aliasable_media_ids.add(build_seed_media_id)
 
     payload["root_media_id"] = canonical_media_id
     payload["canonical_root_media_id"] = canonical_media_id

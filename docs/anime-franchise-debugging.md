@@ -212,7 +212,9 @@ Detail pages no longer synchronously build a missing franchise payload. On a cac
 
 After a complete, non-truncated Celery build, Yamtrack may store lightweight alias keys so entries from the same franchise can reuse the canonical complete payload. Alias keys use `mal_anime_franchise_alias_<id>` and point to a canonical `mal_anime_franchise_<canonical_id>` payload. Aliases are ignored if the canonical payload is missing, invalid, or does not explicitly cover the requested media ID.
 
-Aliases are only created for complete, non-truncated payloads when `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` is enabled. Aliasable IDs are limited to entries in the main series line. Section-only entries are considered covered for diagnostics but are not alias targets.
+Aliases are only created for complete, non-truncated payloads when `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` is enabled. Aliasable IDs include the main series line and continuity-extra entries (`continuity_extras` / Main Story Extras). The build seed is aliasable only when it belongs to one of those aliasable sets, or when it is the canonical media ID itself. Other secondary sections remain covered for diagnostics but are not alias targets by default.
+
+If a build log shows `media_id=<seed> canonical_media_id=<canonical> truncated=False` but reopening `<seed>` still logs a cache miss, inspect `mal_anime_franchise_alias_<seed>` and `aliasable_media_ids` in the canonical payload. If the seed is present only in a non-aliasable section such as `specials`, `spin_offs`, `alternatives`, or `related_series`, the cache miss may be intentional unless that section is later promoted into the alias allowlist.
 
 If an alias is created for an ID, any older direct payload for that aliased ID is removed so the canonical payload can be used. Broken or stale aliases are ignored and cleaned up safely.
 
