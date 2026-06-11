@@ -404,6 +404,70 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_aliases_continuity_extra_seed(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 4
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "38040",
+                "display_title": "KonoSuba Movie: Kurenai Densetsu",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "30831",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "KonoSuba",
+                        },
+                        {
+                            "media_id": "32937",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "KonoSuba 2",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "38040",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "KonoSuba Movie: Kurenai Densetsu",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("38040")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["canonical_media_id"], "30831")
+        self.assertGreaterEqual(result["alias_count"], 1)
+        alias = cache.get(anime_franchise_cache.get_alias_key("38040"))
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias["canonical_media_id"], "30831")
+        lookup = anime_franchise_cache.load_payload_for_media("38040")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "30831")
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
     def test_build_mal_anime_franchise_payload_truncated_build_skips_aliases(
         self,
         mock_service,
