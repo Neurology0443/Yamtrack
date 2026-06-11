@@ -175,3 +175,31 @@ When changing grouping behavior:
 2. Keep `Series` sourced only from `snapshot.series_line`.
 3. Avoid adding business placement logic to layout/adapter/template.
 4. Update debugging/customization docs and tests with the behavior change.
+
+## Async complete-payload cache
+
+MAL anime grouping uses two complementary caches:
+
+1. The existing MAL anime cache stores individual MAL anime metadata records and remains responsible for cache/stale refresh of each anime entry.
+2. The complete franchise cache stores the assembled, template-ready franchise payload without user-specific data.
+
+The complete payload cache is keyed by the MAL anime ID:
+
+```text
+Payload key: mal_anime_franchise_<id>
+Meta key: mal_anime_franchise_<id>:meta
+Queue lock: mal_anime_franchise_<id>:queue_lock
+Task lock: mal_anime_franchise_<id>:task_lock
+```
+
+On the first detail-page visit with no complete franchise payload, Yamtrack keeps `media.related.related_anime` visible as the lightweight fallback and queues `build_mal_anime_franchise_payload`. The HTTP view does not call `AnimeFranchiseService().build(...)` synchronously. After Celery finishes, a normal page refresh loads the complete franchise payload from cache, enriches it with the current user's status/progress during rendering, and hides `related_anime` to avoid duplicate franchise sections.
+
+Stale complete payloads are still displayed. If freshness/cooldown settings allow it, Yamtrack queues a background refresh while continuing to serve the stale payload.
+
+The complete franchise payload must remain user-agnostic: it must not contain `Item`, `BasicMedia`, progress, status, rendered HTML, or any `request.user`-dependent values. User-specific enrichment is performed only by `prepare_anime_franchise_context(...)` at render time.
+
+Cached franchise payloads are strictly validated before rendering. Invalid or malformed payloads are ignored, so the direct MAL `related_anime` fallback remains visible and a background rebuild can be queued. A valid payload with no series or section entries is also treated as non-displayable and does not hide `related_anime`.
+
+The cache writer refuses non JSON-safe values and user-specific keys; render-time user enrichment is never written back to the cached payload. If a background build produces an invalid payload, Yamtrack preserves the previous successful franchise payload and records the failure in metadata.
+
+The canonical alias layer is navigation infrastructure, not UI placement logic. It may alias continuity extras so pages for continuity movies/OVAs can reuse the canonical complete payload, but it must not change section placement. Placement remains owned by the UI rule pipeline. `continuity_extras` is aliasable because it represents the main-continuity entries outside the primary TV series line; secondary sections such as `specials`, `spin_offs`, `alternatives`, and `related_series` remain non-aliasable by default.

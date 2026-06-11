@@ -20,7 +20,6 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from app import config, helpers, history_processor
 from app import statistics as stats
-from app.anime_franchise_footer import enrich_franchise_entries_for_footer
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
     TV,
@@ -33,7 +32,11 @@ from app.models import (
     UserMessage,
 )
 from app.providers import manual, services, tmdb
-from app.services.anime_franchise import AnimeFranchiseService
+from app.services import anime_franchise_cache
+from app.services.anime_franchise_context import (
+    has_displayable_franchise_entries,
+    prepare_anime_franchise_context,
+)
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
@@ -275,7 +278,7 @@ def media_search(request):
 
 
 @require_GET
-def media_details(request, source, media_type, media_id, title):  # noqa: ARG001 title for URL
+def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912
     """Return the details page for a media item."""
     use_mal_anime_stale_cache = (
         source == Sources.MAL.value
@@ -308,51 +311,68 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         and media_type == MediaTypes.ANIME.value
     )
     if is_anime_franchise_enabled:
-        franchise_payload = AnimeFranchiseService().build(media_id)
-        prepared_series_entries = [
-            {
-                **entry,
-                "series_label": f"Season {index}",
-            }
-            for index, entry in enumerate(
-                franchise_payload.series["entries"],
-                start=1,
+        franchise_refresh_considered = False
+        franchise_lookup = anime_franchise_cache.load_payload_for_media(media_id)
+        franchise_payload = franchise_lookup.payload
+        franchise_meta = franchise_lookup.meta
+        franchise_cache_media_id = franchise_lookup.canonical_media_id
+        if franchise_payload is not None:
+            logger.info("MAL anime franchise cache hit for media_id=%s", media_id)
+            try:
+                prepared_franchise = prepare_anime_franchise_context(
+                    request,
+                    franchise_payload,
+                    media_metadata,
+                )
+            except Exception as error:
+                logger.exception(
+                    "Failed to prepare cached MAL anime franchise context for "
+                    "media_id=%s",
+                    media_id,
+                )
+                anime_franchise_cache.mark_error(
+                    franchise_cache_media_id,
+                    f"cached payload render failed: {error}",
+                )
+                anime_franchise = None
+                franchise_refresh_considered = True
+                anime_franchise_cache.maybe_schedule_build(
+                    franchise_cache_media_id,
+                    franchise_meta,
+                    has_payload=False,
+                )
+            else:
+                anime_franchise = prepared_franchise
+                if has_displayable_franchise_entries(anime_franchise):
+                    if media_metadata.get("related"):
+                        media_metadata["related"].pop("related_anime", None)
+                else:
+                    anime_franchise = None
+            if (
+                not franchise_refresh_considered
+                and not anime_franchise_cache.is_fresh(franchise_meta)
+            ):
+                anime_franchise_cache.maybe_schedule_build(
+                    franchise_cache_media_id,
+                    franchise_meta,
+                    has_payload=True,
+                )
+        else:
+            logger.info(
+                "MAL anime franchise cache miss for media_id=%s; scheduling "
+                "background build",
+                media_id,
             )
-        ]
-        franchise_sections = [
-            {
-                "key": section["key"],
-                "title": section["title"],
-                "entries": helpers.enrich_items_with_user_data(
+            related_anime = media_metadata.get("related", {}).get("related_anime")
+            if (
+                anime_franchise_cache.maybe_schedule_build(media_id, franchise_meta)
+                and related_anime
+            ):
+                messages.info(
                     request,
-                    enrich_franchise_entries_for_footer(
-                        section["entries"],
-                        media_metadata,
-                    ),
-                    section["key"],
-                ),
-                "visible_in_ui": section["visible_in_ui"],
-                "hidden_if_empty": section["hidden_if_empty"],
-            }
-            for section in franchise_payload.sections
-        ]
-
-        anime_franchise = {
-            "root_media_id": franchise_payload.root_media_id,
-            "display_title": franchise_payload.display_title,
-            "series": {
-                "key": AnimeFranchiseService.SERIES_LINE_KEY,
-                "title": "Series",
-                "entries": helpers.enrich_items_with_user_data(
-                    request,
-                    prepared_series_entries,
-                    AnimeFranchiseService.SERIES_LINE_KEY,
-                ),
-            },
-            "sections": franchise_sections,
-        }
-        if media_metadata.get("related"):
-            media_metadata["related"].pop("related_anime", None)
+                    "Franchise complète en préparation. "
+                    "Les relations MAL directes sont affichées en attendant.",
+                )
 
     # Enrich related items with user tracking data
     if media_metadata.get("related"):

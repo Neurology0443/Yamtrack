@@ -201,3 +201,65 @@ python manage.py test app.tests.services.test_anime_franchise_snapshot -k cache
 5. Inspect view-level enrichment/output shaping.
 6. Confirm template is only displaying provided context.
 7. Validate cache freshness if behavior appears inconsistent.
+
+## Complete MAL anime franchise payload cache
+
+Yamtrack keeps the existing MAL anime metadata cache for individual anime records and adds a separate long-lived cache for the assembled franchise payload. The payload cache uses `mal_anime_franchise_<id>` plus `:meta`, `:queue_lock`, and `:task_lock` side keys. It stores a schema-versioned, user-agnostic dict that can be enriched during page rendering.
+
+Detail pages no longer synchronously build a missing franchise payload. On a cache miss, the page keeps `media.related.related_anime` visible and queues `build_mal_anime_franchise_payload` in Celery. On a cache hit, the cached payload is enriched with the current user's data and `related_anime` is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.
+
+### Canonical franchise aliases
+
+After a complete, non-truncated Celery build, Yamtrack may store lightweight alias keys so entries from the same franchise can reuse the canonical complete payload. Alias keys use `mal_anime_franchise_alias_<id>` and point to a canonical `mal_anime_franchise_<canonical_id>` payload. Aliases are ignored if the canonical payload is missing, invalid, or does not explicitly cover the requested media ID.
+
+Aliases are only created for complete, non-truncated payloads when `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` is enabled. Aliasable IDs include the main series line and continuity-extra entries (`continuity_extras` / Main Story Extras). The build seed is aliasable only when it belongs to one of those aliasable sets, or when it is the canonical media ID itself. Other secondary sections remain covered for diagnostics but are not alias targets by default.
+
+If a build log shows `media_id=<seed> canonical_media_id=<canonical> truncated=False` but reopening `<seed>` still logs a cache miss, inspect `mal_anime_franchise_alias_<seed>` and `aliasable_media_ids` in the canonical payload. If the seed is present only in a non-aliasable section such as `specials`, `spin_offs`, `alternatives`, or `related_series`, the cache miss may be intentional unless that section is later promoted into the alias allowlist.
+
+If an alias is created for an ID, any older direct payload for that aliased ID is removed so the canonical payload can be used. Broken or stale aliases are ignored and cleaned up safely.
+
+Alias key: `mal_anime_franchise_alias_<id>`
+Alias index: `mal_anime_franchise_<canonical_id>:aliases`
+
+Useful settings:
+
+- `ANIME_FRANCHISE_CACHE_TTL_DAYS` controls the Redis TTL for payload and meta entries.
+- `ANIME_FRANCHISE_CACHE_FRESH_DAYS` controls logical freshness before stale-while-refresh.
+- `ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS` and `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS` throttle rebuild attempts.
+- `ANIME_FRANCHISE_QUEUE_LOCK_MINUTES` prevents duplicate task enqueueing.
+- `ANIME_FRANCHISE_TASK_LOCK_MINUTES` prevents concurrent worker builds.
+- `ANIME_FRANCHISE_MAX_NODES` limits graph discovery during build and produces a partial payload when reached.
+- `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` invalidates incompatible cached payload shapes.
+
+### Debug keys and logs
+
+For MAL anime ID `223`, inspect the complete franchise cache with these keys:
+
+```text
+Payload key: mal_anime_franchise_223
+Meta key: mal_anime_franchise_223:meta
+Queue lock: mal_anime_franchise_223:queue_lock
+Task lock: mal_anime_franchise_223:task_lock
+Alias key: mal_anime_franchise_alias_<id>
+Alias index: mal_anime_franchise_223:aliases
+```
+
+Expected log messages include:
+
+```text
+MAL anime franchise cache miss for media_id=<id>
+MAL anime franchise cache hit for media_id=<id>
+MAL anime franchise build already queued for media_id=<id>
+MAL anime franchise build already running for media_id=<id>
+MAL anime franchise build completed for media_id=<id>
+MAL anime franchise build failed for media_id=<id>
+MAL anime franchise build truncated for media_id=<id>
+```
+
+If the payload is absent or schema-incompatible, the detail page should keep `related_anime` visible and enqueue a background rebuild when cooldowns allow. If a valid payload is stale, the page should still render it and only refresh in the background.
+
+The complete payload is validated before rendering. If validation fails, Yamtrack ignores the cached payload, keeps the lightweight `related_anime` fallback visible, and queues a rebuild when cooldowns and locks allow. A structurally valid but empty payload also keeps `related_anime` visible because there is no displayable franchise section to de-duplicate.
+
+`save_payload(...)` rejects non JSON-safe values and user-specific keys such as `item`, `media`, `progress`, `status`, `user_id`, or rendered HTML. If a Celery build produces an invalid payload, the task records the error in meta and preserves the previous successful payload. Build metadata uses the public `AnimeFranchiseGraphBuilder.node_count` API rather than reading graph internals.
+
+Cached franchise payloads are validated on both write and read. Payloads that are structurally valid but contain user-specific keys or non JSON-safe values are ignored at read time, preserving the direct MAL `related_anime` fallback and allowing a background rebuild when cooldowns permit.
