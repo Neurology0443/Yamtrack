@@ -215,11 +215,15 @@ def build_mal_anime_franchise_payload(media_id):
                 canonical_payload,
                 truncated=False,
             )
-        context_ref_count = anime_franchise_cache.replace_context_refs(
-            canonical_media_id,
-            canonical_payload,
-            truncated=truncated,
-        )
+        context_ref_count = 0
+        if settings.ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED:
+            context_ref_count = anime_franchise_cache.replace_context_refs(
+                canonical_media_id,
+                canonical_payload,
+                truncated=truncated,
+            )
+        else:
+            anime_franchise_cache.delete_context_refs_for_canonical(canonical_media_id)
         if truncated:
             logger.info(
                 "MAL anime franchise build truncated for media_id=%s max_nodes=%s",

@@ -853,6 +853,58 @@ class MediaDetailsViewTests(TestCase):
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
+    @override_settings(
+        ANIME_FRANCHISE_GROUPING_ENABLED=True,
+        ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=False,
+    )
+    def test_mal_anime_context_lookup_disabled_ignores_existing_context_key(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Disabling weak contexts should ignore existing context cache keys."""
+        mock_get_metadata.return_value = {
+            "media_id": "32801",
+            "title": "DanMachi OVA",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "28121",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "DanMachi",
+                        "image": "img",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_context_payload()
+        anime_franchise_cache.save_payload("28121", payload)
+        anime_franchise_cache.replace_context_refs("28121", payload)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "32801",
+                    "title": "danmachi-ova",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["anime_franchise"])
+        self.assertIn("related_anime", response.context["media"]["related"])
+        mock_build_delay.assert_called_once_with("32801")
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
     def test_mal_anime_related_series_does_not_context_hit(
         self,

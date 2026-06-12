@@ -19,6 +19,7 @@ from app.services import anime_franchise_cache
     ANIME_FRANCHISE_TASK_LOCK_MINUTES=60,
     ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION=1,
     ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True,
+    ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=True,
 )
 class AnimeFranchiseCacheTests(TestCase):
     def setUp(self):
@@ -223,11 +224,6 @@ class AnimeFranchiseCacheTests(TestCase):
 
     def test_replace_context_refs_creates_special_contexts_only(self):
         canonical_id = "28121"
-        direct_payload = deepcopy(self.payload)
-        direct_payload["root_media_id"] = "32801"
-        direct_payload["display_title"] = "OVA"
-        direct_payload["series"]["entries"][0]["media_id"] = "32801"
-        anime_franchise_cache.save_payload("32801", direct_payload)
         payload = {
             "schema_version": 1,
             "root_media_id": canonical_id,
@@ -317,7 +313,121 @@ class AnimeFranchiseCacheTests(TestCase):
             cache.get(anime_franchise_cache.get_context_index_key(canonical_id)),
             ["32801", "37348"],
         )
-        self.assertIsNotNone(anime_franchise_cache.load_payload("32801")[0])
+        self.assertIsNone(anime_franchise_cache.load_payload("32801")[0])
+
+    def test_replace_context_refs_skips_media_id_with_direct_payload(self):
+        canonical_id = "28121"
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "32801"
+        direct_payload["display_title"] = "DanMachi OVA"
+        direct_payload["series"]["entries"][0]["media_id"] = "32801"
+        anime_franchise_cache.save_payload("32801", direct_payload)
+        payload = {
+            "schema_version": 1,
+            "root_media_id": canonical_id,
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi OVA",
+                        },
+                        {
+                            "media_id": "37348",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi II OVA",
+                        },
+                    ],
+                },
+            ],
+        }
+        anime_franchise_cache.save_payload(canonical_id, payload)
+
+        count = anime_franchise_cache.replace_context_refs(canonical_id, payload)
+
+        self.assertEqual(count, 1)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("32801")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_context_key("37348")))
+
+    def test_replace_context_refs_removes_old_context_when_direct_payload_now_exists(
+        self,
+    ):
+        canonical_id = "28121"
+        cache.set(anime_franchise_cache.get_context_index_key(canonical_id), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id=canonical_id,
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "32801"
+        direct_payload["display_title"] = "DanMachi OVA"
+        direct_payload["series"]["entries"][0]["media_id"] = "32801"
+        anime_franchise_cache.save_payload("32801", direct_payload)
+        payload = {
+            "schema_version": 1,
+            "root_media_id": canonical_id,
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi OVA",
+                        },
+                    ],
+                },
+            ],
+        }
+        anime_franchise_cache.save_payload(canonical_id, payload)
+
+        count = anime_franchise_cache.replace_context_refs(canonical_id, payload)
+
+        self.assertEqual(count, 0)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("32801")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_context_index_key(canonical_id)),
+            [],
+        )
 
     def test_load_payload_for_media_context_requires_explicit_allow_context(self):
         payload = self._dragon_ball_payload()

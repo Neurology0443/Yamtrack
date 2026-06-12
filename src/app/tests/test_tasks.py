@@ -672,6 +672,78 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(result["context_ref_count"], 0)
         self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
 
+    @override_settings(ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=False)
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_context_lookup_disabled_cleans_refs(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        cache.set(anime_franchise_cache.get_context_index_key("28121"), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="28121",
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "28121",
+                "display_title": "DanMachi",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "28121",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi",
+                        },
+                        {
+                            "media_id": "28122",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi II",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "specials",
+                        "title": "Specials",
+                        "entries": [
+                            {
+                                "media_id": "32801",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "DanMachi OVA",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("28121")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["context_ref_count"], 0)
+        self.assertGreaterEqual(result["alias_count"], 1)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertIsNone(
+            cache.get(anime_franchise_cache.get_context_index_key("28121")),
+        )
+
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")

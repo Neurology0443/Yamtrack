@@ -716,6 +716,11 @@ def delete_context_refs_for_canonical(canonical_media_id) -> None:
     cache.delete(get_context_index_key(canonical_media_id))
 
 
+def _has_direct_payload_key(media_id) -> bool:
+    """Return whether media_id currently has any direct payload cache key."""
+    return cache.get(get_payload_key(media_id)) is not None
+
+
 def replace_context_refs(
     canonical_media_id,
     payload: dict,
@@ -748,7 +753,9 @@ def replace_context_refs(
     new_context_ids = {
         media_id
         for media_id in context_section_keys
-        if media_id != canonical_media_id and media_id not in aliasable_ids
+        if media_id != canonical_media_id
+        and media_id not in aliasable_ids
+        and not _has_direct_payload_key(media_id)
     }
 
     ttl = get_ttl_seconds()

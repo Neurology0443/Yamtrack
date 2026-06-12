@@ -313,7 +313,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         franchise_refresh_considered = False
         franchise_lookup = anime_franchise_cache.load_payload_for_media(
             media_id,
-            allow_context=True,
+            allow_context=settings.ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED,
         )
         franchise_payload = franchise_lookup.payload
         franchise_meta = franchise_lookup.meta
