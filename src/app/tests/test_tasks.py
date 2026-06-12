@@ -13,6 +13,9 @@ from app.models import UserMessage, UserMessageLevel
 from app.providers import mal_cache
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_import import FranchiseImportStats
+from app.services.anime_franchise_task_names import (
+    MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
+)
 from app.tasks import (
     build_mal_anime_franchise_payload,
     cleanup_user_messages,
@@ -101,6 +104,9 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             skipped=0,
             errors=0,
             created_ids=["100", "200"],
+            cache_warm_scheduled=2,
+            cache_warm_roots=["100", "200"],
+            cache_warm_errors=0,
         )
 
         result = import_anime_franchise(
@@ -136,9 +142,26 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                 "skipped": 0,
                 "errors": 0,
                 "created_ids": ["100", "200"],
+                "cache_warm_scheduled": 2,
+                "cache_warm_roots": ["100", "200"],
+                "cache_warm_errors": 0,
             },
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
+
+    @patch("app.tasks.cache")
+    @patch("app.tasks.AnimeFranchiseImportService")
+    def test_import_task_returns_default_cache_warm_fields(
+        self, mock_service_cls, mock_cache
+    ):
+        mock_cache.add.return_value = True
+        mock_service_cls.return_value.run.return_value = FranchiseImportStats()
+
+        result = import_anime_franchise(profile_key="satellites")
+
+        self.assertEqual(result["cache_warm_scheduled"], 0)
+        self.assertEqual(result["cache_warm_roots"], [])
+        self.assertEqual(result["cache_warm_errors"], 0)
 
     @patch("app.tasks.cache")
     @patch("app.tasks.AnimeFranchiseImportService")
@@ -177,6 +200,12 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             timeout=60 * 60 * 6,
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
+
+    def test_build_mal_anime_franchise_payload_uses_shared_task_name(self):
+        self.assertEqual(
+            build_mal_anime_franchise_payload.name,
+            MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
+        )
 
 
 class RefreshMALAnimeMetadataTaskTests(TestCase):
