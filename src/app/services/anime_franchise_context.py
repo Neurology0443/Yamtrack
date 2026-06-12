@@ -38,6 +38,15 @@ def serialize_franchise_payload(franchise_payload, *, root_media_id=None) -> dic
         "display_title": _payload_get(franchise_payload, "display_title", ""),
         "series": _payload_get(franchise_payload, "series", {}),
         "sections": _payload_get(franchise_payload, "sections", []),
+        "canonical_root_media_id": str(
+            _payload_get(franchise_payload, "canonical_root_media_id", "")
+        ),
+        "has_series_line": bool(
+            _payload_get(franchise_payload, "has_series_line", False)
+        ),
+        "continuity_component_media_ids": _payload_get(
+            franchise_payload, "continuity_component_media_ids", []
+        ),
     }
     return _plain_value(payload)
 

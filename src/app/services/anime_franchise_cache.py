@@ -204,6 +204,13 @@ def determine_canonical_media_id(payload: dict, fallback_media_id) -> str:
     if not isinstance(payload, dict):
         return fallback_media_id
 
+    explicit_canonical_root = payload.get("canonical_root_media_id")
+    if (
+        explicit_canonical_root not in (None, "")
+        and payload.get("has_series_line") is False
+    ):
+        return str(explicit_canonical_root)
+
     series = payload.get("series")
     if not isinstance(series, dict):
         return fallback_media_id
@@ -274,7 +281,16 @@ def prepare_payload_for_aliasing(
     if canonical_media_id not in covered_media_ids:
         covered_media_ids.add(canonical_media_id)
 
-    if build_seed_media_id == canonical_media_id:
+    continuity_component_media_ids = {
+        str(media_id)
+        for media_id in payload.get("continuity_component_media_ids", [])
+        if media_id not in (None, "")
+    }
+
+    if build_seed_media_id == canonical_media_id or (
+        canonical_media_id != build_seed_media_id
+        and build_seed_media_id in continuity_component_media_ids
+    ):
         aliasable_media_ids.add(build_seed_media_id)
 
     payload["root_media_id"] = canonical_media_id

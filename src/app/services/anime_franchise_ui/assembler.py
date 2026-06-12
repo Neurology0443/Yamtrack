@@ -18,16 +18,20 @@ from typing import TYPE_CHECKING
 from .candidates import UiCandidate
 
 if TYPE_CHECKING:
-    from app.services.anime_franchise_types import AnimeRelation
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+    from app.services.anime_franchise_types import AnimeRelation
 
 
 class UiCandidateAssembler:
     """Build canonical secondary candidates while keeping Series separate."""
 
+    _CONTINUITY_RELATION_TYPES = {"prequel", "sequel"}
+
     def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:
         series_ids = {node.media_id for node in snapshot.series_line}
-        series_index = {node.media_id: idx for idx, node in enumerate(snapshot.series_line)}
+        series_index = {
+            node.media_id: idx for idx, node in enumerate(snapshot.series_line)
+        }
         root_media_id = snapshot.root_node.media_id
 
         promoted_relations = snapshot.promoted_continuity_candidates or []
@@ -43,18 +47,35 @@ class UiCandidateAssembler:
 
         grouped_relations: dict[str, list[AnimeRelation]] = {}
         seen_relations: set[tuple[str, str, str]] = set()
-        for relation in [*snapshot.direct_candidates, *promoted_relations]:
-            relation_key = (
-                relation.source_media_id,
-                relation.target_media_id,
-                relation.relation_type,
+        if snapshot.has_series_line:
+            for relation in [*snapshot.direct_candidates, *promoted_relations]:
+                self._add_grouped_relation(
+                    grouped_relations=grouped_relations,
+                    seen_relations=seen_relations,
+                    relation=relation,
+                    series_ids=series_ids,
+                )
+
+        mini_relation_keys: set[tuple[str, str, str]] = set()
+        mini_sort_ranks: dict[str, int] = {}
+        if not snapshot.has_series_line:
+            component_ids = self._get_component_ids(snapshot)
+            mini_relation_keys, mini_sort_ranks = (
+                self._build_no_series_continuity_candidates(
+                    snapshot=snapshot,
+                    grouped_relations=grouped_relations,
+                    seen_relations=seen_relations,
+                    series_ids=series_ids,
+                    component_ids=component_ids,
+                )
             )
-            if relation_key in seen_relations:
-                continue
-            seen_relations.add(relation_key)
-            if relation.target_media_id in series_ids:
-                continue
-            grouped_relations.setdefault(relation.target_media_id, []).append(relation)
+            self._add_no_series_direct_informative_candidates(
+                snapshot=snapshot,
+                grouped_relations=grouped_relations,
+                seen_relations=seen_relations,
+                series_ids=series_ids,
+                component_ids=component_ids,
+            )
 
         candidates: list[UiCandidate] = []
         for target_media_id, relations in grouped_relations.items():
@@ -62,19 +83,33 @@ class UiCandidateAssembler:
             if node is None:
                 continue
 
-            relation_types = self._ordered_unique([relation.relation_type for relation in relations])
-            source_media_ids = self._ordered_unique([relation.source_media_id for relation in relations])
-            series_line_sources = [source_id for source_id in source_media_ids if source_id in series_ids]
-            root_sources = [source_id for source_id in source_media_ids if source_id == root_media_id]
+            relation_types = self._ordered_unique(
+                [relation.relation_type for relation in relations]
+            )
+            source_media_ids = self._ordered_unique(
+                [relation.source_media_id for relation in relations]
+            )
+            series_line_sources = [
+                source_id for source_id in source_media_ids if source_id in series_ids
+            ]
+            root_sources = [
+                source_id
+                for source_id in source_media_ids
+                if source_id == root_media_id
+            ]
             non_series_sources = [
-                source_id for source_id in source_media_ids if source_id not in series_ids
+                source_id
+                for source_id in source_media_ids
+                if source_id not in series_ids
             ]
 
             promoted_metadata = promoted_target_metadata.get(target_media_id, {})
             linked_series_line_media_id = self._resolve_best_series_anchor(
                 series_line_sources=series_line_sources,
                 series_index=series_index,
-                promoted_anchor_media_id=promoted_metadata.get("series_anchor_media_id"),
+                promoted_anchor_media_id=promoted_metadata.get(
+                    "series_anchor_media_id"
+                ),
                 promoted_depth=promoted_metadata.get("depth"),
             )
             if linked_series_line_media_id is None and not snapshot.has_series_line:
@@ -89,6 +124,34 @@ class UiCandidateAssembler:
                 in promoted_relation_keys
                 for relation in relations
             )
+            is_mini_continuity = any(
+                (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                in mini_relation_keys
+                for relation in relations
+            )
+            metadata = {
+                "is_promoted_continuity": is_promoted_continuity,
+                "promoted_from_series_line_media_id": promoted_metadata.get(
+                    "series_anchor_media_id"
+                ),
+                "promoted_depth": promoted_metadata.get("depth"),
+                "is_mini_continuity": is_mini_continuity,
+                "origins": [
+                    {
+                        "source_media_id": relation.source_media_id,
+                        "relation_type": relation.relation_type,
+                        "is_from_series_line": relation.source_media_id in series_ids,
+                        "is_from_root_node": relation.source_media_id == root_media_id,
+                    }
+                    for relation in relations
+                ],
+            }
+            if target_media_id in mini_sort_ranks:
+                metadata["section_sort_rank"] = mini_sort_ranks[target_media_id]
 
             candidates.append(
                 UiCandidate(
@@ -114,24 +177,178 @@ class UiCandidateAssembler:
                     has_root_origin=bool(root_sources),
                     has_non_series_origin=bool(non_series_sources),
                     is_current=node.media_id == snapshot.root_node.media_id,
-                    metadata={
-                        "is_promoted_continuity": is_promoted_continuity,
-                        "promoted_from_series_line_media_id": promoted_metadata.get("series_anchor_media_id"),
-                        "promoted_depth": promoted_metadata.get("depth"),
-                        "origins": [
-                            {
-                                "source_media_id": relation.source_media_id,
-                                "relation_type": relation.relation_type,
-                                "is_from_series_line": relation.source_media_id in series_ids,
-                                "is_from_root_node": relation.source_media_id == root_media_id,
-                            }
-                            for relation in relations
-                        ],
-                    },
+                    metadata=metadata,
                 )
             )
 
         return candidates
+
+    def _build_no_series_continuity_candidates(
+        self,
+        *,
+        snapshot: AnimeFranchiseSnapshot,
+        grouped_relations: dict[str, list[AnimeRelation]],
+        seen_relations: set[tuple[str, str, str]],
+        series_ids: set[str],
+        component_ids: set[str],
+    ) -> tuple[set[tuple[str, str, str]], dict[str, int]]:
+        """Enrich no-series snapshots with the full prequel/sequel component."""
+        root_media_id = snapshot.root_node.media_id
+        mini_relation_keys: set[tuple[str, str, str]] = set()
+        internal_relations: list[AnimeRelation] = []
+
+        for relation in snapshot.all_normalized_relations:
+            if relation.relation_type not in self._CONTINUITY_RELATION_TYPES:
+                continue
+            if (
+                relation.source_media_id not in component_ids
+                or relation.target_media_id not in component_ids
+            ):
+                continue
+            relation_key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            mini_relation_keys.add(relation_key)
+            internal_relations.append(relation)
+            if relation.target_media_id == root_media_id:
+                continue
+            self._add_grouped_relation(
+                grouped_relations=grouped_relations,
+                seen_relations=seen_relations,
+                relation=relation,
+                series_ids=series_ids,
+            )
+
+        for node in snapshot.continuity_component:
+            if node.media_id == root_media_id:
+                continue
+            node_relations = grouped_relations.setdefault(node.media_id, [])
+            if node_relations:
+                continue
+            node_relations.extend(
+                relation
+                for relation in internal_relations
+                if relation.source_media_id == node.media_id
+                or relation.target_media_id == node.media_id
+            )
+
+        return mini_relation_keys, self._rank_no_series_continuity(
+            snapshot=snapshot,
+            component_ids=component_ids,
+            internal_relations=internal_relations,
+        )
+
+    def _add_no_series_direct_informative_candidates(
+        self,
+        *,
+        snapshot: AnimeFranchiseSnapshot,
+        grouped_relations: dict[str, list[AnimeRelation]],
+        seen_relations: set[tuple[str, str, str]],
+        series_ids: set[str],
+        component_ids: set[str],
+    ) -> None:
+        """Add only root-direct non-continuity relations for no-series snapshots."""
+        root_media_id = snapshot.root_node.media_id
+        for relation in snapshot.direct_candidates:
+            if relation.relation_type in self._CONTINUITY_RELATION_TYPES:
+                continue
+            if relation.target_media_id == root_media_id:
+                continue
+            if relation.target_media_id in component_ids:
+                continue
+            if relation.target_media_id not in snapshot.nodes_by_media_id:
+                continue
+            self._add_grouped_relation(
+                grouped_relations=grouped_relations,
+                seen_relations=seen_relations,
+                relation=relation,
+                series_ids=series_ids,
+            )
+
+    @staticmethod
+    def _get_component_ids(snapshot: AnimeFranchiseSnapshot) -> set[str]:
+        return {node.media_id for node in snapshot.continuity_component}
+
+    @staticmethod
+    def _add_grouped_relation(
+        *,
+        grouped_relations: dict[str, list[AnimeRelation]],
+        seen_relations: set[tuple[str, str, str]],
+        relation: AnimeRelation,
+        series_ids: set[str],
+    ) -> None:
+        relation_key = (
+            relation.source_media_id,
+            relation.target_media_id,
+            relation.relation_type,
+        )
+        if relation_key in seen_relations:
+            return
+        seen_relations.add(relation_key)
+        if relation.target_media_id in series_ids:
+            return
+        grouped_relations.setdefault(relation.target_media_id, []).append(relation)
+
+    def _rank_no_series_continuity(
+        self,
+        *,
+        snapshot: AnimeFranchiseSnapshot,
+        component_ids: set[str],
+        internal_relations: list[AnimeRelation],
+    ) -> dict[str, int]:
+        adjacency: dict[str, set[str]] = {media_id: set() for media_id in component_ids}
+        for relation in internal_relations:
+            source_id, target_id = self._continuity_direction(
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            adjacency.setdefault(source_id, set()).add(target_id)
+
+        anchor_id = str(snapshot.canonical_root_media_id or snapshot.root_node.media_id)
+        ordered_ids: list[str] = []
+        visited: set[str] = set()
+        if anchor_id in component_ids:
+            queue = deque([anchor_id])
+            visited.add(anchor_id)
+            while queue:
+                current_id = queue.popleft()
+                ordered_ids.append(current_id)
+                for next_id in sorted(
+                    adjacency.get(current_id, set()),
+                    key=lambda media_id: self._node_sort_tuple(snapshot, media_id),
+                ):
+                    if next_id in visited:
+                        continue
+                    visited.add(next_id)
+                    queue.append(next_id)
+
+        remaining_ids = sorted(
+            component_ids - visited,
+            key=lambda media_id: self._node_sort_tuple(snapshot, media_id),
+        )
+        ordered_ids.extend(remaining_ids)
+        return {media_id: index for index, media_id in enumerate(ordered_ids)}
+
+    @staticmethod
+    def _node_sort_tuple(
+        snapshot: AnimeFranchiseSnapshot, media_id: str
+    ) -> tuple[str, str]:
+        node = snapshot.nodes_by_media_id.get(media_id)
+        date_value = (
+            node.start_date.isoformat() if node and node.start_date else "9999-12-31"
+        )
+        return date_value, str(media_id)
+
+    @staticmethod
+    def _continuity_direction(
+        source_id: str, target_id: str, relation_type: str
+    ) -> tuple[str, str]:
+        if relation_type == "prequel":
+            return target_id, source_id
+        return source_id, target_id
 
     @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:
@@ -152,8 +369,7 @@ class UiCandidateAssembler:
         Final tie-break rank is: earliest `series_index`, then lowest depth.
         """
         anchor_candidates: list[tuple[str, int]] = [
-            (source_id, 0)
-            for source_id in series_line_sources
+            (source_id, 0) for source_id in series_line_sources
         ]
         if promoted_anchor_media_id is not None and promoted_depth is not None:
             anchor_candidates.append((promoted_anchor_media_id, promoted_depth))
@@ -192,7 +408,9 @@ class UiCandidateAssembler:
             target_media_id, anchor_media_id, depth = queue.popleft()
             current = result.get(target_media_id)
             if current is not None:
-                current_anchor_index = series_index.get(str(current["series_anchor_media_id"]), 999999)
+                current_anchor_index = series_index.get(
+                    str(current["series_anchor_media_id"]), 999999
+                )
                 candidate_anchor_index = series_index.get(anchor_media_id, 999999)
                 current_rank = (current_anchor_index, int(current["depth"]))
                 candidate_rank = (candidate_anchor_index, depth)

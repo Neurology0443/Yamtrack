@@ -19,6 +19,9 @@ class AnimeFranchiseUiPayload:
     display_title: str
     series: dict
     sections: list[dict]
+    canonical_root_media_id: str
+    has_series_line: bool
+    continuity_component_media_ids: list[str]
 
 
 class ViewModelAdapter:
@@ -31,6 +34,9 @@ class ViewModelAdapter:
         display_title: str,
         series_block: SeriesBlock,
         sections: list[CompiledSection],
+        canonical_root_media_id: str = "",
+        has_series_line: bool = False,
+        continuity_component_media_ids: list[str] | None = None,
     ) -> AnimeFranchiseUiPayload:
         return AnimeFranchiseUiPayload(
             root_media_id=root_media_id,
@@ -56,8 +62,13 @@ class ViewModelAdapter:
                         "is_current": entry.is_current,
                     }
                     for entry in series_block.entries
-                ]
+                ],
             },
+            canonical_root_media_id=str(canonical_root_media_id),
+            has_series_line=bool(has_series_line),
+            continuity_component_media_ids=[
+                str(media_id) for media_id in (continuity_component_media_ids or [])
+            ],
             sections=[
                 {
                     "key": section.key,
@@ -77,8 +88,12 @@ class ViewModelAdapter:
                             "start_date": candidate.start_date,
                             "runtime_minutes": candidate.runtime_minutes,
                             "episode_count": candidate.episode_count,
-                            "linked_series_line_media_id": candidate.linked_series_line_media_id,
-                            "linked_series_line_index": candidate.linked_series_line_index,
+                            "linked_series_line_media_id": (
+                                candidate.linked_series_line_media_id
+                            ),
+                            "linked_series_line_index": (
+                                candidate.linked_series_line_index
+                            ),
                             "is_current": candidate.is_current,
                             "badges": list(candidate.badges),
                         }

@@ -432,6 +432,159 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_rebuilds_no_series_from_canonical_root(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 5
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        requested_payload = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "37087",
+                "display_title": "Overlord: Ple Ple Pleiades 2",
+                "canonical_root_media_id": "31138",
+                "has_series_line": False,
+                "continuity_component_media_ids": [
+                    "31138",
+                    "33372",
+                    "37087",
+                    "37781",
+                    "48897",
+                ],
+                "series": {"key": "series", "title": "Series", "entries": []},
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "31138",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades",
+                            },
+                            {
+                                "media_id": "33372",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Nazarick Saidai no Kiki",
+                            },
+                            {
+                                "media_id": "37781",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades 3",
+                            },
+                            {
+                                "media_id": "48897",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades 4",
+                            },
+                        ],
+                    },
+                    {
+                        "key": "related_series",
+                        "title": "Related Series",
+                        "entries": [
+                            {
+                                "media_id": "35073",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Overlord II",
+                                "relation_type": "parent_story",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+        canonical_payload = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "31138",
+                "display_title": "Overlord: Ple Ple Pleiades",
+                "canonical_root_media_id": "31138",
+                "has_series_line": False,
+                "continuity_component_media_ids": [
+                    "31138",
+                    "33372",
+                    "37087",
+                    "37781",
+                    "48897",
+                ],
+                "series": {"key": "series", "title": "Series", "entries": []},
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "33372",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Nazarick Saidai no Kiki",
+                            },
+                            {
+                                "media_id": "37087",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades 2",
+                            },
+                            {
+                                "media_id": "37781",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades 3",
+                            },
+                            {
+                                "media_id": "48897",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Ple Ple Pleiades 4",
+                            },
+                        ],
+                    }
+                ],
+            },
+        )()
+        mock_service.return_value.build.side_effect = [
+            requested_payload,
+            canonical_payload,
+        ]
+
+        result = build_mal_anime_franchise_payload("37087")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["canonical_media_id"], "31138")
+        self.assertEqual(
+            mock_service.return_value.build.call_args_list[0].args,
+            ("37087",),
+        )
+        self.assertEqual(
+            mock_service.return_value.build.call_args_list[1].args,
+            ("31138",),
+        )
+        payload, _meta = anime_franchise_cache.load_payload("31138")
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["root_media_id"], "31138")
+        self.assertIn("37087", payload["aliasable_media_ids"])
+        self.assertNotIn("35073", payload["aliasable_media_ids"])
+        saved_media_ids = anime_franchise_cache.extract_payload_media_ids(payload)
+        self.assertNotIn("35073", saved_media_ids)
+        self.assertIsNone(anime_franchise_cache.load_payload("37087")[0])
+        alias = cache.get(anime_franchise_cache.get_alias_key("37087"))
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias["canonical_media_id"], "31138")
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
     def test_build_mal_anime_franchise_payload_aliases_continuity_extra_seed(
         self,
         mock_service,

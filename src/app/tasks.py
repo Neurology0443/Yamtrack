@@ -178,10 +178,26 @@ def build_mal_anime_franchise_payload(media_id):
         graph_builder = AnimeFranchiseGraphBuilder(
             max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
         )
-        franchise_payload = AnimeFranchiseService(
+        franchise_service = AnimeFranchiseService(
             graph_builder=graph_builder,
-        ).build(media_id)
+        )
+        franchise_payload = franchise_service.build(media_id)
         truncated = bool(graph_builder.truncated)
+        if not truncated:
+            initial_serialized_payload = serialize_franchise_payload(
+                franchise_payload,
+                root_media_id=media_id,
+            )
+            canonical_root_media_id = str(
+                initial_serialized_payload.get("canonical_root_media_id") or ""
+            )
+            if (
+                initial_serialized_payload.get("has_series_line") is False
+                and canonical_root_media_id
+                and canonical_root_media_id != media_id
+            ):
+                franchise_payload = franchise_service.build(canonical_root_media_id)
+                truncated = bool(graph_builder.truncated)
         aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
         can_use_aliases = aliases_enabled and not truncated
         truncation_reason = graph_builder.truncation_reason or ""
