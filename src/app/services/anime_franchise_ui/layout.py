@@ -29,7 +29,9 @@ class LayoutCompiler:
 
         section_defs = dict(context.sections)
         for section_key in grouped:
-            section_defs.setdefault(section_key, self._fallback_section_definition(section_key))
+            section_defs.setdefault(
+                section_key, self._fallback_section_definition(section_key)
+            )
 
         sections: list[CompiledSection] = []
         for key, definition in section_defs.items():
@@ -52,7 +54,7 @@ class LayoutCompiler:
 
     @staticmethod
     def _fallback_section_definition(section_key: str) -> SectionDefinition:
-        """Build default section metadata for keys created by rules without definitions."""
+        """Build fallback section metadata for ad-hoc section keys."""
         return SectionDefinition(
             key=section_key,
             title=section_key.replace("_", " ").title(),
@@ -60,7 +62,7 @@ class LayoutCompiler:
 
     @staticmethod
     def _sort_entries(entries: list[UiCandidate]) -> list[UiCandidate]:
-        """Apply generic metadata-driven structural sorting when rank metadata exists."""
+        """Apply metadata-driven sorting when rank metadata exists."""
         if not entries:
             return entries
 

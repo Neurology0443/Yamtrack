@@ -4,8 +4,8 @@ from .anchor_rules import AnchorRules
 from .base_facts import BaseFactsRules
 from .base_placement import BasePlacementRules
 from .format_rules import FormatRules
-from .secondary_refinement_rules import SecondaryRefinementRules
 from .relation_rules import RelationRules
+from .secondary_refinement_rules import SecondaryRefinementRules
 from .section_rules import SectionRules
 
 __all__ = [

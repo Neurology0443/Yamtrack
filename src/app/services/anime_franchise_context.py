@@ -47,6 +47,12 @@ def serialize_franchise_payload(franchise_payload, *, root_media_id=None) -> dic
         "continuity_component_media_ids": _payload_get(
             franchise_payload, "continuity_component_media_ids", []
         ),
+        "continuity_component_entries": _payload_get(
+            franchise_payload, "continuity_component_entries", []
+        ),
+        "continuity_component_relations": _payload_get(
+            franchise_payload, "continuity_component_relations", []
+        ),
     }
     return _plain_value(payload)
 
@@ -73,6 +79,12 @@ def has_displayable_franchise_entries(anime_franchise: dict | None) -> bool:
     if series_entries:
         return True
 
+    component_entries = _copy_entries(
+        anime_franchise.get("continuity_component_entries", [])
+    )
+    if anime_franchise.get("has_series_line") is False and len(component_entries) > 1:
+        return True
+
     sections = anime_franchise.get("sections", [])
     if not isinstance(sections, list):
         return False
@@ -80,6 +92,111 @@ def has_displayable_franchise_entries(anime_franchise: dict | None) -> bool:
         isinstance(section, dict) and bool(section.get("entries"))
         for section in sections
     )
+
+
+def _invert_continuity_relation(relation_type: str) -> str:
+    if relation_type == "prequel":
+        return "sequel"
+    if relation_type == "sequel":
+        return "prequel"
+    return relation_type
+
+
+def _relation_type_relative_to_current(
+    *,
+    current_media_id: str,
+    target_media_id: str,
+    relations: list[dict],
+    ranks: dict[str, int],
+) -> str | None:
+    for relation in relations:
+        if not isinstance(relation, dict):
+            continue
+        source_id = str(relation.get("source_media_id") or "")
+        relation_target_id = str(relation.get("target_media_id") or "")
+        relation_type = relation.get("relation_type")
+        if relation_type not in {"prequel", "sequel"}:
+            continue
+        if source_id == current_media_id and relation_target_id == target_media_id:
+            return str(relation_type)
+        if source_id == target_media_id and relation_target_id == current_media_id:
+            return _invert_continuity_relation(str(relation_type))
+
+    current_rank = ranks.get(current_media_id)
+    target_rank = ranks.get(target_media_id)
+    if current_rank is None or target_rank is None:
+        return None
+    if target_rank < current_rank:
+        return "prequel"
+    if target_rank > current_rank:
+        return "sequel"
+    return None
+
+
+def _build_no_series_render_continuity_entries(
+    franchise_payload: dict,
+    current_media_id: str,
+) -> list[dict] | None:
+    if franchise_payload.get("has_series_line") is not False:
+        return None
+
+    component_entries = franchise_payload.get("continuity_component_entries")
+    component_relations = franchise_payload.get("continuity_component_relations")
+    if not isinstance(component_entries, list) or not component_entries:
+        return None
+    if not isinstance(component_relations, list):
+        return None
+
+    continuity_section_entries: dict[str, dict] = {}
+    for section in franchise_payload.get("sections", []):
+        if not isinstance(section, dict) or section.get("key") != "continuity_extras":
+            continue
+        for entry in _copy_entries(section.get("entries", [])):
+            media_id = str(entry.get("media_id") or "")
+            if media_id:
+                continuity_section_entries[media_id] = entry
+
+    normalized_entries: list[dict] = []
+    for index, component_entry in enumerate(_copy_entries(component_entries)):
+        media_id = str(component_entry.get("media_id") or "")
+        if not media_id or media_id == current_media_id:
+            continue
+        sort_rank = component_entry.get("section_sort_rank", index)
+        try:
+            normalized_rank = int(sort_rank)
+        except (TypeError, ValueError):
+            normalized_rank = index
+        template_entry = continuity_section_entries.get(media_id, {})
+        entry = {**component_entry, **template_entry}
+        entry["media_id"] = media_id
+        entry["section_sort_rank"] = normalized_rank
+        normalized_entries.append(entry)
+
+    ranks: dict[str, int] = {}
+    for index, component_entry in enumerate(_copy_entries(component_entries)):
+        media_id = str(component_entry.get("media_id") or "")
+        if not media_id:
+            continue
+        sort_rank = component_entry.get("section_sort_rank", index)
+        try:
+            ranks[media_id] = int(sort_rank)
+        except (TypeError, ValueError):
+            ranks[media_id] = index
+
+    normalized_entries.sort(
+        key=lambda entry: (entry["section_sort_rank"], entry["media_id"])
+    )
+    for entry in normalized_entries:
+        relation_type = _relation_type_relative_to_current(
+            current_media_id=current_media_id,
+            target_media_id=str(entry.get("media_id") or ""),
+            relations=component_relations,
+            ranks=ranks,
+        )
+        if relation_type is not None:
+            entry["relation_type"] = relation_type
+
+    return normalized_entries
 
 
 def prepare_anime_franchise_context(
@@ -103,7 +220,13 @@ def prepare_anime_franchise_context(
             start=1,
         )
     ]
+    no_series_continuity_entries = _build_no_series_render_continuity_entries(
+        franchise_payload,
+        current_media_id,
+    )
     franchise_sections = []
+    has_continuity_section = False
+    continuity_section_title = "Main Story Extras"
     for section in franchise_payload.get("sections", []):
         if not isinstance(section, dict):
             continue
@@ -111,6 +234,15 @@ def prepare_anime_franchise_context(
         section_title = section.get("title")
         if not section_key or not section_title:
             continue
+        if section_key == "continuity_extras":
+            has_continuity_section = True
+            continuity_section_title = section_title
+        section_entries = _copy_entries(section.get("entries", []))
+        if (
+            section_key == "continuity_extras"
+            and no_series_continuity_entries is not None
+        ):
+            section_entries = no_series_continuity_entries
         franchise_sections.append(
             {
                 "key": section_key,
@@ -120,7 +252,7 @@ def prepare_anime_franchise_context(
                     enrich_franchise_entries_for_footer(
                         [
                             _with_current_entry(entry, current_media_id)
-                            for entry in _copy_entries(section.get("entries", []))
+                            for entry in section_entries
                         ],
                         media_metadata,
                     ),
@@ -128,6 +260,31 @@ def prepare_anime_franchise_context(
                 ),
                 "visible_in_ui": section.get("visible_in_ui", True),
                 "hidden_if_empty": section.get("hidden_if_empty", True),
+            }
+        )
+
+    if (
+        not has_continuity_section
+        and no_series_continuity_entries is not None
+        and no_series_continuity_entries
+    ):
+        franchise_sections.append(
+            {
+                "key": "continuity_extras",
+                "title": continuity_section_title,
+                "entries": helpers.enrich_items_with_user_data(
+                    request,
+                    enrich_franchise_entries_for_footer(
+                        [
+                            _with_current_entry(entry, current_media_id)
+                            for entry in no_series_continuity_entries
+                        ],
+                        media_metadata,
+                    ),
+                    "continuity_extras",
+                ),
+                "visible_in_ui": True,
+                "hidden_if_empty": True,
             }
         )
 

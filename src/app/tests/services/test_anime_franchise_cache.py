@@ -812,6 +812,7 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(canonical_id, "31138")
         for media_id in ["31138", "33372", "37087", "37781", "48897"]:
             self.assertIn(media_id, prepared["aliasable_media_ids"])
+            self.assertIn(media_id, prepared["covered_media_ids"])
             self.assertIn(media_id, aliasable_ids)
         self.assertNotIn("35073", prepared["aliasable_media_ids"])
         self.assertNotIn("35073", aliasable_ids)

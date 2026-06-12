@@ -16,6 +16,12 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 from .candidates import UiCandidate
+from .no_series_continuity import (
+    CONTINUITY_RELATION_TYPES,
+    get_component_ids,
+    get_internal_continuity_relations,
+    order_component_media_ids,
+)
 
 if TYPE_CHECKING:
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
@@ -24,8 +30,6 @@ if TYPE_CHECKING:
 
 class UiCandidateAssembler:
     """Build canonical secondary candidates while keeping Series separate."""
-
-    _CONTINUITY_RELATION_TYPES = {"prequel", "sequel"}
 
     def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:
         series_ids = {node.media_id for node in snapshot.series_line}
@@ -59,7 +63,7 @@ class UiCandidateAssembler:
         mini_relation_keys: set[tuple[str, str, str]] = set()
         mini_sort_ranks: dict[str, int] = {}
         if not snapshot.has_series_line:
-            component_ids = self._get_component_ids(snapshot)
+            component_ids = get_component_ids(snapshot)
             mini_relation_keys, mini_sort_ranks = (
                 self._build_no_series_continuity_candidates(
                     snapshot=snapshot,
@@ -195,23 +199,15 @@ class UiCandidateAssembler:
         """Enrich no-series snapshots with the full prequel/sequel component."""
         root_media_id = snapshot.root_node.media_id
         mini_relation_keys: set[tuple[str, str, str]] = set()
-        internal_relations: list[AnimeRelation] = []
+        internal_relations = get_internal_continuity_relations(snapshot, component_ids)
 
-        for relation in snapshot.all_normalized_relations:
-            if relation.relation_type not in self._CONTINUITY_RELATION_TYPES:
-                continue
-            if (
-                relation.source_media_id not in component_ids
-                or relation.target_media_id not in component_ids
-            ):
-                continue
+        for relation in internal_relations:
             relation_key = (
                 relation.source_media_id,
                 relation.target_media_id,
                 relation.relation_type,
             )
             mini_relation_keys.add(relation_key)
-            internal_relations.append(relation)
             if relation.target_media_id == root_media_id:
                 continue
             self._add_grouped_relation(
@@ -252,7 +248,7 @@ class UiCandidateAssembler:
         """Add only root-direct non-continuity relations for no-series snapshots."""
         root_media_id = snapshot.root_node.media_id
         for relation in snapshot.direct_candidates:
-            if relation.relation_type in self._CONTINUITY_RELATION_TYPES:
+            if relation.relation_type in CONTINUITY_RELATION_TYPES:
                 continue
             if relation.target_media_id == root_media_id:
                 continue
@@ -266,10 +262,6 @@ class UiCandidateAssembler:
                 relation=relation,
                 series_ids=series_ids,
             )
-
-    @staticmethod
-    def _get_component_ids(snapshot: AnimeFranchiseSnapshot) -> set[str]:
-        return {node.media_id for node in snapshot.continuity_component}
 
     @staticmethod
     def _add_grouped_relation(
@@ -298,57 +290,10 @@ class UiCandidateAssembler:
         component_ids: set[str],
         internal_relations: list[AnimeRelation],
     ) -> dict[str, int]:
-        adjacency: dict[str, set[str]] = {media_id: set() for media_id in component_ids}
-        for relation in internal_relations:
-            source_id, target_id = self._continuity_direction(
-                relation.source_media_id,
-                relation.target_media_id,
-                relation.relation_type,
-            )
-            adjacency.setdefault(source_id, set()).add(target_id)
-
-        anchor_id = str(snapshot.canonical_root_media_id or snapshot.root_node.media_id)
-        ordered_ids: list[str] = []
-        visited: set[str] = set()
-        if anchor_id in component_ids:
-            queue = deque([anchor_id])
-            visited.add(anchor_id)
-            while queue:
-                current_id = queue.popleft()
-                ordered_ids.append(current_id)
-                for next_id in sorted(
-                    adjacency.get(current_id, set()),
-                    key=lambda media_id: self._node_sort_tuple(snapshot, media_id),
-                ):
-                    if next_id in visited:
-                        continue
-                    visited.add(next_id)
-                    queue.append(next_id)
-
-        remaining_ids = sorted(
-            component_ids - visited,
-            key=lambda media_id: self._node_sort_tuple(snapshot, media_id),
+        ordered_ids = order_component_media_ids(
+            snapshot, component_ids, internal_relations
         )
-        ordered_ids.extend(remaining_ids)
         return {media_id: index for index, media_id in enumerate(ordered_ids)}
-
-    @staticmethod
-    def _node_sort_tuple(
-        snapshot: AnimeFranchiseSnapshot, media_id: str
-    ) -> tuple[str, str]:
-        node = snapshot.nodes_by_media_id.get(media_id)
-        date_value = (
-            node.start_date.isoformat() if node and node.start_date else "9999-12-31"
-        )
-        return date_value, str(media_id)
-
-    @staticmethod
-    def _continuity_direction(
-        source_id: str, target_id: str, relation_type: str
-    ) -> tuple[str, str]:
-        if relation_type == "prequel":
-            return target_id, source_id
-        return source_id, target_id
 
     @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:

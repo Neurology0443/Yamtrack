@@ -12,7 +12,9 @@ class RulePipeline:
     def __init__(self, packs: list[RulePack]):
         self.packs = packs
 
-    def run(self, *, candidates: list[UiCandidate], context: RuleContext) -> RuleContext:
+    def run(
+        self, *, candidates: list[UiCandidate], context: RuleContext
+    ) -> RuleContext:
         for pack in self.packs:
             for rule in pack.rules:
                 for candidate in candidates:
@@ -30,7 +32,11 @@ class RulePipeline:
                                 "rule": rule.key,
                                 "from": previous_section,
                                 "to": current_section,
-                                "kind": "initial" if previous_section is None else "override",
+                                "kind": (
+                                    "initial"
+                                    if previous_section is None
+                                    else "override"
+                                ),
                             }
                         )
         return context

@@ -12,6 +12,9 @@ from django.utils import timezone
 from app.models import UserMessage, UserMessageLevel
 from app.providers import mal_cache
 from app.services import anime_franchise_cache
+from app.services.anime_franchise_context import (
+    _build_no_series_render_continuity_entries,
+)
 from app.services.anime_franchise_import import FranchiseImportStats
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
@@ -456,6 +459,61 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                     "37781",
                     "48897",
                 ],
+                "continuity_component_entries": [
+                    {
+                        "media_id": media_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "special",
+                        "title": title,
+                        "image": "",
+                        "start_date": None,
+                        "runtime_minutes": None,
+                        "episode_count": None,
+                        "section_sort_rank": rank,
+                    }
+                    for rank, (media_id, title) in enumerate(
+                        [
+                            ("31138", "Ple Ple Pleiades"),
+                            ("33372", "Nazarick Saidai no Kiki"),
+                            ("37087", "Ple Ple Pleiades 2"),
+                            ("37781", "Ple Ple Pleiades 3"),
+                            ("48897", "Ple Ple Pleiades 4"),
+                        ]
+                    )
+                ],
+                "continuity_component_relations": [
+                    {
+                        "source_media_id": "31138",
+                        "target_media_id": "33372",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "33372",
+                        "target_media_id": "31138",
+                        "relation_type": "prequel",
+                    },
+                    {
+                        "source_media_id": "31138",
+                        "target_media_id": "37087",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "37087",
+                        "target_media_id": "31138",
+                        "relation_type": "prequel",
+                    },
+                    {
+                        "source_media_id": "37087",
+                        "target_media_id": "37781",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "37781",
+                        "target_media_id": "48897",
+                        "relation_type": "sequel",
+                    },
+                ],
                 "series": {"key": "series", "title": "Series", "entries": []},
                 "sections": [
                     {
@@ -519,6 +577,61 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                     "37781",
                     "48897",
                 ],
+                "continuity_component_entries": [
+                    {
+                        "media_id": media_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "special",
+                        "title": title,
+                        "image": "",
+                        "start_date": None,
+                        "runtime_minutes": None,
+                        "episode_count": None,
+                        "section_sort_rank": rank,
+                    }
+                    for rank, (media_id, title) in enumerate(
+                        [
+                            ("31138", "Ple Ple Pleiades"),
+                            ("33372", "Nazarick Saidai no Kiki"),
+                            ("37087", "Ple Ple Pleiades 2"),
+                            ("37781", "Ple Ple Pleiades 3"),
+                            ("48897", "Ple Ple Pleiades 4"),
+                        ]
+                    )
+                ],
+                "continuity_component_relations": [
+                    {
+                        "source_media_id": "31138",
+                        "target_media_id": "33372",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "33372",
+                        "target_media_id": "31138",
+                        "relation_type": "prequel",
+                    },
+                    {
+                        "source_media_id": "31138",
+                        "target_media_id": "37087",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "37087",
+                        "target_media_id": "31138",
+                        "relation_type": "prequel",
+                    },
+                    {
+                        "source_media_id": "37087",
+                        "target_media_id": "37781",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "source_media_id": "37781",
+                        "target_media_id": "48897",
+                        "relation_type": "sequel",
+                    },
+                ],
                 "series": {"key": "series", "title": "Series", "entries": []},
                 "sections": [
                     {
@@ -574,6 +687,10 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         payload, _meta = anime_franchise_cache.load_payload("31138")
         self.assertIsNotNone(payload)
         self.assertEqual(payload["root_media_id"], "31138")
+        self.assertIn(
+            "31138",
+            [entry["media_id"] for entry in payload["continuity_component_entries"]],
+        )
         self.assertIn("37087", payload["aliasable_media_ids"])
         self.assertNotIn("35073", payload["aliasable_media_ids"])
         saved_media_ids = anime_franchise_cache.extract_payload_media_ids(payload)
@@ -582,6 +699,16 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         alias = cache.get(anime_franchise_cache.get_alias_key("37087"))
         self.assertIsNotNone(alias)
         self.assertEqual(alias["canonical_media_id"], "31138")
+        lookup = anime_franchise_cache.load_payload_for_media("33372")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "31138")
+        rendered_entries = _build_no_series_render_continuity_entries(
+            lookup.payload,
+            "33372",
+        )
+        rendered_media_ids = [entry["media_id"] for entry in rendered_entries]
+        self.assertIn("31138", rendered_media_ids)
+        self.assertNotIn("33372", rendered_media_ids)
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")

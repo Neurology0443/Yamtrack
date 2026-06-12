@@ -286,6 +286,9 @@ def prepare_payload_for_aliasing(
         for media_id in payload.get("continuity_component_media_ids", [])
         if media_id not in (None, "")
     }
+    if payload.get("has_series_line") is False:
+        aliasable_media_ids.update(continuity_component_media_ids)
+        covered_media_ids.update(continuity_component_media_ids)
 
     if build_seed_media_id == canonical_media_id or (
         canonical_media_id != build_seed_media_id

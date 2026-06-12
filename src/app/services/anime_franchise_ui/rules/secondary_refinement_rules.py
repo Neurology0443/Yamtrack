@@ -5,7 +5,6 @@ from __future__ import annotations
 from app.services.anime_franchise_ui.actions import place_in, set_candidate_metadata
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
 
-
 LONG_TV_SPIN_OFF_MIN_RUNTIME_MINUTES = 30
 
 

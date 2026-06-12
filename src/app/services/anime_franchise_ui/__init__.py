@@ -13,6 +13,10 @@ from .adapter import AnimeFranchiseUiPayload, ViewModelAdapter
 from .assembler import UiCandidateAssembler
 from .engine import RulePipeline
 from .layout import LayoutCompiler
+from .no_series_continuity import (
+    build_component_entries,
+    build_component_relations,
+)
 from .presets import DefaultUiPreset
 from .rule_types import RuleContext, RulePack
 from .series import SeriesBuilder
@@ -41,6 +45,13 @@ class AnimeFranchiseUiPipeline:
         context = RuleContext(snapshot=snapshot)
         self.rule_pipeline.run(candidates=candidates, context=context)
         sections = self.layout_compiler.compile(candidates=candidates, context=context)
+        if snapshot.has_series_line:
+            continuity_component_entries = []
+            continuity_component_relations = []
+        else:
+            continuity_component_entries = build_component_entries(snapshot)
+            continuity_component_relations = build_component_relations(snapshot)
+
         return self.adapter.adapt(
             root_media_id=snapshot.root_node.media_id,
             display_title=snapshot.root_node.title,
@@ -51,6 +62,8 @@ class AnimeFranchiseUiPipeline:
             continuity_component_media_ids=[
                 node.media_id for node in snapshot.continuity_component
             ],
+            continuity_component_entries=continuity_component_entries,
+            continuity_component_relations=continuity_component_relations,
         )
 
 

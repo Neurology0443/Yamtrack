@@ -314,6 +314,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
             ["33569", "42364", "60012", "63830"],
         )
+        self.assertEqual(
+            [entry["media_id"] for entry in payload.continuity_component_entries],
+            ["33142", "33569", "42364", "60012", "63830"],
+        )
+        self.assertTrue(payload.continuity_component_relations)
 
     def _overlord_mini_snapshot(self, root_media_id="37087"):
         relation_specs = [
@@ -463,6 +468,17 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             entry for entry in all_entries if entry["media_id"] == "35073"
         )
         self.assertEqual(parent_story_entry["relation_type"], "parent_story")
+        component_ids = {
+            entry["media_id"] for entry in payload.continuity_component_entries
+        }
+        self.assertFalse({"35073", "37675", "48895"} & component_ids)
+        self.assertTrue(
+            {
+                relation["relation_type"]
+                for relation in payload.continuity_component_relations
+            }
+            <= {"prequel", "sequel"}
+        )
 
     def test_no_series_pipeline_does_not_add_deep_informative_relations(self):
         payload = AnimeFranchiseUiPipeline().run(self._overlord_mini_snapshot("37087"))

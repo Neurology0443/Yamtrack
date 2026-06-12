@@ -26,7 +26,8 @@ def _is_direct_or_fallback_anchor(candidate, context) -> bool:
         return True
     return (
         not context.snapshot.has_series_line
-        and candidate.linked_series_line_media_id == context.snapshot.fallback_anchor_media_id
+        and candidate.linked_series_line_media_id
+        == context.snapshot.fallback_anchor_media_id
     )
 
 

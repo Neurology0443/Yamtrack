@@ -22,6 +22,8 @@ class AnimeFranchiseUiPayload:
     canonical_root_media_id: str
     has_series_line: bool
     continuity_component_media_ids: list[str]
+    continuity_component_entries: list[dict]
+    continuity_component_relations: list[dict]
 
 
 class ViewModelAdapter:
@@ -37,6 +39,8 @@ class ViewModelAdapter:
         canonical_root_media_id: str = "",
         has_series_line: bool = False,
         continuity_component_media_ids: list[str] | None = None,
+        continuity_component_entries: list[dict] | None = None,
+        continuity_component_relations: list[dict] | None = None,
     ) -> AnimeFranchiseUiPayload:
         return AnimeFranchiseUiPayload(
             root_media_id=root_media_id,
@@ -68,6 +72,16 @@ class ViewModelAdapter:
             has_series_line=bool(has_series_line),
             continuity_component_media_ids=[
                 str(media_id) for media_id in (continuity_component_media_ids or [])
+            ],
+            continuity_component_entries=[
+                dict(entry)
+                for entry in (continuity_component_entries or [])
+                if isinstance(entry, dict)
+            ],
+            continuity_component_relations=[
+                dict(relation)
+                for relation in (continuity_component_relations or [])
+                if isinstance(relation, dict)
             ],
             sections=[
                 {

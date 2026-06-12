@@ -8,8 +8,8 @@ from app.services.anime_franchise_ui.rules import (
     BaseFactsRules,
     BasePlacementRules,
     FormatRules,
-    SecondaryRefinementRules,
     RelationRules,
+    SecondaryRefinementRules,
     SectionRules,
 )
 
