@@ -579,6 +579,22 @@ class AnimeFranchiseCacheTests(TestCase):
             "223",
         )
 
+    def test_determine_canonical_media_id_from_no_series_metadata(self):
+        payload = {
+            "root_media_id": "33569",
+            "display_title": "Re:Petit",
+            "canonical_root_media_id": "33142",
+            "has_series_line": False,
+            "continuity_component_media_ids": ["33142", "33569", "42364"],
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [],
+        }
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "33142",
+        )
+
     def test_prepare_payload_for_aliasing_adds_internal_metadata(self):
         prepared, canonical_id, aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
@@ -652,6 +668,153 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIn("225", prepared["covered_media_ids"])
         self.assertIn("225", prepared["aliasable_media_ids"])
         self.assertIn("225", aliasable_ids)
+
+    def test_prepare_payload_for_aliasing_includes_no_series_seed_from_component(self):
+        payload = {
+            "root_media_id": "33142",
+            "display_title": "Break Time",
+            "canonical_root_media_id": "33142",
+            "has_series_line": False,
+            "continuity_component_media_ids": [
+                "33142",
+                "33569",
+                "42364",
+                "60012",
+                "63830",
+            ],
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": "33569",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Re:Petit",
+                        },
+                        {
+                            "media_id": "42364",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Break Time 2",
+                        },
+                        {
+                            "media_id": "60012",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Break Time 3",
+                        },
+                        {
+                            "media_id": "63830",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Break Time 4",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="33569",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        self.assertEqual(canonical_id, "33142")
+        self.assertEqual(prepared["root_media_id"], "33142")
+        self.assertIn("33569", prepared["aliasable_media_ids"])
+        self.assertIn("33569", aliasable_ids)
+
+    def test_prepare_payload_for_aliasing_keeps_no_series_related_non_aliasable(
+        self,
+    ):
+        payload = {
+            "root_media_id": "31138",
+            "display_title": "Overlord: Ple Ple Pleiades",
+            "canonical_root_media_id": "31138",
+            "has_series_line": False,
+            "continuity_component_media_ids": [
+                "31138",
+                "33372",
+                "37087",
+                "37781",
+                "48897",
+            ],
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": "31138",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Ple Ple Pleiades",
+                        },
+                        {
+                            "media_id": "33372",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Nazarick Saidai no Kiki",
+                        },
+                        {
+                            "media_id": "37087",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Ple Ple Pleiades 2",
+                        },
+                        {
+                            "media_id": "37781",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Ple Ple Pleiades 3",
+                        },
+                        {
+                            "media_id": "48897",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Ple Ple Pleiades 4",
+                        },
+                    ],
+                },
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        {
+                            "media_id": "35073",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Overlord II",
+                            "relation_type": "parent_story",
+                        },
+                    ],
+                },
+            ],
+        }
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="37087",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        self.assertEqual(canonical_id, "31138")
+        for media_id in ["31138", "33372", "37087", "37781", "48897"]:
+            self.assertIn(media_id, prepared["aliasable_media_ids"])
+            self.assertIn(media_id, aliasable_ids)
+        self.assertNotIn("35073", prepared["aliasable_media_ids"])
+        self.assertNotIn("35073", aliasable_ids)
 
     def test_prepare_payload_for_aliasing_does_not_alias_uncovered_seed(self):
         payload = self._dragon_ball_payload()

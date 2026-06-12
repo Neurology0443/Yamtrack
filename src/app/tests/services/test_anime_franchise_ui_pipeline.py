@@ -24,12 +24,12 @@ from app.services.anime_franchise_ui.predicates import (
     episode_count_lt,
     episode_count_lte,
     relation_type_is,
+    run_once,
     runtime_minutes_eq,
     runtime_minutes_gt,
     runtime_minutes_gte,
     runtime_minutes_lt,
     runtime_minutes_lte,
-    run_once,
 )
 from app.services.anime_franchise_ui.rule_types import (
     CompiledSection,
@@ -43,9 +43,15 @@ from app.services.anime_franchise_ui.series import SeriesBuilder
 
 class AnimeFranchiseUiPipelineTests(TestCase):
     def _snapshot(self):
-        series_1 = AnimeNode("100", "Season 1", "mal", "tv", "img-100", date(2020, 1, 1), [])
-        series_2 = AnimeNode("200", "Season 2", "mal", "tv", "img-200", date(2021, 1, 1), [])
-        movie = AnimeNode("300", "Movie", "mal", "movie", "img-300", date(2022, 1, 1), [])
+        series_1 = AnimeNode(
+            "100", "Season 1", "mal", "tv", "img-100", date(2020, 1, 1), []
+        )
+        series_2 = AnimeNode(
+            "200", "Season 2", "mal", "tv", "img-200", date(2021, 1, 1), []
+        )
+        movie = AnimeNode(
+            "300", "Movie", "mal", "movie", "img-300", date(2022, 1, 1), []
+        )
         ova = AnimeNode("400", "OVA", "mal", "ova", "img-400", date(2021, 6, 1), [])
 
         direct_candidates = [
@@ -88,13 +94,17 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
 
-        self.assertEqual({candidate.media_id for candidate in candidates}, {"300", "400"})
+        self.assertEqual(
+            {candidate.media_id for candidate in candidates}, {"300", "400"}
+        )
         self.assertEqual(len(candidates), 2)
 
     def test_candidate_assembler_preserves_multi_origin_signals_for_same_media(self):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
-        movie_candidate = next(candidate for candidate in candidates if candidate.media_id == "300")
+        movie_candidate = next(
+            candidate for candidate in candidates if candidate.media_id == "300"
+        )
 
         self.assertEqual(movie_candidate.relation_type, "side_story")
         self.assertEqual(movie_candidate.relation_types, ["side_story", "spin_off"])
@@ -154,14 +164,19 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(payload.series["title"], "Series")
         section_keys = [section["key"] for section in payload.sections]
         self.assertIn("specials", section_keys)
-        specials = next(section for section in payload.sections if section["key"] == "specials")
+        specials = next(
+            section for section in payload.sections if section["key"] == "specials"
+        )
         self.assertEqual(specials["title"], "Specials")
         self.assertIn("media_type", payload.series["entries"][0])
         self.assertIn("anime_media_type", payload.series["entries"][0])
 
     def test_pipeline_prefers_relation_types_for_ambiguous_candidates(self):
         snapshot = self._snapshot()
-        snapshot.direct_candidates = [AnimeRelation("200", "300", "other"), AnimeRelation("200", "300", "side_story")]
+        snapshot.direct_candidates = [
+            AnimeRelation("200", "300", "other"),
+            AnimeRelation("200", "300", "side_story"),
+        ]
 
         payload = AnimeFranchiseUiPipeline().run(snapshot)
         sections = {section["key"]: section for section in payload.sections}
@@ -171,6 +186,296 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ["300"],
         )
         self.assertNotIn("ignored", sections)
+
+    def _mini_snapshot(self, root_media_id="33569"):
+        relation_specs = [
+            ("33142", "33569", "sequel"),
+            ("33569", "33142", "prequel"),
+            ("33569", "42364", "sequel"),
+            ("42364", "33569", "prequel"),
+            ("42364", "60012", "sequel"),
+            ("60012", "42364", "prequel"),
+            ("60012", "63830", "sequel"),
+            ("63830", "60012", "prequel"),
+            ("33569", "31240", "other"),
+            ("31240", "39587", "sequel"),
+        ]
+        relations = [AnimeRelation(*spec) for spec in relation_specs]
+        relation_map = {}
+        for relation in relations:
+            relation_map.setdefault(relation.source_media_id, []).append(relation)
+
+        nodes = {
+            "33142": AnimeNode(
+                "33142",
+                "Break Time",
+                "mal",
+                "special",
+                "img-33142",
+                date(2016, 4, 8),
+                relation_map.get("33142", []),
+            ),
+            "33569": AnimeNode(
+                "33569",
+                "Re:Petit",
+                "mal",
+                "special",
+                "img-33569",
+                date(2016, 6, 24),
+                relation_map.get("33569", []),
+            ),
+            "42364": AnimeNode(
+                "42364",
+                "Break Time 2nd",
+                "mal",
+                "special",
+                "img-42364",
+                date(2020, 7, 10),
+                relation_map.get("42364", []),
+            ),
+            "60012": AnimeNode(
+                "60012",
+                "Break Time 3rd",
+                "mal",
+                "special",
+                "img-60012",
+                date(2024, 10, 4),
+                relation_map.get("60012", []),
+            ),
+            "63830": AnimeNode(
+                "63830",
+                "Break Time 4th",
+                "mal",
+                "special",
+                "img-63830",
+                date(2025, 2, 7),
+                relation_map.get("63830", []),
+            ),
+            "31240": AnimeNode(
+                "31240",
+                "Main Franchise Other",
+                "mal",
+                "tv",
+                "img-31240",
+                date(2016, 4, 4),
+                relation_map.get("31240", []),
+            ),
+            "39587": AnimeNode(
+                "39587",
+                "Main Franchise Sequel",
+                "mal",
+                "tv",
+                "img-39587",
+                date(2020, 7, 8),
+                relation_map.get("39587", []),
+            ),
+        }
+        component_ids = ["33569", "33142", "42364", "60012", "63830"]
+        return SimpleNamespace(
+            root_node=nodes[root_media_id],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=relations,
+            continuity_component=[nodes[media_id] for media_id in component_ids],
+            series_line=[],
+            direct_anchors=[nodes[root_media_id]],
+            direct_candidates=relation_map.get(root_media_id, []),
+            promoted_continuity_candidates=[],
+            has_series_line=False,
+            fallback_anchor_media_id=root_media_id,
+            canonical_root_media_id="33142",
+        )
+
+    def test_no_series_pipeline_shows_full_internal_continuity_from_noncanonical_root(
+        self,
+    ):
+        payload = AnimeFranchiseUiPipeline().run(self._mini_snapshot("33569"))
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
+            ["33142", "42364", "60012", "63830"],
+        )
+        self.assertNotIn(
+            "31240",
+            {entry["media_id"] for entry in sections["continuity_extras"]["entries"]},
+        )
+        self.assertNotIn(
+            "39587",
+            {entry["media_id"] for entry in sections["continuity_extras"]["entries"]},
+        )
+
+    def test_no_series_pipeline_shows_full_internal_continuity_from_canonical_root(
+        self,
+    ):
+        payload = AnimeFranchiseUiPipeline().run(self._mini_snapshot("33142"))
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
+            ["33569", "42364", "60012", "63830"],
+        )
+
+    def _overlord_mini_snapshot(self, root_media_id="37087"):
+        relation_specs = [
+            ("37087", "31138", "prequel"),
+            ("37087", "35073", "parent_story"),
+            ("37087", "37781", "sequel"),
+            ("31138", "33372", "sequel"),
+            ("31138", "37087", "sequel"),
+            ("31138", "29803", "parent_story"),
+            ("31138", "36497", "other"),
+            ("31138", "38693", "other"),
+            ("31138", "51168", "other"),
+            ("31138", "57034", "other"),
+            ("37781", "37087", "prequel"),
+            ("37781", "37675", "parent_story"),
+            ("37781", "48897", "sequel"),
+            ("33372", "31138", "prequel"),
+            ("33372", "29803", "parent_story"),
+            ("48897", "37781", "prequel"),
+            ("48897", "48895", "other"),
+        ]
+        relations = [AnimeRelation(*spec) for spec in relation_specs]
+        relation_map = {}
+        for relation in relations:
+            relation_map.setdefault(relation.source_media_id, []).append(relation)
+
+        nodes = {
+            "31138": AnimeNode(
+                "31138",
+                "Overlord: Ple Ple Pleiades",
+                "mal",
+                "special",
+                "img-31138",
+                date(2015, 9, 25),
+                relation_map.get("31138", []),
+            ),
+            "33372": AnimeNode(
+                "33372",
+                "Overlord: Ple Ple Pleiades - Nazarick Saidai no Kiki",
+                "mal",
+                "special",
+                "img-33372",
+                date(2016, 9, 30),
+                relation_map.get("33372", []),
+            ),
+            "37087": AnimeNode(
+                "37087",
+                "Overlord: Ple Ple Pleiades 2",
+                "mal",
+                "special",
+                "img-37087",
+                date(2018, 1, 9),
+                relation_map.get("37087", []),
+            ),
+            "37781": AnimeNode(
+                "37781",
+                "Overlord: Ple Ple Pleiades 3",
+                "mal",
+                "special",
+                "img-37781",
+                date(2018, 7, 10),
+                relation_map.get("37781", []),
+            ),
+            "48897": AnimeNode(
+                "48897",
+                "Overlord: Ple Ple Pleiades 4",
+                "mal",
+                "special",
+                "img-48897",
+                date(2022, 7, 5),
+                relation_map.get("48897", []),
+            ),
+            "35073": AnimeNode(
+                "35073",
+                "Overlord II",
+                "mal",
+                "tv",
+                "img-35073",
+                date(2018, 1, 9),
+                relation_map.get("35073", []),
+            ),
+            "29803": AnimeNode(
+                "29803",
+                "Overlord",
+                "mal",
+                "tv",
+                "img-29803",
+                date(2015, 7, 7),
+                relation_map.get("29803", []),
+            ),
+            "37675": AnimeNode(
+                "37675",
+                "Overlord III",
+                "mal",
+                "tv",
+                "img-37675",
+                date(2018, 7, 10),
+                relation_map.get("37675", []),
+            ),
+            "48895": AnimeNode(
+                "48895",
+                "Overlord IV",
+                "mal",
+                "tv",
+                "img-48895",
+                date(2022, 7, 5),
+                relation_map.get("48895", []),
+            ),
+        }
+        component_ids = ["31138", "33372", "37087", "37781", "48897"]
+        return SimpleNamespace(
+            root_node=nodes[root_media_id],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=relations,
+            continuity_component=[nodes[media_id] for media_id in component_ids],
+            series_line=[],
+            direct_anchors=[nodes[root_media_id]],
+            direct_candidates=relation_map.get(root_media_id, []),
+            promoted_continuity_candidates=[],
+            has_series_line=False,
+            fallback_anchor_media_id=root_media_id,
+            canonical_root_media_id="31138",
+        )
+
+    def test_no_series_pipeline_preserves_root_direct_informative_relation(self):
+        payload = AnimeFranchiseUiPipeline().run(self._overlord_mini_snapshot("37087"))
+        sections = {section["key"]: section for section in payload.sections}
+        continuity_ids = [
+            entry["media_id"] for entry in sections["continuity_extras"]["entries"]
+        ]
+
+        self.assertEqual(continuity_ids, ["31138", "33372", "37781", "48897"])
+        self.assertNotIn("35073", continuity_ids)
+        self.assertNotIn("29803", continuity_ids)
+        self.assertNotIn("37675", continuity_ids)
+        self.assertNotIn("48895", continuity_ids)
+
+        self.assertIn("related_series", sections)
+        related_ids = [
+            entry["media_id"] for entry in sections["related_series"]["entries"]
+        ]
+        self.assertIn("35073", related_ids)
+        all_entries = [
+            entry for section in payload.sections for entry in section["entries"]
+        ]
+        parent_story_entry = next(
+            entry for entry in all_entries if entry["media_id"] == "35073"
+        )
+        self.assertEqual(parent_story_entry["relation_type"], "parent_story")
+
+    def test_no_series_pipeline_does_not_add_deep_informative_relations(self):
+        payload = AnimeFranchiseUiPipeline().run(self._overlord_mini_snapshot("37087"))
+        all_ids = {
+            entry["media_id"]
+            for section in payload.sections
+            for entry in section["entries"]
+        }
+
+        self.assertIn("35073", all_ids)
+        self.assertNotIn("37675", all_ids)
+        self.assertNotIn("29803", all_ids)
+        self.assertNotIn("48895", all_ids)
 
     def test_adapter_output_keeps_footer_and_enrichment_fields(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
@@ -185,7 +490,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
 
     def test_ignored_section_is_not_visible_in_ui(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
-        ignored = next(section for section in payload.sections if section["key"] == "ignored")
+        ignored = next(
+            section for section in payload.sections if section["key"] == "ignored"
+        )
         self.assertFalse(ignored["visible_in_ui"])
 
     def test_predicates_runtime_episode_and_relation_comparators(self):
@@ -273,7 +580,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
 
         sections = LayoutCompiler().compile(candidates=candidates, context=context)
 
-        self.assertEqual([section.key for section in sections], ["early_section", "late_section"])
+        self.assertEqual(
+            [section.key for section in sections], ["early_section", "late_section"]
+        )
         self.assertEqual([entry.media_id for entry in sections[0].entries], ["302"])
         self.assertEqual([entry.media_id for entry in sections[1].entries], ["301"])
         self.assertNotIn("empty_hidden", [section.key for section in sections])
@@ -379,7 +688,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         )(candidate, context)
         set_section_title(key="refine_me", title="Refined Title")(candidate, context)
         set_section_order(key="refine_me", order=50)(candidate, context)
-        set_section_hidden_if_empty(key="refine_me", hidden_if_empty=False)(candidate, context)
+        set_section_hidden_if_empty(key="refine_me", hidden_if_empty=False)(
+            candidate, context
+        )
 
         definition = context.sections["refine_me"]
         self.assertEqual(definition.title, "Refined Title")
@@ -512,7 +823,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
                         Rule(
                             key="initial_rule",
                             when=lambda *_args: True,
-                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "related_series"),),
+                            actions=(
+                                lambda current_candidate, _ctx: setattr(
+                                    current_candidate, "section_key", "related_series"
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -522,7 +837,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
                         Rule(
                             key="override_rule",
                             when=lambda *_args: True,
-                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "specials"),),
+                            actions=(
+                                lambda current_candidate, _ctx: setattr(
+                                    current_candidate, "section_key", "specials"
+                                ),
+                            ),
                         ),
                     ),
                 ),

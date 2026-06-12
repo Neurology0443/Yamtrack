@@ -46,6 +46,11 @@ class AnimeFranchiseUiPipeline:
             display_title=snapshot.root_node.title,
             series_block=series_block,
             sections=sections,
+            canonical_root_media_id=snapshot.canonical_root_media_id,
+            has_series_line=snapshot.has_series_line,
+            continuity_component_media_ids=[
+                node.media_id for node in snapshot.continuity_component
+            ],
         )
 
 
