@@ -215,6 +215,15 @@ def build_mal_anime_franchise_payload(media_id):
                 canonical_payload,
                 truncated=False,
             )
+        context_ref_count = 0
+        if settings.ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED:
+            context_ref_count = anime_franchise_cache.replace_context_refs(
+                canonical_media_id,
+                canonical_payload,
+                truncated=truncated,
+            )
+        else:
+            anime_franchise_cache.delete_context_refs_for_canonical(canonical_media_id)
         if truncated:
             logger.info(
                 "MAL anime franchise build truncated for media_id=%s max_nodes=%s",
@@ -223,13 +232,14 @@ def build_mal_anime_franchise_payload(media_id):
             )
         logger.info(
             "MAL anime franchise build completed for media_id=%s canonical_media_id=%s "
-            "nodes=%s duration=%s truncated=%s aliases=%s",
+            "nodes=%s duration=%s truncated=%s aliases=%s contexts=%s",
             media_id,
             canonical_media_id,
             node_count,
             round(duration, 3),
             truncated,
             alias_count,
+            context_ref_count,
         )
         return {  # noqa: TRY300 - task returns structured success payloads
             "media_id": media_id,
@@ -240,6 +250,7 @@ def build_mal_anime_franchise_payload(media_id):
             "truncated": truncated,
             "truncation_reason": truncation_reason,
             "alias_count": alias_count,
+            "context_ref_count": context_ref_count,
         }
     except Exception as error:  # noqa: BLE001 - background task must isolate failures
         error_message = str(error) or error.__class__.__name__

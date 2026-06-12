@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _REQUIRED_ENTRY_KEYS = {"media_id", "source", "media_type", "title"}
 _ALIASABLE_SECTION_KEYS = {"continuity_extras"}
+_CONTEXT_LOOKUP_SECTION_KEYS = {"specials"}
 
 _FORBIDDEN_ENTRY_KEYS = {
     "media",
@@ -50,6 +51,16 @@ def get_alias_index_key(canonical_media_id) -> str:
     return f"{get_payload_key(canonical_media_id)}:aliases"
 
 
+def get_context_key(media_id) -> str:
+    """Return the weak context key for a MAL anime franchise payload."""
+    return f"mal_anime_franchise_context_{media_id}"
+
+
+def get_context_index_key(canonical_media_id) -> str:
+    """Return the index key listing context refs for a canonical payload."""
+    return f"{get_payload_key(canonical_media_id)}:contexts"
+
+
 @dataclass(frozen=True)
 class FranchisePayloadLookup:
     """Resolved complete franchise payload lookup result."""
@@ -59,6 +70,8 @@ class FranchisePayloadLookup:
     payload: dict | None
     meta: dict
     alias_hit: bool = False
+    context_hit: bool = False
+    resolution: str = "miss"
 
 
 def get_queue_lock_key(media_id) -> str:
@@ -136,6 +149,35 @@ def extract_aliasable_media_ids(payload: dict) -> set[str]:
             media_ids.update(_extract_entry_media_ids(section.get("entries", [])))
 
     return media_ids
+
+
+def _extract_context_media_id_section_keys(payload: dict) -> dict[str, str]:
+    """Return context-resolvable media IDs mapped to their payload section keys."""
+    if not isinstance(payload, dict):
+        return {}
+
+    section_keys_by_media_id = {}
+    sections = payload.get("sections")
+    if not isinstance(sections, list):
+        return section_keys_by_media_id
+
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        section_key = section.get("key")
+        if section_key not in _CONTEXT_LOOKUP_SECTION_KEYS:
+            continue
+        if section.get("visible_in_ui", True) is False:
+            continue
+        for media_id in _extract_entry_media_ids(section.get("entries", [])):
+            section_keys_by_media_id[str(media_id)] = str(section_key)
+
+    return section_keys_by_media_id
+
+
+def extract_context_media_ids(payload: dict) -> set[str]:
+    """Return media IDs allowed to weakly resolve to a canonical payload."""
+    return set(_extract_context_media_id_section_keys(payload))
 
 
 def extract_payload_media_ids(payload: dict) -> set[str]:
@@ -274,6 +316,44 @@ def _normalize_alias_record(alias) -> dict | None:
         "canonical_media_id": str(canonical_media_id),
         "aliased_media_id": str(aliased_media_id),
         "created_at": alias.get("created_at") or "",
+    }
+
+
+def _build_context_record(
+    *,
+    canonical_media_id: str,
+    context_media_id: str,
+    section_key: str,
+) -> dict:
+    return {
+        "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "canonical_media_id": str(canonical_media_id),
+        "context_media_id": str(context_media_id),
+        "section_key": str(section_key),
+        "created_at": timezone.now().isoformat(),
+    }
+
+
+def _normalize_context_record(record) -> dict | None:
+    if not isinstance(record, dict):
+        return None
+    if record.get("schema_version") != settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION:
+        return None
+
+    canonical_media_id = record.get("canonical_media_id")
+    context_media_id = record.get("context_media_id")
+    section_key = record.get("section_key")
+    if canonical_media_id in (None, "") or context_media_id in (None, ""):
+        return None
+    if section_key not in _CONTEXT_LOOKUP_SECTION_KEYS:
+        return None
+
+    return {
+        "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "canonical_media_id": str(canonical_media_id),
+        "context_media_id": str(context_media_id),
+        "section_key": str(section_key),
+        "created_at": record.get("created_at") or "",
     }
 
 
@@ -448,8 +528,7 @@ def is_valid_payload(payload) -> bool:
         return False
     sections = payload.get("sections")
     return (
-        payload.get("schema_version")
-        == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+        payload.get("schema_version") == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
         and _is_non_empty_string(payload.get("root_media_id"))
         and _is_non_empty_string(payload.get("display_title"))
         and _is_valid_series(payload.get("series"))
@@ -610,6 +689,104 @@ def replace_aliases(
     return len(new_alias_ids)
 
 
+def _delete_context_if_owned_by(media_id, canonical_media_id) -> bool:
+    """Delete context only if it currently points to canonical_media_id."""
+    media_id = str(media_id)
+    canonical_media_id = str(canonical_media_id)
+
+    context = _normalize_context_record(cache.get(get_context_key(media_id)))
+    if context is None:
+        cache.delete(get_context_key(media_id))
+        return True
+
+    if context["canonical_media_id"] != canonical_media_id:
+        return False
+
+    cache.delete(get_context_key(media_id))
+    return True
+
+
+def delete_context_refs_for_canonical(canonical_media_id) -> None:
+    """Delete all weak contexts currently indexed for a canonical payload."""
+    canonical_media_id = str(canonical_media_id)
+    context_ids = cache.get(get_context_index_key(canonical_media_id))
+    if isinstance(context_ids, list):
+        for media_id in context_ids:
+            _delete_context_if_owned_by(media_id, canonical_media_id)
+    cache.delete(get_context_index_key(canonical_media_id))
+
+
+def _has_direct_payload_key(media_id) -> bool:
+    """Return whether media_id currently has any direct payload cache key."""
+    return cache.get(get_payload_key(media_id)) is not None
+
+
+def replace_context_refs(
+    canonical_media_id,
+    payload: dict,
+    *,
+    truncated: bool = False,
+) -> int:
+    """Replace weak context records for a canonical franchise payload."""
+    canonical_media_id = str(canonical_media_id)
+
+    if truncated:
+        delete_context_refs_for_canonical(canonical_media_id)
+        return 0
+
+    payload = dict(payload) if isinstance(payload, dict) else payload
+    if isinstance(payload, dict):
+        payload.setdefault(
+            "schema_version",
+            settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        )
+    if not is_valid_payload(payload):
+        return 0
+
+    aliasable_media_ids = payload.get("aliasable_media_ids")
+    if isinstance(aliasable_media_ids, list):
+        aliasable_ids = {str(media_id) for media_id in aliasable_media_ids}
+    else:
+        aliasable_ids = extract_aliasable_media_ids(payload)
+
+    context_section_keys = _extract_context_media_id_section_keys(payload)
+    new_context_ids = {
+        media_id
+        for media_id in context_section_keys
+        if media_id != canonical_media_id
+        and media_id not in aliasable_ids
+        and not _has_direct_payload_key(media_id)
+    }
+
+    ttl = get_ttl_seconds()
+    old_context_ids = cache.get(get_context_index_key(canonical_media_id))
+    if not isinstance(old_context_ids, list):
+        old_context_ids = []
+
+    for old_media_id in old_context_ids:
+        if str(old_media_id) not in new_context_ids:
+            _delete_context_if_owned_by(old_media_id, canonical_media_id)
+
+    for context_media_id in sorted(new_context_ids):
+        cache.set(
+            get_context_key(context_media_id),
+            _build_context_record(
+                canonical_media_id=canonical_media_id,
+                context_media_id=context_media_id,
+                section_key=context_section_keys[context_media_id],
+            ),
+            timeout=ttl,
+        )
+
+    cache.set(
+        get_context_index_key(canonical_media_id),
+        sorted(new_context_ids),
+        timeout=ttl,
+    )
+
+    return len(new_context_ids)
+
+
 def _load_alias_for_media(media_id) -> dict | None:
     media_id = str(media_id)
     alias = _normalize_alias_record(cache.get(get_alias_key(media_id)))
@@ -628,11 +805,59 @@ def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup
         payload=None,
         meta=meta,
         alias_hit=False,
+        context_hit=False,
+        resolution="miss",
     )
 
 
-def load_payload_for_media(media_id) -> FranchisePayloadLookup:
-    """Load a complete payload for media_id, resolving canonical aliases safely."""
+def load_context_payload_for_media(
+    media_id,
+    *,
+    fallback_meta: dict | None = None,
+) -> FranchisePayloadLookup:
+    """Load a canonical payload through a weak context record."""
+    requested_media_id = str(media_id)
+    fallback_meta = normalize_meta(fallback_meta)
+
+    context = _normalize_context_record(cache.get(get_context_key(requested_media_id)))
+    if context is None:
+        cache.delete(get_context_key(requested_media_id))
+        return _empty_lookup(requested_media_id, fallback_meta)
+    if context["context_media_id"] != requested_media_id:
+        cache.delete(get_context_key(requested_media_id))
+        return _empty_lookup(requested_media_id, fallback_meta)
+
+    canonical_media_id = context["canonical_media_id"]
+    canonical_payload, canonical_meta = load_payload(canonical_media_id)
+    if canonical_payload is None:
+        cache.delete(get_context_key(requested_media_id))
+        return _empty_lookup(requested_media_id, fallback_meta)
+
+    if requested_media_id not in extract_context_media_ids(canonical_payload):
+        cache.delete(get_context_key(requested_media_id))
+        return _empty_lookup(requested_media_id, fallback_meta)
+
+    logger.info(
+        "MAL anime franchise context hit for media_id=%s canonical_media_id=%s",
+        requested_media_id,
+        canonical_media_id,
+    )
+
+    return FranchisePayloadLookup(
+        requested_media_id=requested_media_id,
+        canonical_media_id=canonical_media_id,
+        payload=canonical_payload,
+        meta=canonical_meta,
+        alias_hit=False,
+        context_hit=True,
+        resolution="context",
+    )
+
+
+def load_payload_for_media(
+    media_id, *, allow_context: bool = False
+) -> FranchisePayloadLookup:
+    """Load a complete payload for media_id, resolving aliases and contexts safely."""
     requested_media_id = str(media_id)
 
     direct_payload, direct_meta = load_payload(requested_media_id)
@@ -643,43 +868,53 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
             payload=direct_payload,
             meta=direct_meta,
             alias_hit=False,
+            context_hit=False,
+            resolution="direct",
         )
 
-    if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
-        return _empty_lookup(requested_media_id, direct_meta)
-
-    alias = _load_alias_for_media(requested_media_id)
-    if alias is None:
-        return _empty_lookup(requested_media_id, direct_meta)
-
-    canonical_media_id = alias["canonical_media_id"]
-    canonical_payload = None
-    canonical_meta = direct_meta
-    if canonical_media_id != requested_media_id:
-        canonical_payload, canonical_meta = load_payload(canonical_media_id)
-        if canonical_payload is not None and not payload_covers_media_id(
-            canonical_payload,
-            requested_media_id,
-        ):
+    if settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
+        alias = _load_alias_for_media(requested_media_id)
+        if alias is not None:
+            canonical_media_id = alias["canonical_media_id"]
             canonical_payload = None
+            canonical_meta = direct_meta
+            if canonical_media_id != requested_media_id:
+                canonical_payload, canonical_meta = load_payload(canonical_media_id)
+                if canonical_payload is not None and not payload_covers_media_id(
+                    canonical_payload,
+                    requested_media_id,
+                ):
+                    canonical_payload = None
 
-    if canonical_payload is None:
-        cache.delete(get_alias_key(requested_media_id))
-        return _empty_lookup(requested_media_id, direct_meta)
+            if canonical_payload is None:
+                cache.delete(get_alias_key(requested_media_id))
+            else:
+                logger.info(
+                    "MAL anime franchise alias hit for media_id=%s "
+                    "canonical_media_id=%s",
+                    requested_media_id,
+                    canonical_media_id,
+                )
 
-    logger.info(
-        "MAL anime franchise alias hit for media_id=%s canonical_media_id=%s",
-        requested_media_id,
-        canonical_media_id,
-    )
+                return FranchisePayloadLookup(
+                    requested_media_id=requested_media_id,
+                    canonical_media_id=canonical_media_id,
+                    payload=canonical_payload,
+                    meta=canonical_meta,
+                    alias_hit=True,
+                    context_hit=False,
+                    resolution="alias",
+                )
 
-    return FranchisePayloadLookup(
-        requested_media_id=requested_media_id,
-        canonical_media_id=canonical_media_id,
-        payload=canonical_payload,
-        meta=canonical_meta,
-        alias_hit=True,
-    )
+    if allow_context:
+        context_lookup = load_context_payload_for_media(
+            requested_media_id,
+            fallback_meta=direct_meta,
+        )
+        if context_lookup.payload is not None:
+            return context_lookup
+
+    return _empty_lookup(requested_media_id, direct_meta)
 
 
 def save_payload(
@@ -726,6 +961,8 @@ def save_payload(
     ttl = get_ttl_seconds()
     cache.set(get_payload_key(media_id), payload, timeout=ttl)
     cache.set(get_meta_key(media_id), meta, timeout=ttl)
+    cache.delete(get_alias_key(media_id))
+    cache.delete(get_context_key(media_id))
     return meta
 
 

@@ -281,8 +281,7 @@ def media_search(request):
 def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912
     """Return the details page for a media item."""
     use_mal_anime_stale_cache = (
-        source == Sources.MAL.value
-        and media_type == MediaTypes.ANIME.value
+        source == Sources.MAL.value and media_type == MediaTypes.ANIME.value
     )
     media_metadata = services.get_media_metadata(
         media_type,
@@ -312,7 +311,10 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_refresh_considered = False
-        franchise_lookup = anime_franchise_cache.load_payload_for_media(media_id)
+        franchise_lookup = anime_franchise_cache.load_payload_for_media(
+            media_id,
+            allow_context=settings.ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED,
+        )
         franchise_payload = franchise_lookup.payload
         franchise_meta = franchise_lookup.meta
         franchise_cache_media_id = franchise_lookup.canonical_media_id
@@ -348,9 +350,8 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                         media_metadata["related"].pop("related_anime", None)
                 else:
                     anime_franchise = None
-            if (
-                not franchise_refresh_considered
-                and not anime_franchise_cache.is_fresh(franchise_meta)
+            if not franchise_refresh_considered and not anime_franchise_cache.is_fresh(
+                franchise_meta
             ):
                 anime_franchise_cache.maybe_schedule_build(
                     franchise_cache_media_id,

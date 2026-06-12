@@ -113,11 +113,9 @@ class MediaDetailsViewTests(TestCase):
         mock_build_delay,
     ):
         """Anime franchise grouping should be injected for MAL anime details."""
-        mock_enrich_items.side_effect = (
-            lambda request, items, section_name: [  # noqa: ARG005
-                {"item": item, "media": None} for item in items
-            ]
-        )
+        mock_enrich_items.side_effect = lambda request, items, section_name: [  # noqa: ARG005
+            {"item": item, "media": None} for item in items
+        ]
         mock_get_metadata.return_value = {
             "media_id": "100",
             "title": "Test Anime",
@@ -180,11 +178,9 @@ class MediaDetailsViewTests(TestCase):
         mock_enrich_items,
     ):
         """Regression guard for dedup between franchise and legacy related_anime."""
-        mock_enrich_items.side_effect = (
-            lambda request, items, section_name: [  # noqa: ARG005
-                {"item": item, "media": None} for item in items
-            ]
-        )
+        mock_enrich_items.side_effect = lambda request, items, section_name: [  # noqa: ARG005
+            {"item": item, "media": None} for item in items
+        ]
         mock_get_metadata.return_value = {
             "media_id": "100",
             "title": "Test Anime",
@@ -218,32 +214,36 @@ class MediaDetailsViewTests(TestCase):
                 "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series": {"key": "series", "title": "Series", "entries": [
-                    {
-                        "media_id": "100",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Test Anime",
-                        "image": "http://example.com/image.jpg",
-                        "relation_type": None,
-                        "linked_series_line_media_id": None,
-                        "linked_series_line_index": None,
-                        "is_current": True,
-                    },
-                    {
-                        "media_id": "101",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Test Anime Season 2",
-                        "image": "http://example.com/image-2.jpg",
-                        "relation_type": None,
-                        "linked_series_line_media_id": None,
-                        "linked_series_line_index": None,
-                        "is_current": False,
-                    }
-                ]},
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "100",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "tv",
+                            "title": "Test Anime",
+                            "image": "http://example.com/image.jpg",
+                            "relation_type": None,
+                            "linked_series_line_media_id": None,
+                            "linked_series_line_index": None,
+                            "is_current": True,
+                        },
+                        {
+                            "media_id": "101",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "tv",
+                            "title": "Test Anime Season 2",
+                            "image": "http://example.com/image-2.jpg",
+                            "relation_type": None,
+                            "linked_series_line_media_id": None,
+                            "linked_series_line_index": None,
+                            "is_current": False,
+                        },
+                    ],
+                },
                 "sections": [
                     {
                         "key": "related_series",
@@ -301,7 +301,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-active="true"', count=0)
         self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
-
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -424,7 +423,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertIsNone(response.context["anime_franchise"])
         self.assertIn("related_anime", response.context["media"]["related"])
         mock_build_delay.assert_called_once_with("100")
-
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -677,8 +675,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertNotContains(response, "Franchise complète en préparation")
         mock_build_delay.assert_not_called()
 
-
-
     def _canonical_alias_payload(self):
         return {
             "root_media_id": "223",
@@ -752,9 +748,208 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["anime_franchise"])
-        mock_fallback_payload.assert_not_called()
         mock_build_delay.assert_not_called()
         self.assertNotIn("related_anime", response.context["media"]["related"])
+
+    def _canonical_context_payload(self):
+        return {
+            "root_media_id": "28121",
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "28121",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                        "image": "img",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi OVA",
+                            "image": "img",
+                        },
+                    ],
+                },
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        {
+                            "media_id": "32887",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Sword Oratoria",
+                            "image": "img",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_special_context_hit_displays_payload_without_fallback(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Special context hits should render the canonical franchise payload."""
+        mock_get_metadata.return_value = {
+            "media_id": "32801",
+            "title": "DanMachi OVA",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "28121",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "DanMachi",
+                        "image": "img",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_context_payload()
+        anime_franchise_cache.save_payload("28121", payload)
+        anime_franchise_cache.replace_context_refs("28121", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "32801",
+                    "title": "danmachi-ova",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context["anime_franchise"])
+        self.assertNotIn("related_anime", response.context["media"]["related"])
+        sections = response.context["anime_franchise"]["sections"]
+        specials = next(section for section in sections if section["key"] == "specials")
+        self.assertEqual(specials["title"], "Specials")
+        self.assertTrue(specials["entries"][0]["item"]["is_current"])
+        mock_build_delay.assert_not_called()
+        self.assertNotContains(response, "Franchise complète en préparation")
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(
+        ANIME_FRANCHISE_GROUPING_ENABLED=True,
+        ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=False,
+    )
+    def test_mal_anime_context_lookup_disabled_ignores_existing_context_key(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Disabling weak contexts should ignore existing context cache keys."""
+        mock_get_metadata.return_value = {
+            "media_id": "32801",
+            "title": "DanMachi OVA",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "28121",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "DanMachi",
+                        "image": "img",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_context_payload()
+        anime_franchise_cache.save_payload("28121", payload)
+        anime_franchise_cache.replace_context_refs("28121", payload)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "32801",
+                    "title": "danmachi-ova",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["anime_franchise"])
+        self.assertIn("related_anime", response.context["media"]["related"])
+        mock_build_delay.assert_called_once_with("32801")
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_related_series_does_not_context_hit(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Related series entries should not resolve through weak contexts."""
+        mock_get_metadata.return_value = {
+            "media_id": "32887",
+            "title": "Sword Oratoria",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "28121",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "DanMachi",
+                        "image": "img",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_context_payload()
+        anime_franchise_cache.save_payload("28121", payload)
+        anime_franchise_cache.replace_context_refs("28121", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "32887",
+                    "title": "sword-oratoria",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["anime_franchise"])
+        self.assertIn("related_anime", response.context["media"]["related"])
+        mock_build_delay.assert_called_once_with("32887")
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -865,7 +1060,6 @@ class MediaDetailsViewTests(TestCase):
                 ],
             },
         }
-        mock_fallback_payload.return_value = None
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -887,7 +1081,6 @@ class MediaDetailsViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_fallback_payload.assert_called_once()
         mock_build_delay.assert_called_once_with("269")
 
     @patch("app.views.anime_franchise_cache.maybe_schedule_build")

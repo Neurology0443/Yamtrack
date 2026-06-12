@@ -377,7 +377,6 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
 
-
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")
     def test_build_mal_anime_franchise_payload_from_noncanonical_saves_canonical(
@@ -545,6 +544,206 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertIsNone(canonical_payload)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
 
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_creates_special_context_refs(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "28121",
+                "display_title": "DanMachi",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "28121",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "specials",
+                        "title": "Specials",
+                        "entries": [
+                            {
+                                "media_id": "32801",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "DanMachi OVA",
+                            },
+                        ],
+                    },
+                    {
+                        "key": "related_series",
+                        "title": "Related Series",
+                        "entries": [
+                            {
+                                "media_id": "32887",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Sword Oratoria",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("28121")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["context_ref_count"], 1)
+        self.assertEqual(result["alias_count"], 0)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32887")))
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_truncated_cleans_context_refs(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        cache.set(anime_franchise_cache.get_context_index_key("28121"), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="28121",
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 2
+        mock_graph_builder.truncated = True
+        mock_graph_builder.truncation_reason = "max_nodes"
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "28121",
+                "display_title": "DanMachi",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "28121",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "specials",
+                        "title": "Specials",
+                        "entries": [
+                            {
+                                "media_id": "32801",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "DanMachi OVA",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("28121")
+
+        self.assertTrue(result["built"])
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["context_ref_count"], 0)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+
+    @override_settings(ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=False)
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks.AnimeFranchiseService")
+    def test_build_mal_anime_franchise_payload_context_lookup_disabled_cleans_refs(
+        self,
+        mock_service,
+        mock_graph_builder_class,
+    ):
+        cache.set(anime_franchise_cache.get_context_index_key("28121"), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="28121",
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        mock_service.return_value.build.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "28121",
+                "display_title": "DanMachi",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "28121",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi",
+                        },
+                        {
+                            "media_id": "28122",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi II",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "specials",
+                        "title": "Specials",
+                        "entries": [
+                            {
+                                "media_id": "32801",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "DanMachi OVA",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("28121")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["context_ref_count"], 0)
+        self.assertGreaterEqual(result["alias_count"], 1)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertIsNone(
+            cache.get(anime_franchise_cache.get_context_index_key("28121")),
+        )
+
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")
@@ -632,7 +831,6 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(meta["last_error_message"], "boom")
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
-
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks.AnimeFranchiseService")

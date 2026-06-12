@@ -19,6 +19,7 @@ from app.services import anime_franchise_cache
     ANIME_FRANCHISE_TASK_LOCK_MINUTES=60,
     ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION=1,
     ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True,
+    ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=True,
 )
 class AnimeFranchiseCacheTests(TestCase):
     def setUp(self):
@@ -50,7 +51,6 @@ class AnimeFranchiseCacheTests(TestCase):
             "truncated": False,
             "node_count": 2,
         }
-
 
     def _dragon_ball_payload(self):
         return {
@@ -177,6 +177,398 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("998", aliasable_ids)
         self.assertNotIn("997", aliasable_ids)
         self.assertNotIn("996", aliasable_ids)
+
+    def test_extract_context_media_ids_reads_visible_specials_only(self):
+        payload = self._dragon_ball_payload()
+        payload["sections"].extend(
+            [
+                {
+                    "key": "ignored",
+                    "title": "Ignored",
+                    "entries": [
+                        {
+                            "media_id": "995",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Ignored",
+                        },
+                    ],
+                },
+                {
+                    "key": "specials",
+                    "title": "Hidden Specials",
+                    "visible_in_ui": False,
+                    "entries": [
+                        {
+                            "media_id": "994",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Hidden Special",
+                        },
+                    ],
+                },
+            ],
+        )
+
+        self.assertEqual(
+            anime_franchise_cache.extract_aliasable_media_ids(payload),
+            {"223", "813", "269", "225"},
+        )
+        context_ids = anime_franchise_cache.extract_context_media_ids(payload)
+        self.assertEqual(context_ids, {"999"})
+        self.assertNotIn("997", context_ids)
+        self.assertNotIn("998", context_ids)
+        self.assertNotIn("996", context_ids)
+        self.assertNotIn("995", context_ids)
+        self.assertNotIn("994", context_ids)
+
+    def test_replace_context_refs_creates_special_contexts_only(self):
+        canonical_id = "28121"
+        payload = {
+            "schema_version": 1,
+            "root_media_id": canonical_id,
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                    },
+                    {
+                        "media_id": "37347",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi II",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": "50000",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Extra",
+                        }
+                    ],
+                },
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "OVA",
+                        },
+                        {
+                            "media_id": "37348",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "OVA II",
+                        },
+                    ],
+                },
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        {
+                            "media_id": "32887",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Sword Oratoria",
+                        }
+                    ],
+                },
+            ],
+            "aliasable_media_ids": [canonical_id, "37347", "50000"],
+        }
+        anime_franchise_cache.save_payload(canonical_id, payload)
+
+        count = anime_franchise_cache.replace_context_refs(canonical_id, payload)
+
+        self.assertEqual(count, 2)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_context_key("32801"))[
+                "canonical_media_id"
+            ],
+            canonical_id,
+        )
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_context_key("37348"))["section_key"],
+            "specials",
+        )
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("50000")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32887")))
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_context_index_key(canonical_id)),
+            ["32801", "37348"],
+        )
+        self.assertIsNone(anime_franchise_cache.load_payload("32801")[0])
+
+    def test_replace_context_refs_skips_media_id_with_direct_payload(self):
+        canonical_id = "28121"
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "32801"
+        direct_payload["display_title"] = "DanMachi OVA"
+        direct_payload["series"]["entries"][0]["media_id"] = "32801"
+        anime_franchise_cache.save_payload("32801", direct_payload)
+        payload = {
+            "schema_version": 1,
+            "root_media_id": canonical_id,
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi OVA",
+                        },
+                        {
+                            "media_id": "37348",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi II OVA",
+                        },
+                    ],
+                },
+            ],
+        }
+        anime_franchise_cache.save_payload(canonical_id, payload)
+
+        count = anime_franchise_cache.replace_context_refs(canonical_id, payload)
+
+        self.assertEqual(count, 1)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("32801")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_context_key("37348")))
+
+    def test_replace_context_refs_removes_old_context_when_direct_payload_now_exists(
+        self,
+    ):
+        canonical_id = "28121"
+        cache.set(anime_franchise_cache.get_context_index_key(canonical_id), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id=canonical_id,
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "32801"
+        direct_payload["display_title"] = "DanMachi OVA"
+        direct_payload["series"]["entries"][0]["media_id"] = "32801"
+        anime_franchise_cache.save_payload("32801", direct_payload)
+        payload = {
+            "schema_version": 1,
+            "root_media_id": canonical_id,
+            "display_title": "DanMachi",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "DanMachi",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "32801",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "DanMachi OVA",
+                        },
+                    ],
+                },
+            ],
+        }
+        anime_franchise_cache.save_payload(canonical_id, payload)
+
+        count = anime_franchise_cache.replace_context_refs(canonical_id, payload)
+
+        self.assertEqual(count, 0)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("32801")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("32801")))
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_context_index_key(canonical_id)),
+            [],
+        )
+
+    def test_load_payload_for_media_context_requires_explicit_allow_context(self):
+        payload = self._dragon_ball_payload()
+        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.replace_context_refs("223", payload)
+
+        default_lookup = anime_franchise_cache.load_payload_for_media("999")
+        context_lookup = anime_franchise_cache.load_payload_for_media(
+            "999",
+            allow_context=True,
+        )
+
+        self.assertIsNone(default_lookup.payload)
+        self.assertFalse(default_lookup.context_hit)
+        self.assertEqual(default_lookup.resolution, "miss")
+        self.assertIsNotNone(context_lookup.payload)
+        self.assertTrue(context_lookup.context_hit)
+        self.assertFalse(context_lookup.alias_hit)
+        self.assertEqual(context_lookup.resolution, "context")
+        self.assertEqual(context_lookup.canonical_media_id, "223")
+
+    def test_load_payload_for_media_prefers_direct_and_alias_over_context(self):
+        canonical_payload = self._dragon_ball_payload()
+        canonical_payload["aliasable_media_ids"] = ["223", "269"]
+        anime_franchise_cache.save_payload("223", canonical_payload)
+        anime_franchise_cache.replace_aliases("223", canonical_payload)
+        cache.set(
+            anime_franchise_cache.get_context_key("269"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="111",
+                context_media_id="269",
+                section_key="specials",
+            ),
+        )
+
+        alias_lookup = anime_franchise_cache.load_payload_for_media(
+            "269",
+            allow_context=True,
+        )
+        self.assertEqual(alias_lookup.resolution, "alias")
+        self.assertTrue(alias_lookup.alias_hit)
+
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "269"
+        direct_payload["display_title"] = "Dragon Ball GT"
+        direct_payload["series"]["entries"][0]["media_id"] = "269"
+        anime_franchise_cache.save_payload("269", direct_payload)
+        direct_lookup = anime_franchise_cache.load_payload_for_media(
+            "269",
+            allow_context=True,
+        )
+
+        self.assertEqual(direct_lookup.resolution, "direct")
+        self.assertFalse(direct_lookup.alias_hit)
+        self.assertFalse(direct_lookup.context_hit)
+        self.assertEqual(direct_lookup.canonical_media_id, "269")
+
+    def test_load_payload_for_media_deletes_stale_context(self):
+        payload = self._dragon_ball_payload()
+        payload["sections"] = [
+            section for section in payload["sections"] if section["key"] != "specials"
+        ]
+        anime_franchise_cache.save_payload("223", payload)
+        cache.set(
+            anime_franchise_cache.get_context_key("999"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="223",
+                context_media_id="999",
+                section_key="specials",
+            ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("999", allow_context=True)
+
+        self.assertIsNone(lookup.payload)
+        self.assertEqual(lookup.resolution, "miss")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("999")))
+
+    def test_delete_context_refs_for_canonical_preserves_other_owner(self):
+        cache.set(anime_franchise_cache.get_context_index_key("111"), ["32801"])
+        cache.set(
+            anime_franchise_cache.get_context_key("32801"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="222",
+                context_media_id="32801",
+                section_key="specials",
+            ),
+        )
+
+        anime_franchise_cache.delete_context_refs_for_canonical("111")
+
+        context = cache.get(anime_franchise_cache.get_context_key("32801"))
+        self.assertEqual(context["canonical_media_id"], "222")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_index_key("111")))
+
+    def test_replace_context_refs_truncated_deletes_owned_contexts(self):
+        payload = self._dragon_ball_payload()
+        cache.set(anime_franchise_cache.get_context_index_key("223"), ["999"])
+        cache.set(
+            anime_franchise_cache.get_context_key("999"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="223",
+                context_media_id="999",
+                section_key="specials",
+            ),
+        )
+
+        count = anime_franchise_cache.replace_context_refs(
+            "223", payload, truncated=True
+        )
+
+        self.assertEqual(count, 0)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("999")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_index_key("223")))
+
+    def test_save_payload_clears_alias_and_context_keys_for_direct_payload(self):
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="223",
+                aliased_media_id="269",
+            ),
+        )
+        cache.set(
+            anime_franchise_cache.get_context_key("269"),
+            anime_franchise_cache._build_context_record(
+                canonical_media_id="111",
+                context_media_id="269",
+                section_key="specials",
+            ),
+        )
+        direct_payload = deepcopy(self.payload)
+        direct_payload["root_media_id"] = "269"
+        direct_payload["display_title"] = "Dragon Ball GT"
+        direct_payload["series"]["entries"][0]["media_id"] = "269"
+
+        anime_franchise_cache.save_payload("269", direct_payload)
+
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_context_key("269")))
+        self.assertIsNotNone(anime_franchise_cache.load_payload("269")[0])
 
     def test_determine_canonical_media_id_from_series_line(self):
         self.assertEqual(
@@ -637,7 +1029,6 @@ class AnimeFranchiseCacheTests(TestCase):
             anime_franchise_cache.can_schedule_build(meta, has_payload=True),
         )
 
-
     def test_missing_payload_returns_empty_meta(self):
         payload, meta = anime_franchise_cache.load_payload("404")
 
@@ -680,8 +1071,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(meta["truncated"], before_meta["truncated"])
         self.assertEqual(meta["truncation_reason"], before_meta["truncation_reason"])
         self.assertEqual(meta["last_error_message"], "boom")
-
-
 
     def test_normalize_meta_empty_dict_keeps_required_defaults(self):
         meta = anime_franchise_cache.normalize_meta({})
@@ -745,7 +1134,9 @@ class AnimeFranchiseCacheTests(TestCase):
             with self.subTest(forbidden_key=forbidden_key):
                 with self.assertRaises(ValueError):
                     anime_franchise_cache.save_payload("100", payload)
-                self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("100")))
+                self.assertIsNone(
+                    cache.get(anime_franchise_cache.get_payload_key("100"))
+                )
 
     def test_invalid_payload_load_returns_none_and_normalized_meta(self):
         cache.set(
@@ -758,8 +1149,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(payload)
         self.assertEqual(meta["schema_version"], 1)
         self.assertTrue(meta["last_accessed_at"])
-
-
 
     def test_normalize_meta_with_invalid_node_count_falls_back_to_zero(self):
         meta = anime_franchise_cache.normalize_meta({"node_count": "abc"})

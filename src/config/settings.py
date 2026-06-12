@@ -412,6 +412,11 @@ ANIME_FRANCHISE_CACHE_ALIASES_ENABLED = config(
     default=True,
     cast=bool,
 )
+ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED = config(
+    "ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED",
+    default=True,
+    cast=bool,
+)
 ANIME_FRANCHISE_CACHE_FRESH_DAYS = config(
     "ANIME_FRANCHISE_CACHE_FRESH_DAYS",
     default=30,
