@@ -15,6 +15,9 @@ from app.services.anime_franchise import AnimeFranchiseService
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_task_names import (
+    MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +139,9 @@ def import_anime_franchise(
             "skipped": stats.skipped,
             "errors": stats.errors,
             "created_ids": stats.created_ids,
+            "cache_warm_scheduled": stats.cache_warm_scheduled,
+            "cache_warm_roots": stats.cache_warm_roots,
+            "cache_warm_errors": stats.cache_warm_errors,
         }
 
         logger.info("Anime franchise import completed: %s", result)
@@ -144,7 +150,7 @@ def import_anime_franchise(
         cache.delete(lock_key)
 
 
-@shared_task(name="Build MAL anime franchise payload")
+@shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
 def build_mal_anime_franchise_payload(media_id):
     """Build and cache the complete MAL anime franchise payload in the background."""
     media_id = str(media_id)
