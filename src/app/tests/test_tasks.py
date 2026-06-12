@@ -101,6 +101,9 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             skipped=0,
             errors=0,
             created_ids=["100", "200"],
+            cache_warm_scheduled=2,
+            cache_warm_roots=["100", "200"],
+            cache_warm_errors=0,
         )
 
         result = import_anime_franchise(
@@ -136,9 +139,26 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                 "skipped": 0,
                 "errors": 0,
                 "created_ids": ["100", "200"],
+                "cache_warm_scheduled": 2,
+                "cache_warm_roots": ["100", "200"],
+                "cache_warm_errors": 0,
             },
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
+
+    @patch("app.tasks.cache")
+    @patch("app.tasks.AnimeFranchiseImportService")
+    def test_import_task_returns_default_cache_warm_fields(
+        self, mock_service_cls, mock_cache
+    ):
+        mock_cache.add.return_value = True
+        mock_service_cls.return_value.run.return_value = FranchiseImportStats()
+
+        result = import_anime_franchise(profile_key="satellites")
+
+        self.assertEqual(result["cache_warm_scheduled"], 0)
+        self.assertEqual(result["cache_warm_roots"], [])
+        self.assertEqual(result["cache_warm_errors"], 0)
 
     @patch("app.tasks.cache")
     @patch("app.tasks.AnimeFranchiseImportService")
