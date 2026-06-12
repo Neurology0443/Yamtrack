@@ -54,7 +54,7 @@ class AnimeFranchiseImportService:
         *,
         snapshot_service: AnimeFranchiseSnapshotService | None = None,
         state_service: AnimeImportStateService | None = None,
-        cache_warm_scheduler: Callable[[str], bool | None] | None = None,
+        cache_warm_scheduler: Callable[[str], None] | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -173,21 +173,11 @@ class AnimeFranchiseImportService:
                 key=int,
             )
             try:
-                scheduled = self.cache_warm_scheduler(root_media_id)
+                self.cache_warm_scheduler(root_media_id)
             except Exception:
                 stats.cache_warm_errors += 1
                 logger.exception(
-                    "Anime franchise import failed to schedule cache warm build "
-                    "for component_root_mal_id=%s created_ids=%s",
-                    root_media_id,
-                    created_ids,
-                )
-                continue
-
-            if not scheduled:
-                stats.cache_warm_errors += 1
-                logger.warning(
-                    "Anime franchise import did not schedule cache warm build "
+                    "Anime franchise import failed to register cache warm build "
                     "for component_root_mal_id=%s created_ids=%s",
                     root_media_id,
                     created_ids,
@@ -197,7 +187,7 @@ class AnimeFranchiseImportService:
             stats.cache_warm_roots.append(root_media_id)
             stats.cache_warm_scheduled += 1
             logger.info(
-                "Anime franchise import scheduled cache warm build "
+                "Anime franchise import registered cache warm build "
                 "for component_root_mal_id=%s created_ids=%s",
                 root_media_id,
                 created_ids,

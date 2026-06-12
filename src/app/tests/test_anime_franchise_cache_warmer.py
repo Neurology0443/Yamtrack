@@ -7,8 +7,10 @@ from django.test import TestCase
 
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_cache_warmer import (
-    MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
     schedule_mal_anime_franchise_cache_warm,
+)
+from app.services.anime_franchise_task_names import (
+    MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
 
 
@@ -24,12 +26,16 @@ class AnimeFranchiseCacheWarmerTests(TestCase):
     def test_uses_task_name_and_converts_id_to_string(
         self, mock_send_task, mock_on_commit
     ):
-        mock_on_commit.side_effect = lambda callback: callback()
+        def run_on_commit(callback, **_kwargs):
+            callback()
 
-        scheduled = schedule_mal_anime_franchise_cache_warm(123)
+        mock_on_commit.side_effect = run_on_commit
 
-        self.assertTrue(scheduled)
+        result = schedule_mal_anime_franchise_cache_warm(123)
+
+        self.assertIsNone(result)
         mock_on_commit.assert_called_once()
+        self.assertTrue(mock_on_commit.call_args.kwargs.get("robust"))
         mock_send_task.assert_called_once_with(
             MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
             args=["123"],
@@ -38,18 +44,21 @@ class AnimeFranchiseCacheWarmerTests(TestCase):
     @patch("app.services.anime_franchise_cache_warmer.transaction.on_commit")
     @patch("app.services.anime_franchise_cache_warmer.current_app.send_task")
     def test_uses_existing_queue_lock(self, mock_send_task, mock_on_commit):
-        mock_on_commit.side_effect = lambda callback: callback()
+        def run_on_commit(callback, **_kwargs):
+            callback()
 
-        scheduled = schedule_mal_anime_franchise_cache_warm("123")
+        mock_on_commit.side_effect = run_on_commit
 
-        self.assertTrue(scheduled)
+        result = schedule_mal_anime_franchise_cache_warm("123")
+
+        self.assertIsNone(result)
         self.assertEqual(
             cache.get(anime_franchise_cache.get_queue_lock_key("123")), "1"
         )
 
-        scheduled = schedule_mal_anime_franchise_cache_warm("123")
+        result = schedule_mal_anime_franchise_cache_warm("123")
 
-        self.assertFalse(scheduled)
+        self.assertIsNone(result)
         mock_send_task.assert_called_once_with(
             MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
             args=["123"],
@@ -64,9 +73,9 @@ class AnimeFranchiseCacheWarmerTests(TestCase):
         )
 
         with self.captureOnCommitCallbacks(execute=True):
-            scheduled = schedule_mal_anime_franchise_cache_warm("123")
+            result = schedule_mal_anime_franchise_cache_warm("123")
 
-        self.assertFalse(scheduled)
+        self.assertIsNone(result)
         mock_send_task.assert_not_called()
 
     @patch("app.services.anime_franchise_cache_warmer.current_app.send_task")
@@ -74,9 +83,9 @@ class AnimeFranchiseCacheWarmerTests(TestCase):
         mock_send_task.side_effect = RuntimeError("boom")
 
         with self.captureOnCommitCallbacks(execute=True):
-            scheduled = schedule_mal_anime_franchise_cache_warm("123")
+            result = schedule_mal_anime_franchise_cache_warm("123")
 
-        self.assertFalse(scheduled)
+        self.assertIsNone(result)
         self.assertIsNone(
             cache.get(anime_franchise_cache.get_queue_lock_key("123"))
         )

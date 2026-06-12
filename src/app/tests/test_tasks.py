@@ -13,6 +13,9 @@ from app.models import UserMessage, UserMessageLevel
 from app.providers import mal_cache
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_import import FranchiseImportStats
+from app.services.anime_franchise_task_names import (
+    MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
+)
 from app.tasks import (
     build_mal_anime_franchise_payload,
     cleanup_user_messages,
@@ -197,6 +200,12 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             timeout=60 * 60 * 6,
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
+
+    def test_build_mal_anime_franchise_payload_uses_shared_task_name(self):
+        self.assertEqual(
+            build_mal_anime_franchise_payload.name,
+            MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
+        )
 
 
 class RefreshMALAnimeMetadataTaskTests(TestCase):

@@ -3,15 +3,25 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.db import transaction
 from django.test import TestCase
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
+from app.services import anime_franchise_cache
+from app.services.anime_franchise_cache_warmer import (
+    schedule_mal_anime_franchise_cache_warm,
+)
 from app.services.anime_franchise_import import AnimeFranchiseImportService
 
 
 class AnimeFranchiseImportNotificationTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.user = get_user_model().objects.create_user(username="import-user")
+
+    def tearDown(self):
+        cache.clear()
 
     def _build_service(
         self,
@@ -65,7 +75,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         service, profile = self._build_service(
             {"123"}, cache_warm_scheduler=cache_warm_scheduler
         )
@@ -124,7 +134,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             status=Status.PLANNING.value,
         )
 
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         service, profile = self._build_service(
             {"123"}, cache_warm_scheduler=cache_warm_scheduler
         )
@@ -160,7 +170,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         _mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         service, profile = self._build_service(
             {"123", "124"}, cache_warm_scheduler=cache_warm_scheduler
         )
@@ -193,7 +203,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         _mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         due_seeds = [
             SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
             SimpleNamespace(user_id=self.user.id, seed_mal_id="322"),
@@ -238,7 +248,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         _mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         due_seeds = [
             SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
             SimpleNamespace(user_id=self.user.id, seed_mal_id="400"),
@@ -285,7 +295,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         service, profile = self._build_service(
             {"123"}, cache_warm_scheduler=cache_warm_scheduler
         )
@@ -315,11 +325,10 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_notify.assert_not_called()
         mock_anime_minimal.assert_not_called()
 
-
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")
     @patch("app.services.anime_franchise_import.get_import_profile")
-    def test_scheduler_false_return_does_not_break_import(
+    def test_scheduler_return_value_is_ignored(
         self,
         mock_get_profile,
         mock_anime_minimal,
@@ -345,13 +354,95 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         )
 
         self.assertEqual(stats.created, 1)
-        self.assertEqual(stats.cache_warm_errors, 1)
-        self.assertEqual(stats.cache_warm_scheduled, 0)
-        self.assertEqual(stats.cache_warm_roots, [])
+        self.assertEqual(stats.cache_warm_scheduled, 1)
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self.assertEqual(stats.cache_warm_errors, 0)
         cache_warm_scheduler.assert_called_once_with("321")
         self.assertTrue(
             Anime.objects.filter(user=self.user, item__media_id="123").exists()
         )
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_deferred_scheduler_registration_is_not_counted_as_error(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        registered_roots = []
+
+        def deferred_scheduler(root_media_id: str) -> None:
+            transaction.on_commit(lambda: registered_roots.append(root_media_id))
+
+        service, profile = self._build_service(
+            {"123"}, cache_warm_scheduler=deferred_scheduler
+        )
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.return_value = {
+            "title": "Import Anime",
+            "image": "http://example.com/image.jpg",
+        }
+
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            stats = service.run(
+                profile_key="satellites",
+                dry_run=False,
+                full_rescan=False,
+                limit=None,
+                refresh_cache=False,
+                user_ids=[self.user.id],
+            )
+
+        self.assertEqual(stats.created, 1)
+        self.assertEqual(stats.cache_warm_scheduled, 1)
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self.assertEqual(stats.cache_warm_errors, 0)
+        self.assertEqual(registered_roots, [])
+        self.assertEqual(len(callbacks), 1)
+
+    @patch("app.services.anime_franchise_cache_warmer.current_app.send_task")
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_existing_queue_lock_is_not_counted_as_cache_warm_error(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+        mock_send_task,
+    ):
+        cache.add(
+            anime_franchise_cache.get_queue_lock_key("321"),
+            "1",
+            timeout=anime_franchise_cache.get_queue_lock_ttl_seconds(),
+        )
+        service, profile = self._build_service(
+            {"123"},
+            cache_warm_scheduler=schedule_mal_anime_franchise_cache_warm,
+        )
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.return_value = {
+            "title": "Import Anime",
+            "image": "http://example.com/image.jpg",
+        }
+
+        with self.captureOnCommitCallbacks(execute=True):
+            stats = service.run(
+                profile_key="satellites",
+                dry_run=False,
+                full_rescan=False,
+                limit=None,
+                refresh_cache=False,
+                user_ids=[self.user.id],
+            )
+
+        self.assertEqual(stats.created, 1)
+        self.assertEqual(stats.cache_warm_scheduled, 1)
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self.assertEqual(stats.cache_warm_errors, 0)
+        mock_send_task.assert_not_called()
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")
@@ -362,7 +453,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal,
         _mock_notify,
     ):
-        cache_warm_scheduler = Mock(return_value=True)
+        cache_warm_scheduler = Mock()
         service, profile = self._build_service(
             {"123", "124"}, cache_warm_scheduler=cache_warm_scheduler
         )
