@@ -458,10 +458,15 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             {"123", "124"}, cache_warm_scheduler=cache_warm_scheduler
         )
         mock_get_profile.return_value = profile
-        mock_anime_minimal.side_effect = [
-            {"title": "Anime 123", "image": "http://example.com/123.jpg"},
-            RuntimeError("boom"),
-        ]
+
+        def anime_minimal_side_effect(media_id, **_kwargs):
+            if media_id == "123":
+                return {"title": "Anime 123", "image": "http://example.com/123.jpg"}
+            cache_warm_scheduler.assert_called_once_with("321")
+            error_message = "boom"
+            raise RuntimeError(error_message)
+
+        mock_anime_minimal.side_effect = anime_minimal_side_effect
 
         stats = service.run(
             profile_key="satellites",

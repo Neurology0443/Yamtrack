@@ -63,7 +63,7 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
 
-    def run(  # noqa: C901, PLR0912, PLR0915
+    def run(  # noqa: C901, PLR0915
         self,
         *,
         profile_key: str,
@@ -89,8 +89,38 @@ class AnimeFranchiseImportService:
         stats.users_considered = len({seed.user_id for seed in due_seeds})
         stats.distinct_seeds = len({seed.seed_mal_id for seed in due_seeds})
 
-        roots_to_warm: set[str] = set()
+        scheduled_warm_roots: set[str] = set()
         created_ids_by_root: dict[str, list[str]] = {}
+
+        def schedule_cache_warm_once(root_media_id: str) -> None:
+            if root_media_id in scheduled_warm_roots:
+                return
+
+            created_ids = sorted(
+                set(created_ids_by_root.get(root_media_id, [])),
+                key=int,
+            )
+            try:
+                self.cache_warm_scheduler(root_media_id)
+            except Exception:
+                stats.cache_warm_errors += 1
+                logger.exception(
+                    "Anime franchise import failed to register cache warm build "
+                    "for component_root_mal_id=%s created_ids=%s",
+                    root_media_id,
+                    created_ids,
+                )
+                return
+
+            scheduled_warm_roots.add(root_media_id)
+            stats.cache_warm_roots.append(root_media_id)
+            stats.cache_warm_scheduled += 1
+            logger.info(
+                "Anime franchise import registered cache warm build "
+                "for component_root_mal_id=%s created_ids=%s",
+                root_media_id,
+                created_ids,
+            )
 
         for due_seed in due_seeds:
             stats.scanned += 1
@@ -133,10 +163,10 @@ class AnimeFranchiseImportService:
                     )
                     stats.created += 1
                     stats.created_ids.append(media_id)
-                    roots_to_warm.add(component_root_mal_id)
                     created_ids_by_root.setdefault(component_root_mal_id, []).append(
                         media_id
                     )
+                    schedule_cache_warm_once(component_root_mal_id)
 
                 if dry_run:
                     continue
@@ -166,32 +196,6 @@ class AnimeFranchiseImportService:
                         stats.state_rows_created += 1
                     else:
                         stats.state_rows_updated += 1
-
-        for root_media_id in sorted(roots_to_warm, key=int):
-            created_ids = sorted(
-                set(created_ids_by_root.get(root_media_id, [])),
-                key=int,
-            )
-            try:
-                self.cache_warm_scheduler(root_media_id)
-            except Exception:
-                stats.cache_warm_errors += 1
-                logger.exception(
-                    "Anime franchise import failed to register cache warm build "
-                    "for component_root_mal_id=%s created_ids=%s",
-                    root_media_id,
-                    created_ids,
-                )
-                continue
-
-            stats.cache_warm_roots.append(root_media_id)
-            stats.cache_warm_scheduled += 1
-            logger.info(
-                "Anime franchise import registered cache warm build "
-                "for component_root_mal_id=%s created_ids=%s",
-                root_media_id,
-                created_ids,
-            )
 
         return stats
 
