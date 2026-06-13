@@ -1,0 +1,869 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.">
+      
+      
+        <meta name="author" content="FuzzyGrim">
+      
+      
+        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-franchise-debugging/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/logo.png">
+      <meta name="generator" content="zensical-0.0.42">
+    
+    
+      
+        <title>Anime Franchise Grouping Debugging Runbook - Yamtrack Documentation</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.fba56155.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#anime-franchise-grouping-debugging-runbook" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Yamtrack Documentation" class="md-header__button md-logo" aria-label="Yamtrack Documentation" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="Yamtrack Documentation">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Yamtrack Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Anime Franchise Grouping Debugging Runbook
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/FuzzyGrim/Yamtrack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FuzzyGrim/Yamtrack
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../development/" class="md-tabs__link">
+        
+  
+  Development
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../env-variables/" class="md-tabs__link">
+        
+  
+  Environment Variables
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../media-imports/" class="md-tabs__link">
+        
+  
+  Media Imports
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../social-auth/" class="md-tabs__link">
+        
+  
+  Social Auth
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Yamtrack Documentation" class="md-nav__button md-logo" aria-label="Yamtrack Documentation" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="Yamtrack Documentation">
+
+    </a>
+    Yamtrack Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/FuzzyGrim/Yamtrack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FuzzyGrim/Yamtrack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Development
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../env-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Environment Variables
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../media-imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Media Imports
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../social-auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Social Auth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Administration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-franchise-debugging.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-franchise-debugging.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
+    </a>
+  
+
+
+<h1 id="anime-franchise-grouping-debugging-runbook">Anime Franchise Grouping Debugging Runbook<a class="headerlink" href="#anime-franchise-grouping-debugging-runbook" title="Permanent link">&para;</a></h1>
+<p>This runbook targets the <strong>current</strong> MAL anime franchise UI grouping system.</p>
+<p>It is organized by practical debug steps and keeps host/Docker workflows aligned.</p>
+<h2 id="1-preconditions-and-scope">1) Preconditions and scope<a class="headerlink" href="#1-preconditions-and-scope" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Scope: MAL anime detail pages only (<code>source=mal</code>, <code>media_type=anime</code>).</li>
+<li>Feature flag: <code>ANIME_FRANCHISE_GROUPING_ENABLED=True</code>.</li>
+<li>Repo layout: <code>manage.py</code> is under <code>src/</code>.</li>
+<li>Active grouping path:
+  <code>AnimeFranchiseService -&gt; AnimeFranchiseUiPipeline -&gt; SeriesBuilder -&gt; UiCandidateAssembler -&gt; RulePipeline -&gt; LayoutCompiler -&gt; ViewModelAdapter -&gt; views.py</code>.</li>
+</ul>
+<h2 id="2-targeted-tests-fast-confidence-pass">2) Targeted tests (fast confidence pass)<a class="headerlink" href="#2-targeted-tests-fast-confidence-pass" title="Permanent link">&para;</a></h2>
+<h3 id="host">Host<a class="headerlink" href="#host" title="Permanent link">&para;</a></h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">cd</span><span class="w"> </span>src
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_ui_pipeline
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_snapshot
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.views.test_media_details
+</span></code></pre></div>
+<h3 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.services.test_anime_franchise_ui_pipeline&quot;</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.services.test_anime_franchise&quot;</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.views.test_media_details&quot;</span>
+</span></code></pre></div>
+<h2 id="3-inspect-principal-service-payload-adapter-output">3) Inspect principal service payload (adapter output)<a class="headerlink" href="#3-inspect-principal-service-payload-adapter-output" title="Permanent link">&para;</a></h2>
+<p>Use this to inspect what the modern pipeline returns before view enrichment:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>src
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell
+</span></code></pre></div>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseService</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">AnimeFranchiseService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;root:&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="o">.</span><span class="n">root_media_id</span><span class="p">,</span> <span class="n">payload</span><span class="o">.</span><span class="n">display_title</span><span class="p">)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;series entries:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;media_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">series</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]])</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">sections</span><span class="p">:</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">section</span><span class="p">[</span><span class="s2">&quot;key&quot;</span><span class="p">],</span> <span class="n">section</span><span class="p">[</span><span class="s2">&quot;title&quot;</span><span class="p">],</span> <span class="nb">len</span><span class="p">(</span><span class="n">section</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]))</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">pprint</span><span class="p">([</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="p">{</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>            <span class="s2">&quot;media_id&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;media_id&quot;</span><span class="p">],</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>            <span class="s2">&quot;anime_media_type&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;anime_media_type&quot;</span><span class="p">),</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>            <span class="s2">&quot;relation_type&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;relation_type&quot;</span><span class="p">),</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>            <span class="s2">&quot;linked_index&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;linked_series_line_index&quot;</span><span class="p">),</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>            <span class="s2">&quot;badges&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;badges&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="p">}</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">section</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="p">])</span>
+</span></code></pre></div>
+<h2 id="4-inspect-view-level-context-shaping-post-adapter">4) Inspect view-level context shaping (post-adapter)<a class="headerlink" href="#4-inspect-view-level-context-shaping-post-adapter" title="Permanent link">&para;</a></h2>
+<p>The view currently rebuilds <code>anime_franchise</code> context and enriches entries.</p>
+<p>Quick checks in <code>media_details</code> response context:</p>
+<ul>
+<li><code>series_label</code> exists on series entries,</li>
+<li>section entries include footer presentation fields,</li>
+<li><code>related_anime</code> removed from legacy related block when grouping is enabled.</li>
+</ul>
+<p>Tip: use <code>app.tests.views.test_media_details</code> as baseline assertions for this layer.</p>
+<h2 id="5-inspect-internal-placement-trace-pipeline-level">5) Inspect internal placement trace (pipeline-level)<a class="headerlink" href="#5-inspect-internal-placement-trace-pipeline-level" title="Permanent link">&para;</a></h2>
+<p><code>placement_trace</code> is internal candidate metadata. It is not part of the final template payload.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_ui</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseUiPipeline</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_snapshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseSnapshotService</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_ui.rule_types</span><span class="w"> </span><span class="kn">import</span> <span class="n">RuleContext</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">snapshot</span> <span class="o">=</span> <span class="n">AnimeFranchiseSnapshotService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="n">AnimeFranchiseUiPipeline</span><span class="p">()</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">candidates</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">candidate_assembler</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">context</span> <span class="o">=</span> <span class="n">RuleContext</span><span class="p">(</span><span class="n">snapshot</span><span class="o">=</span><span class="n">snapshot</span><span class="p">)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">rule_pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">candidates</span><span class="o">=</span><span class="n">candidates</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">trace</span> <span class="o">=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;placement_trace&quot;</span><span class="p">)</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="k">if</span> <span class="n">trace</span><span class="p">:</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>        <span class="nb">print</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">media_id</span><span class="p">,</span> <span class="n">trace</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Interpretation:</p>
+<ul>
+<li><code>kind="initial"</code>: first section assignment.</li>
+<li><code>kind="override"</code>: later pack changed section.</li>
+</ul>
+<h2 id="6-rule-order-troubleshooting-and-overrides">6) Rule-order troubleshooting and overrides<a class="headerlink" href="#6-rule-order-troubleshooting-and-overrides" title="Permanent link">&para;</a></h2>
+<p>Current ordered packs:</p>
+<ol>
+<li><code>base_facts</code></li>
+<li><code>base_placement</code></li>
+<li><code>relation_rules</code></li>
+<li><code>anchor_rules</code></li>
+<li><code>format_rules</code></li>
+<li><code>section_rules</code></li>
+</ol>
+<p>Current behavior:</p>
+<ul>
+<li>not global first-match-wins,</li>
+<li>later packs can override <code>section_key</code>,</li>
+<li><code>section_rules</code> is metadata-only.</li>
+</ul>
+<p>If a candidate lands in an unexpected section:</p>
+<ol>
+<li>inspect <code>relation_types</code> and <code>metadata["relation_facts"]</code>,</li>
+<li>inspect <code>placement_trace</code> transitions,</li>
+<li>verify anchor flags (<code>has_series_line_origin</code>, <code>has_root_origin</code>),</li>
+<li>verify format gates (<code>cm</code>, <code>pv</code>, and section-specific exclusions).</li>
+</ol>
+<h2 id="7-fallback-no-series-line-verification">7) Fallback no-series-line verification<a class="headerlink" href="#7-fallback-no-series-line-verification" title="Permanent link">&para;</a></h2>
+<p>Expected current behavior:</p>
+<ul>
+<li><code>snapshot.has_series_line == False</code>,</li>
+<li><code>Series</code> block empty,</li>
+<li>fallback/root anchor still drives candidate gathering,</li>
+<li>fallback placement (<code>related_series</code>) used only when no earlier rule assigned section.</li>
+</ul>
+<p>Use <code>app.tests.services.test_anime_franchise_snapshot</code> + <code>test_anime_franchise_ui_pipeline</code> when adjusting this behavior.</p>
+<h2 id="8-relation-normalization-check">8) Relation normalization check<a class="headerlink" href="#8-relation-normalization-check" title="Permanent link">&para;</a></h2>
+<p>When relation labels look wrong, verify normalization quickly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.providers</span><span class="w"> </span><span class="kn">import</span> <span class="n">mal</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">mal</span><span class="o">.</span><span class="n">normalize_relation_type</span><span class="p">(</span><span class="s2">&quot;Side Story&quot;</span><span class="p">))</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">mal</span><span class="o">.</span><span class="n">normalize_relation_type</span><span class="p">(</span><span class="s2">&quot;full-story&quot;</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Also run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">cd</span><span class="w"> </span>src
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise<span class="w"> </span>-k<span class="w"> </span>normalize_relation
+</span></code></pre></div>
+<h2 id="9-graph-extraction-snapshot-check">9) Graph extraction / snapshot check<a class="headerlink" href="#9-graph-extraction-snapshot-check" title="Permanent link">&para;</a></h2>
+<p>If anchors or continuity are suspicious, inspect snapshot fields directly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_snapshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseSnapshotService</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">snapshot</span> <span class="o">=</span> <span class="n">AnimeFranchiseSnapshotService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;has_series_line:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">has_series_line</span><span class="p">)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;canonical_root_media_id:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">canonical_root_media_id</span><span class="p">)</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;fallback_anchor_media_id:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">fallback_anchor_media_id</span><span class="p">)</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;series_line:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">media_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">series_line</span><span class="p">])</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;direct_anchors:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">media_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">direct_anchors</span><span class="p">])</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;direct_candidates:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">snapshot</span><span class="o">.</span><span class="n">direct_candidates</span><span class="p">))</span>
+</span></code></pre></div>
+<h2 id="10-legacy-related-de-duplication-check">10) Legacy related de-duplication check<a class="headerlink" href="#10-legacy-related-de-duplication-check" title="Permanent link">&para;</a></h2>
+<p>When grouping is enabled, page related items should not duplicate franchise items via <code>related_anime</code>.</p>
+<p>Run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">cd</span><span class="w"> </span>src
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.views.test_media_details<span class="w"> </span>-k<span class="w"> </span>related_anime
+</span></code></pre></div>
+<h2 id="11-cache-and-refresh-checks">11) Cache and refresh checks<a class="headerlink" href="#11-cache-and-refresh-checks" title="Permanent link">&para;</a></h2>
+<p>For stale grouping output:</p>
+<ul>
+<li>compare normal build vs <code>refresh_cache=True</code> path at service/snapshot level,</li>
+<li>run snapshot cache tests:</li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">cd</span><span class="w"> </span>src
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_snapshot<span class="w"> </span>-k<span class="w"> </span>cache
+</span></code></pre></div>
+<h2 id="12-suggested-troubleshooting-order">12) Suggested troubleshooting order<a class="headerlink" href="#12-suggested-troubleshooting-order" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Reproduce with targeted test(s).</li>
+<li>Inspect snapshot semantics.</li>
+<li>Inspect pipeline payload (adapter output).</li>
+<li>Inspect <code>placement_trace</code> for overrides.</li>
+<li>Inspect view-level enrichment/output shaping.</li>
+<li>Confirm template is only displaying provided context.</li>
+<li>Validate cache freshness if behavior appears inconsistent.</li>
+</ol>
+<h2 id="complete-mal-anime-franchise-payload-cache">Complete MAL anime franchise payload cache<a class="headerlink" href="#complete-mal-anime-franchise-payload-cache" title="Permanent link">&para;</a></h2>
+<p>Yamtrack keeps the existing MAL anime metadata cache for individual anime records and adds a separate long-lived cache for the assembled franchise payload. The payload cache uses <code>mal_anime_franchise_&lt;id&gt;</code> plus <code>:meta</code>, <code>:queue_lock</code>, and <code>:task_lock</code> side keys. It stores a schema-versioned, user-agnostic dict that can be enriched during page rendering.</p>
+<p>Detail pages no longer synchronously build a missing franchise payload. On a cache miss, the page keeps <code>media.related.related_anime</code> visible and queues <code>build_mal_anime_franchise_payload</code> in Celery. On a cache hit, the cached payload is enriched with the current user's data and <code>related_anime</code> is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.</p>
+<h3 id="canonical-franchise-aliases">Canonical franchise aliases<a class="headerlink" href="#canonical-franchise-aliases" title="Permanent link">&para;</a></h3>
+<p>After a complete, non-truncated Celery build, Yamtrack may store lightweight alias keys so entries from the same franchise can reuse the canonical complete payload. Alias keys use <code>mal_anime_franchise_alias_&lt;id&gt;</code> and point to a canonical <code>mal_anime_franchise_&lt;canonical_id&gt;</code> payload. Aliases are ignored if the canonical payload is missing, invalid, or does not explicitly cover the requested media ID.</p>
+<p>Aliases are only created for complete, non-truncated payloads when <code>ANIME_FRANCHISE_CACHE_ALIASES_ENABLED</code> is enabled. Aliasable IDs include the main series line and continuity-extra entries (<code>continuity_extras</code> / Main Story Extras). The build seed is aliasable only when it belongs to one of those aliasable sets, or when it is the canonical media ID itself. Other secondary sections remain covered for diagnostics but are not alias targets by default.</p>
+<p>If a build log shows <code>media_id=&lt;seed&gt; canonical_media_id=&lt;canonical&gt; truncated=False</code> but reopening <code>&lt;seed&gt;</code> still logs a cache miss, inspect <code>mal_anime_franchise_alias_&lt;seed&gt;</code> and <code>aliasable_media_ids</code> in the canonical payload. If the seed is present only in a non-aliasable section such as <code>specials</code>, <code>spin_offs</code>, <code>alternatives</code>, or <code>related_series</code>, the cache miss may be intentional unless that section is later promoted into the alias allowlist.</p>
+<p>If an alias is created for an ID, any older direct payload for that aliased ID is removed so the canonical payload can be used. Broken or stale aliases are ignored and cleaned up safely.</p>
+<p>Alias key: <code>mal_anime_franchise_alias_&lt;id&gt;</code>
+Alias index: <code>mal_anime_franchise_&lt;canonical_id&gt;:aliases</code></p>
+<p>Useful settings:</p>
+<ul>
+<li><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code> controls the Redis TTL for payload and meta entries.</li>
+<li><code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code> controls logical freshness before stale-while-refresh.</li>
+<li><code>ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS</code> and <code>ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS</code> throttle rebuild attempts.</li>
+<li><code>ANIME_FRANCHISE_QUEUE_LOCK_MINUTES</code> prevents duplicate task enqueueing.</li>
+<li><code>ANIME_FRANCHISE_TASK_LOCK_MINUTES</code> prevents concurrent worker builds.</li>
+<li><code>ANIME_FRANCHISE_MAX_NODES</code> limits graph discovery during build and produces a partial payload when reached.</li>
+<li><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code> invalidates incompatible cached payload shapes.</li>
+</ul>
+<h3 id="debug-keys-and-logs">Debug keys and logs<a class="headerlink" href="#debug-keys-and-logs" title="Permanent link">&para;</a></h3>
+<p>For MAL anime ID <code>223</code>, inspect the complete franchise cache with these keys:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Payload key: mal_anime_franchise_223
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Meta key: mal_anime_franchise_223:meta
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>Queue lock: mal_anime_franchise_223:queue_lock
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>Task lock: mal_anime_franchise_223:task_lock
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>Alias key: mal_anime_franchise_alias_&lt;id&gt;
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>Alias index: mal_anime_franchise_223:aliases
+</span></code></pre></div>
+<p>Expected log messages include:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>MAL anime franchise cache miss for media_id=&lt;id&gt;
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>MAL anime franchise cache hit for media_id=&lt;id&gt;
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>MAL anime franchise build already queued for media_id=&lt;id&gt;
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>MAL anime franchise build already running for media_id=&lt;id&gt;
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>MAL anime franchise build completed for media_id=&lt;id&gt;
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>MAL anime franchise build failed for media_id=&lt;id&gt;
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>MAL anime franchise build truncated for media_id=&lt;id&gt;
+</span></code></pre></div>
+<p>If the payload is absent or schema-incompatible, the detail page should keep <code>related_anime</code> visible and enqueue a background rebuild when cooldowns allow. If a valid payload is stale, the page should still render it and only refresh in the background.</p>
+<p>The complete payload is validated before rendering. If validation fails, Yamtrack ignores the cached payload, keeps the lightweight <code>related_anime</code> fallback visible, and queues a rebuild when cooldowns and locks allow. A structurally valid but empty payload also keeps <code>related_anime</code> visible because there is no displayable franchise section to de-duplicate.</p>
+<p><code>save_payload(...)</code> rejects non JSON-safe values and user-specific keys such as <code>item</code>, <code>media</code>, <code>progress</code>, <code>status</code>, <code>user_id</code>, or rendered HTML. If a Celery build produces an invalid payload, the task records the error in meta and preserves the previous successful payload. Build metadata uses the public <code>AnimeFranchiseGraphBuilder.node_count</code> API rather than reading graph internals.</p>
+<p>Cached franchise payloads are validated on both write and read. Payloads that are structurally valid but contain user-specific keys or non JSON-safe values are ignored at read time, preserving the direct MAL <code>related_anime</code> fallback and allowing a background rebuild when cooldowns permit.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2022 - 2026 FuzzyGrim
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/FuzzyGrim/Yamtrack" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["content.action.edit","content.action.view","content.code.annotate","content.code.copy","header.autohide","navigation.footer","navigation.indexes","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","search.share","search.suggest","toc.follow","toc.integrate"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"default":"release","provider":"mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.6e5f0216.min.js"></script>
+      
+    
+  </body>
+</html>
