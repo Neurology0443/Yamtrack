@@ -5,8 +5,10 @@ from __future__ import annotations
 from app.services.anime_franchise_ui.actions import place_in, set_candidate_metadata
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
 
-
-LONG_TV_SPIN_OFF_MIN_RUNTIME_MINUTES = 30
+SHORT_SIDE_STORY_MAX_RUNTIME_MINUTES = 15
+TV_SPIN_OFF_MIN_EPISODES = 6
+TV_SPIN_OFF_MIN_RUNTIME_MINUTES = 20
+MOVIE_SPIN_OFF_MIN_RUNTIME_MINUTES = 60
 
 
 def _is_related_series_candidate(candidate, _context) -> bool:
@@ -26,17 +28,33 @@ def _is_short_side_story_special(candidate, _context) -> bool:
         candidate.section_key == "specials"
         and "side_story" in candidate.relation_types
         and candidate.runtime_minutes is not None
-        and candidate.runtime_minutes < 15
+        and candidate.runtime_minutes < SHORT_SIDE_STORY_MAX_RUNTIME_MINUTES
     )
 
 
-def _is_long_tv_spin_off_related(candidate, _context) -> bool:
+def _is_tv_spin_off_series(candidate) -> bool:
     return (
-        candidate.section_key in {"related_series", "alternatives"}
-        and "spin_off" in candidate.relation_types
-        and candidate.media_type == "tv"
+        candidate.media_type == "tv"
+        and candidate.episode_count is not None
+        and candidate.episode_count >= TV_SPIN_OFF_MIN_EPISODES
         and candidate.runtime_minutes is not None
-        and candidate.runtime_minutes > LONG_TV_SPIN_OFF_MIN_RUNTIME_MINUTES
+        and candidate.runtime_minutes >= TV_SPIN_OFF_MIN_RUNTIME_MINUTES
+    )
+
+
+def _is_movie_spin_off(candidate) -> bool:
+    return (
+        candidate.media_type == "movie"
+        and candidate.runtime_minutes is not None
+        and candidate.runtime_minutes >= MOVIE_SPIN_OFF_MIN_RUNTIME_MINUTES
+    )
+
+
+def _is_spin_off_to_promote(candidate, _context) -> bool:
+    return (
+        candidate.section_key == "related_series"
+        and "spin_off" in candidate.relation_types
+        and (_is_tv_spin_off_series(candidate) or _is_movie_spin_off(candidate))
     )
 
 
@@ -84,8 +102,8 @@ SecondaryRefinementRules = RulePack(
             ),
         ),
         Rule(
-            key="long_tv_spinoff_to_spin_offs",
-            when=_is_long_tv_spin_off_related,
+            key="spin_off_to_spin_offs",
+            when=_is_spin_off_to_promote,
             actions=(place_in("spin_offs"),),
         ),
     ),

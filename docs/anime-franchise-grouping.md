@@ -78,7 +78,7 @@ Preset order (`anime_franchise_ui/presets/default.py`):
 
 - Packs run in order.
 - `base_placement` provides initial section hypothesis.
-- `secondary_refinement_rules` refines coarse secondary placement after `relation_rules`: it can reclassify TV side stories and very short side stories from `specials` to `related_series`, then refine `related_series` into `alternatives` and `spin_offs` before format filtering.
+- `secondary_refinement_rules` refines coarse secondary placement after `relation_rules`: it can reclassify TV side stories and very short side stories from `specials` to `related_series`, then refine `related_series` into `alternatives` and substantial UI `spin_offs` before format filtering.
 - Section ordering intent keeps `spin_offs` first, then `alternatives`, then residual `related_series`.
 - Later packs may override `candidate.section_key`.
 - `section_rules` is metadata-only (title/order/hidden policy), no candidate placement actions.
@@ -150,12 +150,19 @@ Internal compatibility/filtered section:
 Current policy is intentionally conservative and maintainable:
 
 - coarse relation-driven placement,
-- related-series refinement for long TV spin-offs and alternatives,
+- related-series refinement for substantial UI spin-offs and alternatives,
 - anchor filtering for direct/fallback relevance,
 - conservative format exclusions,
 - section metadata stabilization pass.
 
 `related_series` remains the fallback residual bucket for related entries that are not captured by these refinements.
+
+The UI `spin_offs` section intentionally promotes only substantial MAL `spin_off` relations:
+
+- TV spin-offs with enough episodes and standard per-episode runtime.
+- Long movie spin-offs.
+
+TV spin-offs require a known episode count >= 6 and known runtime >= 20 minutes per episode. Movie spin-offs require a known runtime >= 60 minutes. Incomplete or smaller `spin_off` entries remain in `related_series`. This is only a UI classification rule and does not affect automatic import profiles.
 
 This is a solid base, but not presented as “fully refined for every MAL edge case”.
 
