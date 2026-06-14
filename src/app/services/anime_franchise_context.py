@@ -114,6 +114,7 @@ def prepare_anime_franchise_context(
                             for entry in _copy_entries(section.get("entries", []))
                         ],
                         media_metadata,
+                        series_entries=prepared_series_entries,
                     ),
                     section_key,
                 ),
