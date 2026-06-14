@@ -57,19 +57,9 @@ def _format_footer_relation_label(relation_type: str | None) -> str | None:
     return relation_type.replace("_", " ").title()
 
 
-def _build_footer_relation_tooltip(
-    relation_type: str | None,
-    source_title: str | None,
-) -> str:
-    """Build a mono-relation tooltip for the displayed footer relation."""
-    if not relation_type:
-        return ""
-    if not source_title:
-        return ""
-    prefix = RELATION_TOOLTIP_PREFIX_MAP.get(relation_type)
-    if not prefix:
-        return ""
-    return f"{prefix}: {source_title}"
+def _build_footer_relation_tooltip(source_title: str | None) -> str:
+    """Build a tooltip showing only the resolved relation source title."""
+    return source_title or ""
 
 
 def _build_series_title_map(series_entries: list[dict] | None) -> dict[str, str]:
@@ -160,10 +150,7 @@ def enrich_franchise_entries_for_footer(
                     footer_relation_value,
                 ),
                 "footer_relation_active": bool(direct_relation_value),
-                "footer_relation_tooltip": _build_footer_relation_tooltip(
-                    footer_relation_value,
-                    source_title,
-                ),
+                "footer_relation_tooltip": _build_footer_relation_tooltip(source_title),
             }
         )
     return enriched_entries

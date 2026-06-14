@@ -32,7 +32,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertEqual(enriched[0]["footer_relation_value"], "sequel")
         self.assertEqual(enriched[0]["footer_relation_label"], "Sequel")
         self.assertTrue(enriched[0]["footer_relation_active"])
-        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Sequel to: Season 1")
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
 
     def test_relation_tooltip_for_inactive_badge(self):
         entries = [
@@ -57,7 +57,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         )
 
         self.assertFalse(enriched[0]["footer_relation_active"])
-        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Sequel to: Season 1")
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
 
     def test_relation_tooltip_is_empty_without_resolved_source(self):
         entries = [
@@ -77,7 +77,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(enriched[0]["footer_relation_tooltip"], "")
 
-    def test_relation_tooltip_is_empty_for_unknown_relation(self):
+    def test_relation_tooltip_shows_source_for_unknown_relation(self):
         entries = [
             {
                 "media_id": 200,
@@ -93,7 +93,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
             series_entries=[{"media_id": 100, "title": "Season 1"}],
         )
 
-        self.assertEqual(enriched[0]["footer_relation_tooltip"], "")
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
 
     def test_relation_tooltip_for_active_badge_uses_current_series_label(self):
         entries = [
@@ -132,7 +132,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertEqual(enriched[0]["footer_relation_value"], "side_story")
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Side story from: Season 1",
+            "Season 1",
         )
 
     def test_relation_tooltip_for_active_badge_falls_back_to_season_title(self):
@@ -163,7 +163,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Prequel to: Season 4",
+            "Season 4",
         )
 
     def test_relation_tooltip_for_active_badge_falls_back_when_not_in_series_line(self):
@@ -200,7 +200,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertTrue(enriched[0]["footer_relation_active"])
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Side story from: Movie",
+            "Movie",
         )
 
     def test_relation_tooltip_for_active_badge_uses_current_page_title(self):
@@ -231,7 +231,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertTrue(enriched[0]["footer_relation_active"])
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Prequel to: Current Page Season 4",
+            "Current Page Season 4",
         )
 
     def test_relation_tooltip_for_active_badge_is_empty_without_current_title(self):
@@ -285,7 +285,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Side story from: Season 1",
+            "Season 1",
         )
 
     def test_relation_tooltip_follows_displayed_relation(self):
@@ -315,5 +315,5 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertEqual(enriched[0]["footer_relation_value"], "prequel")
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Prequel to: Current Season 4",
+            "Current Season 4",
         )
