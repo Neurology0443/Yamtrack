@@ -89,7 +89,7 @@ class AnimeFranchiseContextTests(TestCase):
         mock_footer,
     ):
         original = deepcopy(self.payload)
-        mock_footer.side_effect = lambda entries, media_metadata: entries  # noqa: ARG005
+        mock_footer.side_effect = lambda entries, media_metadata, **kwargs: entries  # noqa: ARG005
         mock_enrich_items.side_effect = lambda request, items, section: [  # noqa: ARG005
             {"item": item, "media": None} for item in items
         ]
@@ -106,7 +106,7 @@ class AnimeFranchiseContextTests(TestCase):
         mock_footer,
     ):
         original = deepcopy(self.payload)
-        mock_footer.side_effect = lambda entries, media_metadata: entries  # noqa: ARG005
+        mock_footer.side_effect = lambda entries, media_metadata, **kwargs: entries  # noqa: ARG005
         mock_enrich_items.side_effect = lambda request, items, section: [  # noqa: ARG005
             {"item": {**item, "viewer": request.user.username}, "media": None}
             for item in items
@@ -174,7 +174,7 @@ class AnimeFranchiseContextTests(TestCase):
                 },
             ],
         }
-        mock_footer.side_effect = lambda entries, media_metadata: entries  # noqa: ARG005
+        mock_footer.side_effect = lambda entries, media_metadata, **kwargs: entries  # noqa: ARG005
         mock_enrich_items.side_effect = lambda request, items, section: [  # noqa: ARG005
             {"item": item, "media": None} for item in items
         ]
@@ -200,7 +200,7 @@ class AnimeFranchiseContextTests(TestCase):
     ):
         payload = deepcopy(self.payload)
         payload["sections"].append({"entries": [{"media_id": "999"}]})
-        mock_footer.side_effect = lambda entries, media_metadata: entries  # noqa: ARG005
+        mock_footer.side_effect = lambda entries, media_metadata, **kwargs: entries  # noqa: ARG005
         mock_enrich_items.side_effect = lambda request, items, section: [  # noqa: ARG005
             {"item": item, "media": None} for item in items
         ]
