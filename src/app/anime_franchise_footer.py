@@ -63,7 +63,7 @@ def _build_footer_relation_tooltip(source_title: str | None) -> str:
 
 
 def _build_series_title_map(series_entries: list[dict] | None) -> dict[str, str]:
-    """Map series-line media IDs to their display-friendly title."""
+    """Map series-line media IDs to their real title, falling back to display labels."""
     title_map = {}
     if not series_entries:
         return title_map
@@ -73,7 +73,7 @@ def _build_series_title_map(series_entries: list[dict] | None) -> dict[str, str]
         media_id = entry.get("media_id")
         if media_id is None:
             continue
-        title = entry.get("series_label") or entry.get("title")
+        title = entry.get("title") or entry.get("series_label")
         if not title:
             continue
         title_map[str(media_id)] = title
@@ -95,7 +95,7 @@ def _resolve_current_series_title(
     media_metadata: dict,
     series_titles_by_media_id: dict[str, str],
 ) -> str | None:
-    """Resolve the current page title from series-line display labels."""
+    """Resolve the current page title from series-line real titles or labels."""
     media_id = media_metadata.get("media_id")
     if media_id is None:
         return None

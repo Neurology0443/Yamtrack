@@ -57,7 +57,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         )
 
         self.assertFalse(enriched[0]["footer_relation_active"])
-        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Generic Full Title")
 
     def test_relation_tooltip_is_empty_without_resolved_source(self):
         entries = [
@@ -95,7 +95,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
 
-    def test_relation_tooltip_for_active_badge_uses_current_series_label(self):
+    def test_relation_tooltip_for_active_badge_uses_current_series_title(self):
         entries = [
             {
                 "media_id": 200,
@@ -132,7 +132,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertEqual(enriched[0]["footer_relation_value"], "side_story")
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Season 1",
+            "Generic Full Title",
         )
 
     def test_relation_tooltip_for_active_badge_falls_back_to_season_title(self):
@@ -260,7 +260,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertTrue(enriched[0]["footer_relation_active"])
         self.assertEqual(enriched[0]["footer_relation_tooltip"], "")
 
-    def test_relation_tooltip_prefers_series_label(self):
+    def test_relation_tooltip_prefers_real_title_over_series_label_existing_case(self):
         entries = [
             {
                 "media_id": 200,
@@ -285,8 +285,61 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
-            "Season 1",
+            "Dungeon ni Deai wo Motomeru no wa Machigatteiru Darou ka",
         )
+
+    def test_relation_tooltip_prefers_real_title_over_series_label(self):
+        entries = [
+            {
+                "media_id": 60012,
+                "title": "Re:Zero kara Hajimeru Break Time 3rd Season",
+                "relation_type": "spin_off",
+                "linked_series_line_media_id": 54857,
+            }
+        ]
+        series_entries = [
+            {
+                "media_id": 54857,
+                "title": "Re:Zero kara Hajimeru Isekai Seikatsu 3rd Season",
+                "series_label": "Season 4",
+            }
+        ]
+
+        enriched = enrich_franchise_entries_for_footer(
+            entries,
+            {},
+            series_entries=series_entries,
+        )
+
+        self.assertFalse(enriched[0]["footer_relation_active"])
+        self.assertEqual(
+            enriched[0]["footer_relation_tooltip"],
+            "Re:Zero kara Hajimeru Isekai Seikatsu 3rd Season",
+        )
+
+    def test_relation_tooltip_falls_back_to_series_label_without_title(self):
+        entries = [
+            {
+                "media_id": 200,
+                "title": "Special",
+                "relation_type": "sequel",
+                "linked_series_line_media_id": 100,
+            }
+        ]
+        series_entries = [
+            {
+                "media_id": 100,
+                "series_label": "Season 1",
+            }
+        ]
+
+        enriched = enrich_franchise_entries_for_footer(
+            entries,
+            {},
+            series_entries=series_entries,
+        )
+
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Season 1")
 
     def test_relation_tooltip_follows_displayed_relation(self):
         entries = [
