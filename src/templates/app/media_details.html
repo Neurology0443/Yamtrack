@@ -582,7 +582,7 @@
                                   data-franchise-badge-value="{{ result.item.footer_relation_value }}"
                                   data-franchise-badge-active="{% if result.item.footer_relation_active %}true{% else %}false{% endif %}">{{ result.item.footer_relation_label }}</span>
                             {% if result.item.footer_relation_tooltip %}
-                                <span class="pointer-events-none absolute top-full right-0 z-20 mt-2 invisible opacity-0 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs shadow-xl transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 {% if result.item.footer_relation_active %}franchise-relation-tooltip-active{% else %}franchise-relation-tooltip-inactive{% endif %}">
+                                <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 z-20 mt-2 invisible opacity-0 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs shadow-xl transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 {% if result.item.footer_relation_active %}franchise-relation-tooltip-active{% else %}franchise-relation-tooltip-inactive{% endif %}">
                                   {{ result.item.footer_relation_tooltip }}
                                 </span>
                               </span>
