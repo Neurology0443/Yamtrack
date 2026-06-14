@@ -652,7 +652,7 @@
 <ul>
 <li>Packs run in order.</li>
 <li><code>base_placement</code> provides initial section hypothesis.</li>
-<li><code>secondary_refinement_rules</code> refines coarse secondary placement after <code>relation_rules</code>: it can reclassify TV side stories and very short side stories from <code>specials</code> to <code>related_series</code>, then refine <code>related_series</code> into <code>alternatives</code> and <code>spin_offs</code> before format filtering.</li>
+<li><code>secondary_refinement_rules</code> refines coarse secondary placement after <code>relation_rules</code>: it can reclassify TV side stories and very short side stories from <code>specials</code> to <code>related_series</code>, then refine <code>related_series</code> into <code>alternatives</code> and substantial UI <code>spin_offs</code> before format filtering.</li>
 <li>Section ordering intent keeps <code>spin_offs</code> first, then <code>alternatives</code>, then residual <code>related_series</code>.</li>
 <li>Later packs may override <code>candidate.section_key</code>.</li>
 <li><code>section_rules</code> is metadata-only (title/order/hidden policy), no candidate placement actions.</li>
@@ -720,12 +720,18 @@
 <p>Current policy is intentionally conservative and maintainable:</p>
 <ul>
 <li>coarse relation-driven placement,</li>
-<li>related-series refinement for long TV spin-offs and alternatives,</li>
+<li>related-series refinement for substantial UI spin-offs and alternatives,</li>
 <li>anchor filtering for direct/fallback relevance,</li>
 <li>conservative format exclusions,</li>
 <li>section metadata stabilization pass.</li>
 </ul>
 <p><code>related_series</code> remains the fallback residual bucket for related entries that are not captured by these refinements.</p>
+<p>The UI <code>spin_offs</code> section intentionally promotes only substantial MAL <code>spin_off</code> relations:</p>
+<ul>
+<li>TV spin-offs with enough episodes and standard per-episode runtime.</li>
+<li>Long movie spin-offs.</li>
+</ul>
+<p>TV spin-offs require a known episode count &gt;= 6 and known runtime &gt;= 20 minutes per episode. Movie spin-offs require a known runtime &gt;= 60 minutes. Incomplete or smaller <code>spin_off</code> entries remain in <code>related_series</code>. This is only a UI classification rule and does not affect automatic import profiles.</p>
 <p>This is a solid base, but not presented as “fully refined for every MAL edge case”.</p>
 <h2 id="9-what-is-principal-vs-compatibility-vs-transitional">9) What is principal vs compatibility vs transitional<a class="headerlink" href="#9-what-is-principal-vs-compatibility-vs-transitional" title="Permanent link">&para;</a></h2>
 <ul>
