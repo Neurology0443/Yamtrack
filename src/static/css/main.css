@@ -3532,3 +3532,27 @@
     }
   }
 }
+
+.franchise-relation-badge-active {
+  background: rgba(17, 24, 39, 0.98);
+  color: #f8fafc;
+  border: 1px solid rgba(129, 140, 248, 0.70);
+}
+
+.franchise-relation-tooltip-active {
+  background: rgba(17, 24, 39, 0.98);
+  color: #f8fafc;
+  border: 1px solid rgba(129, 140, 248, 0.70);
+}
+
+.franchise-relation-badge-inactive {
+  background: rgba(17, 24, 39, 0.80);
+  color: rgba(248, 250, 252, 0.80);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
+.franchise-relation-tooltip-inactive {
+  background: rgba(17, 24, 39, 0.80);
+  color: rgba(248, 250, 252, 0.80);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
