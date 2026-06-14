@@ -3546,13 +3546,13 @@
 }
 
 .franchise-relation-badge-inactive {
-  background: rgba(17, 24, 39, 0.45);
-  color: rgba(248, 250, 252, 0.72);
+  background: rgba(17, 24, 39, 0.80);
+  color: rgba(248, 250, 252, 0.80);
   border: 1px solid rgba(148, 163, 184, 0.45);
 }
 
 .franchise-relation-tooltip-inactive {
-  background: rgba(17, 24, 39, 0.45);
-  color: rgba(248, 250, 252, 0.72);
+  background: rgba(17, 24, 39, 0.80);
+  color: rgba(248, 250, 252, 0.80);
   border: 1px solid rgba(148, 163, 184, 0.45);
 }
