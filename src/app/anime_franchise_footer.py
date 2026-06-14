@@ -48,33 +48,36 @@ def _build_footer_relation_tooltip(source_title: str | None) -> str:
     return source_title or ""
 
 
-def _build_series_title_map(series_entries: list[dict] | None) -> dict[str, str]:
-    """Map series-line media IDs to their real title, falling back to display labels."""
+def _build_title_map(*entry_groups: list[dict] | None) -> dict[str, str]:
+    """Map all available franchise media IDs to displayable titles."""
     title_map = {}
-    if not series_entries:
-        return title_map
-    for entry in series_entries:
-        if not isinstance(entry, dict):
+    for entries in entry_groups:
+        if not entries:
             continue
-        media_id = entry.get("media_id")
-        if media_id is None:
-            continue
-        title = entry.get("title") or entry.get("series_label")
-        if not title:
-            continue
-        title_map[str(media_id)] = title
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            media_id = entry.get("media_id")
+            if media_id is None:
+                continue
+            title = entry.get("title") or entry.get("series_label")
+            if not title:
+                continue
+            title_map[str(media_id)] = title
     return title_map
 
 
 def _resolve_footer_relation_source_title(
     entry: dict,
-    series_titles_by_media_id: dict[str, str],
+    titles_by_media_id: dict[str, str],
 ) -> str | None:
-    """Resolve the displayed footer relation source from series-line entries."""
-    media_id = entry.get("linked_series_line_media_id")
+    """Resolve the displayed footer relation source from the real source ID."""
+    media_id = entry.get("relation_source_media_id") or entry.get(
+        "linked_series_line_media_id",
+    )
     if media_id is None:
         return None
-    return series_titles_by_media_id.get(str(media_id))
+    return titles_by_media_id.get(str(media_id))
 
 
 def _resolve_current_series_title(
@@ -102,12 +105,13 @@ def enrich_franchise_entries_for_footer(
     media_metadata: dict,
     *,
     series_entries: list[dict] | None = None,
+    all_entries: list[dict] | None = None,
 ) -> list[dict]:
     """Attach page-local footer presentation fields to franchise entries."""
     direct_relation_map = _build_page_local_relation_map(media_metadata)
-    series_titles_by_media_id = _build_series_title_map(series_entries)
+    titles_by_media_id = _build_title_map(series_entries, entries, all_entries)
     current_page_title = (
-        _resolve_current_series_title(media_metadata, series_titles_by_media_id)
+        _resolve_current_series_title(media_metadata, titles_by_media_id)
         or _resolve_current_page_title(media_metadata)
     )
     enriched_entries = []
@@ -122,7 +126,7 @@ def enrich_franchise_entries_for_footer(
         else:
             source_title = _resolve_footer_relation_source_title(
                 entry,
-                series_titles_by_media_id,
+                titles_by_media_id,
             )
         enriched_entries.append(
             {

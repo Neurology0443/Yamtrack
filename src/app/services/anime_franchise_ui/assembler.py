@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 from .candidates import UiCandidate
 
 if TYPE_CHECKING:
-    from app.services.anime_franchise_types import AnimeRelation
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+    from app.services.anime_franchise_types import AnimeRelation
 
 
 class UiCandidateAssembler:
@@ -27,7 +27,9 @@ class UiCandidateAssembler:
 
     def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:
         series_ids = {node.media_id for node in snapshot.series_line}
-        series_index = {node.media_id: idx for idx, node in enumerate(snapshot.series_line)}
+        series_index = {
+            node.media_id: idx for idx, node in enumerate(snapshot.series_line)
+        }
         root_media_id = snapshot.root_node.media_id
 
         promoted_relations = snapshot.promoted_continuity_candidates or []
@@ -62,12 +64,24 @@ class UiCandidateAssembler:
             if node is None:
                 continue
 
-            relation_types = self._ordered_unique([relation.relation_type for relation in relations])
-            source_media_ids = self._ordered_unique([relation.source_media_id for relation in relations])
-            series_line_sources = [source_id for source_id in source_media_ids if source_id in series_ids]
-            root_sources = [source_id for source_id in source_media_ids if source_id == root_media_id]
+            relation_types = self._ordered_unique(
+                [relation.relation_type for relation in relations],
+            )
+            source_media_ids = self._ordered_unique(
+                [relation.source_media_id for relation in relations],
+            )
+            series_line_sources = [
+                source_id for source_id in source_media_ids if source_id in series_ids
+            ]
+            root_sources = [
+                source_id
+                for source_id in source_media_ids
+                if source_id == root_media_id
+            ]
             non_series_sources = [
-                source_id for source_id in source_media_ids if source_id not in series_ids
+                source_id
+                for source_id in source_media_ids
+                if source_id not in series_ids
             ]
 
             promoted_metadata = promoted_target_metadata.get(target_media_id, {})
@@ -79,6 +93,11 @@ class UiCandidateAssembler:
             )
             if linked_series_line_media_id is None and not snapshot.has_series_line:
                 linked_series_line_media_id = snapshot.fallback_anchor_media_id
+            relation_source_media_id = self._resolve_relation_source_media_id(
+                relations=relations,
+                series_ids=series_ids,
+                linked_series_line_media_id=linked_series_line_media_id,
+            )
             linked_root_media_id = root_media_id if root_sources else None
             is_promoted_continuity = any(
                 (
@@ -107,6 +126,7 @@ class UiCandidateAssembler:
                         if linked_series_line_media_id is not None
                         else None
                     ),
+                    relation_source_media_id=relation_source_media_id,
                     linked_root_media_id=linked_root_media_id,
                     relation_types=relation_types,
                     source_media_ids=source_media_ids,
@@ -116,14 +136,20 @@ class UiCandidateAssembler:
                     is_current=node.media_id == snapshot.root_node.media_id,
                     metadata={
                         "is_promoted_continuity": is_promoted_continuity,
-                        "promoted_from_series_line_media_id": promoted_metadata.get("series_anchor_media_id"),
+                        "promoted_from_series_line_media_id": promoted_metadata.get(
+                            "series_anchor_media_id",
+                        ),
                         "promoted_depth": promoted_metadata.get("depth"),
                         "origins": [
                             {
                                 "source_media_id": relation.source_media_id,
                                 "relation_type": relation.relation_type,
-                                "is_from_series_line": relation.source_media_id in series_ids,
-                                "is_from_root_node": relation.source_media_id == root_media_id,
+                                "is_from_series_line": (
+                                    relation.source_media_id in series_ids
+                                ),
+                                "is_from_root_node": (
+                                    relation.source_media_id == root_media_id
+                                ),
                             }
                             for relation in relations
                         ],
@@ -136,6 +162,32 @@ class UiCandidateAssembler:
     @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
+
+    def _resolve_relation_source_media_id(
+        self,
+        *,
+        relations: list[AnimeRelation],
+        series_ids: set[str],
+        linked_series_line_media_id: str | None,
+    ) -> str | None:
+        """Resolve the real relation source separately from the UI anchor."""
+        source_ids = self._ordered_unique(
+            [relation.source_media_id for relation in relations],
+        )
+
+        non_series_sources = [
+            source_id for source_id in source_ids if source_id not in series_ids
+        ]
+        if non_series_sources:
+            return non_series_sources[0]
+
+        series_sources = [
+            source_id for source_id in source_ids if source_id in series_ids
+        ]
+        if series_sources:
+            return series_sources[0]
+
+        return linked_series_line_media_id
 
     @staticmethod
     def _resolve_best_series_anchor(
@@ -192,7 +244,10 @@ class UiCandidateAssembler:
             target_media_id, anchor_media_id, depth = queue.popleft()
             current = result.get(target_media_id)
             if current is not None:
-                current_anchor_index = series_index.get(str(current["series_anchor_media_id"]), 999999)
+                current_anchor_index = series_index.get(
+                    str(current["series_anchor_media_id"]),
+                    999999,
+                )
                 candidate_anchor_index = series_index.get(anchor_media_id, 999999)
                 current_rank = (current_anchor_index, int(current["depth"]))
                 candidate_rank = (candidate_anchor_index, depth)

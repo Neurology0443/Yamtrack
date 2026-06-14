@@ -77,8 +77,15 @@ class ViewModelAdapter:
                             "start_date": candidate.start_date,
                             "runtime_minutes": candidate.runtime_minutes,
                             "episode_count": candidate.episode_count,
-                            "linked_series_line_media_id": candidate.linked_series_line_media_id,
-                            "linked_series_line_index": candidate.linked_series_line_index,
+                            "linked_series_line_media_id": (
+                                candidate.linked_series_line_media_id
+                            ),
+                            "linked_series_line_index": (
+                                candidate.linked_series_line_index
+                            ),
+                            "relation_source_media_id": (
+                                candidate.relation_source_media_id
+                            ),
                             "is_current": candidate.is_current,
                             "badges": list(candidate.badges),
                         }

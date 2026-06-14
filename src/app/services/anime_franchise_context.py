@@ -94,8 +94,20 @@ def prepare_anime_franchise_context(
             start=1,
         )
     ]
-    franchise_sections = []
+    copied_sections = []
+    all_footer_entries = [*prepared_series_entries]
     for section in franchise_payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        copied_entries = [
+            _with_current_entry(entry, current_media_id)
+            for entry in _copy_entries(section.get("entries", []))
+        ]
+        copied_sections.append((section, copied_entries))
+        all_footer_entries.extend(copied_entries)
+
+    franchise_sections = []
+    for section, section_entries in copied_sections:
         if not isinstance(section, dict):
             continue
         section_key = section.get("key")
@@ -109,12 +121,10 @@ def prepare_anime_franchise_context(
                 "entries": helpers.enrich_items_with_user_data(
                     request,
                     enrich_franchise_entries_for_footer(
-                        [
-                            _with_current_entry(entry, current_media_id)
-                            for entry in _copy_entries(section.get("entries", []))
-                        ],
+                        section_entries,
                         media_metadata,
                         series_entries=prepared_series_entries,
+                        all_entries=all_footer_entries,
                     ),
                     section_key,
                 ),
