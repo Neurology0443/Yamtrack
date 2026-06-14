@@ -1,3 +1,4 @@
+# ruff: noqa: D101, D102
 from __future__ import annotations
 
 from datetime import date
@@ -24,12 +25,12 @@ from app.services.anime_franchise_ui.predicates import (
     episode_count_lt,
     episode_count_lte,
     relation_type_is,
+    run_once,
     runtime_minutes_eq,
     runtime_minutes_gt,
     runtime_minutes_gte,
     runtime_minutes_lt,
     runtime_minutes_lte,
-    run_once,
 )
 from app.services.anime_franchise_ui.rule_types import (
     CompiledSection,
@@ -43,9 +44,15 @@ from app.services.anime_franchise_ui.series import SeriesBuilder
 
 class AnimeFranchiseUiPipelineTests(TestCase):
     def _snapshot(self):
-        series_1 = AnimeNode("100", "Season 1", "mal", "tv", "img-100", date(2020, 1, 1), [])
-        series_2 = AnimeNode("200", "Season 2", "mal", "tv", "img-200", date(2021, 1, 1), [])
-        movie = AnimeNode("300", "Movie", "mal", "movie", "img-300", date(2022, 1, 1), [])
+        series_1 = AnimeNode(
+            "100", "Season 1", "mal", "tv", "img-100", date(2020, 1, 1), []
+        )
+        series_2 = AnimeNode(
+            "200", "Season 2", "mal", "tv", "img-200", date(2021, 1, 1), []
+        )
+        movie = AnimeNode(
+            "300", "Movie", "mal", "movie", "img-300", date(2022, 1, 1), []
+        )
         ova = AnimeNode("400", "OVA", "mal", "ova", "img-400", date(2021, 6, 1), [])
 
         direct_candidates = [
@@ -75,6 +82,107 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             canonical_root_media_id="100",
         )
 
+    def _snapshot_with_spin_off_candidate(
+        self,
+        *,
+        media_type: str,
+        episode_count: int | None,
+        runtime_minutes: int | None,
+    ):
+        snapshot = self._snapshot()
+        candidate = AnimeNode(
+            "500",
+            "Spin-off Candidate",
+            "mal",
+            media_type,
+            "img-500",
+            date(2023, 1, 1),
+            [],
+            runtime_minutes=runtime_minutes,
+            episode_count=episode_count,
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "500": candidate}
+        snapshot.direct_candidates = [AnimeRelation("200", "500", "spin_off")]
+        snapshot.all_normalized_relations = snapshot.direct_candidates
+        return snapshot
+
+    def _assert_candidate_section(
+        self, snapshot, *, expected_section: str, absent_section: str
+    ):
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        expected_entries = sections.get(expected_section, {"entries": []})["entries"]
+        absent_entries = sections.get(absent_section, {"entries": []})["entries"]
+
+        self.assertIn("500", [entry["media_id"] for entry in expected_entries])
+        self.assertNotIn("500", [entry["media_id"] for entry in absent_entries])
+
+    def test_pipeline_promotes_substantial_tv_spin_off_to_spin_offs(self):
+        snapshot = self._snapshot_with_spin_off_candidate(
+            media_type="tv",
+            episode_count=12,
+            runtime_minutes=24,
+        )
+
+        self._assert_candidate_section(
+            snapshot,
+            expected_section="spin_offs",
+            absent_section="related_series",
+        )
+
+    def test_pipeline_keeps_short_tv_spin_off_in_related_series(self):
+        snapshot = self._snapshot_with_spin_off_candidate(
+            media_type="tv",
+            episode_count=12,
+            runtime_minutes=12,
+        )
+
+        self._assert_candidate_section(
+            snapshot,
+            expected_section="related_series",
+            absent_section="spin_offs",
+        )
+
+    def test_pipeline_keeps_low_episode_tv_spin_off_in_related_series(self):
+        snapshot = self._snapshot_with_spin_off_candidate(
+            media_type="tv",
+            episode_count=3,
+            runtime_minutes=24,
+        )
+
+        self._assert_candidate_section(
+            snapshot,
+            expected_section="related_series",
+            absent_section="spin_offs",
+        )
+
+    def test_pipeline_promotes_long_movie_spin_off_to_spin_offs(self):
+        snapshot = self._snapshot_with_spin_off_candidate(
+            media_type="movie",
+            episode_count=1,
+            runtime_minutes=90,
+        )
+
+        self._assert_candidate_section(
+            snapshot,
+            expected_section="spin_offs",
+            absent_section="related_series",
+        )
+
+    def test_pipeline_keeps_short_movie_spin_off_in_related_series(self):
+        snapshot = self._snapshot_with_spin_off_candidate(
+            media_type="movie",
+            episode_count=1,
+            runtime_minutes=45,
+        )
+
+        self._assert_candidate_section(
+            snapshot,
+            expected_section="related_series",
+            absent_section="spin_offs",
+        )
+
     def test_series_builder_uses_fixed_key_and_title(self):
         snapshot = self._snapshot()
         block = SeriesBuilder().build(snapshot)
@@ -88,13 +196,17 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
 
-        self.assertEqual({candidate.media_id for candidate in candidates}, {"300", "400"})
+        self.assertEqual(
+            {candidate.media_id for candidate in candidates}, {"300", "400"}
+        )
         self.assertEqual(len(candidates), 2)
 
     def test_candidate_assembler_preserves_multi_origin_signals_for_same_media(self):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
-        movie_candidate = next(candidate for candidate in candidates if candidate.media_id == "300")
+        movie_candidate = next(
+            candidate for candidate in candidates if candidate.media_id == "300"
+        )
 
         self.assertEqual(movie_candidate.relation_type, "side_story")
         self.assertEqual(movie_candidate.relation_types, ["side_story", "spin_off"])
@@ -154,14 +266,19 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(payload.series["title"], "Series")
         section_keys = [section["key"] for section in payload.sections]
         self.assertIn("specials", section_keys)
-        specials = next(section for section in payload.sections if section["key"] == "specials")
+        specials = next(
+            section for section in payload.sections if section["key"] == "specials"
+        )
         self.assertEqual(specials["title"], "Specials")
         self.assertIn("media_type", payload.series["entries"][0])
         self.assertIn("anime_media_type", payload.series["entries"][0])
 
     def test_pipeline_prefers_relation_types_for_ambiguous_candidates(self):
         snapshot = self._snapshot()
-        snapshot.direct_candidates = [AnimeRelation("200", "300", "other"), AnimeRelation("200", "300", "side_story")]
+        snapshot.direct_candidates = [
+            AnimeRelation("200", "300", "other"),
+            AnimeRelation("200", "300", "side_story"),
+        ]
 
         payload = AnimeFranchiseUiPipeline().run(snapshot)
         sections = {section["key"]: section for section in payload.sections}
@@ -185,7 +302,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
 
     def test_ignored_section_is_not_visible_in_ui(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
-        ignored = next(section for section in payload.sections if section["key"] == "ignored")
+        ignored = next(
+            section for section in payload.sections if section["key"] == "ignored"
+        )
         self.assertFalse(ignored["visible_in_ui"])
 
     def test_predicates_runtime_episode_and_relation_comparators(self):
@@ -273,7 +392,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
 
         sections = LayoutCompiler().compile(candidates=candidates, context=context)
 
-        self.assertEqual([section.key for section in sections], ["early_section", "late_section"])
+        self.assertEqual(
+            [section.key for section in sections], ["early_section", "late_section"]
+        )
         self.assertEqual([entry.media_id for entry in sections[0].entries], ["302"])
         self.assertEqual([entry.media_id for entry in sections[1].entries], ["301"])
         self.assertNotIn("empty_hidden", [section.key for section in sections])
@@ -379,7 +500,9 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         )(candidate, context)
         set_section_title(key="refine_me", title="Refined Title")(candidate, context)
         set_section_order(key="refine_me", order=50)(candidate, context)
-        set_section_hidden_if_empty(key="refine_me", hidden_if_empty=False)(candidate, context)
+        set_section_hidden_if_empty(key="refine_me", hidden_if_empty=False)(
+            candidate, context
+        )
 
         definition = context.sections["refine_me"]
         self.assertEqual(definition.title, "Refined Title")
@@ -512,7 +635,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
                         Rule(
                             key="initial_rule",
                             when=lambda *_args: True,
-                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "related_series"),),
+                            actions=(
+                                lambda current_candidate, _ctx: setattr(
+                                    current_candidate, "section_key", "related_series"
+                                ),
+                            ),
                         ),
                     ),
                 ),
@@ -522,7 +649,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
                         Rule(
                             key="override_rule",
                             when=lambda *_args: True,
-                            actions=(lambda current_candidate, _ctx: setattr(current_candidate, "section_key", "specials"),),
+                            actions=(
+                                lambda current_candidate, _ctx: setattr(
+                                    current_candidate, "section_key", "specials"
+                                ),
+                            ),
                         ),
                     ),
                 ),
