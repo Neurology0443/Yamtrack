@@ -9,6 +9,19 @@ FORMAT_LABEL_MAP = {
     "pv": "PV",
 }
 
+RELATION_TOOLTIP_PREFIX_MAP = {
+    "prequel": "Prequel to",
+    "sequel": "Sequel to",
+    "summary": "Summary of",
+    "full_story": "Full story of",
+    "side_story": "Side story from",
+    "alternative_setting": "Alternative setting from",
+    "alternative_version": "Alternative version from",
+    "spin_off": "Spin-off from",
+    "parent_story": "Parent story of",
+    "character": "Character relation from",
+}
+
 
 def _format_footer_format_label(anime_media_type: str | None) -> str | None:
     """Convert MAL anime format to footer-friendly display text."""
