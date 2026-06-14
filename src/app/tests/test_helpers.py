@@ -1,9 +1,11 @@
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpRequest
 from django.test import TestCase, override_settings
 
+from app import helpers
 from app.helpers import (
     build_absolute_app_url,
     enrich_items_with_user_data,
@@ -12,7 +14,7 @@ from app.helpers import (
     minutes_to_hhmm,
     redirect_back,
 )
-from app.models import Item, MediaTypes, Movie, Sources, Status
+from app.models import Anime, Item, MediaTypes, Movie, Sources, Status
 
 
 class HelpersTest(TestCase):
@@ -148,7 +150,7 @@ class EnrichItemsWithUserDataTest(TestCase):
         self.movie_media = Movie.objects.create(
             item=self.movie_item,
             user=self.user,
-            status=Status.COMPLETED.value,
+            status=Status.PLANNING.value,
             progress=1,
         )
 
@@ -230,6 +232,9 @@ class EnrichItemsWithUserDataTest(TestCase):
         """Test that completed items are hidden when preference is enabled."""
         self.user.hide_completed_recommendations = True
         self.user.save()
+        Movie.objects.filter(pk=self.movie_media.pk).update(
+            status=Status.COMPLETED.value
+        )
 
         raw_items = [
             {
@@ -259,6 +264,9 @@ class EnrichItemsWithUserDataTest(TestCase):
         """Test that completed items are shown when preference is disabled."""
         self.user.hide_completed_recommendations = False
         self.user.save()
+        Movie.objects.filter(pk=self.movie_media.pk).update(
+            status=Status.COMPLETED.value
+        )
 
         raw_items = [
             {
@@ -282,3 +290,203 @@ class EnrichItemsWithUserDataTest(TestCase):
             self.request, raw_items, "recommendations"
         )
         self.assertEqual(len(enriched_items), 2)
+
+    def test_enrich_items_with_user_data_refreshes_stale_mal_image(self):
+        """Test stale MAL images are refreshed from already-loaded provider data."""
+        item = Item.objects.create(
+            media_id="59193",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            image="https://myanimelist.net/images/anime/old.webp",
+        )
+        Anime.objects.create(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+        entry = {
+            "media_id": "59193",
+            "source": Sources.MAL.value,
+            "media_type": MediaTypes.ANIME.value,
+            "title": "Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            "image": "https://cdn.myanimelist.net/images/anime/1527/158340l.jpg",
+        }
+
+        result = helpers.enrich_items_with_user_data(
+            self.request,
+            [entry],
+            "test_section",
+        )
+
+        item.refresh_from_db()
+        self.assertEqual(item.image, entry["image"])
+        self.assertEqual(result[0]["media"].item.image, entry["image"])
+        self.assertEqual(result[0]["item"]["image"], entry["image"])
+
+    def test_enrich_items_with_user_data_deduplicates_image_refreshes(self):
+        """Test duplicate provider entries only schedule one image bulk update."""
+        item = Item.objects.create(
+            media_id="59193",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            image="https://myanimelist.net/images/anime/old.webp",
+        )
+        Anime.objects.create(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+        entry = {
+            "media_id": "59193",
+            "source": Sources.MAL.value,
+            "media_type": MediaTypes.ANIME.value,
+            "title": "Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            "image": "https://cdn.myanimelist.net/images/anime/1527/158340l.jpg",
+        }
+
+        with patch("app.helpers.Item.objects.bulk_update") as bulk_update:
+            helpers.enrich_items_with_user_data(
+                self.request,
+                [entry, entry.copy()],
+                "test_section",
+            )
+
+        bulk_update.assert_called_once()
+        updated_items = list(bulk_update.call_args.args[0])
+        self.assertEqual(len(updated_items), 1)
+
+
+class ImageRefreshTest(TestCase):
+    """Test helper logic for refreshing stored item images."""
+
+    def test_needs_image_refresh_for_missing_image(self):
+        """Test a missing image is refreshed."""
+        item = Item(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            image="",
+        )
+
+        self.assertTrue(
+            helpers._needs_image_refresh(
+                item,
+                "https://cdn.myanimelist.net/images/anime/new.jpg",
+            )
+        )
+
+    def test_needs_image_refresh_for_placeholder_image(self):
+        """Test the placeholder image is refreshed."""
+        item = Item(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            image=settings.IMG_NONE,
+        )
+
+        self.assertTrue(
+            helpers._needs_image_refresh(
+                item,
+                "https://cdn.myanimelist.net/images/anime/new.jpg",
+            )
+        )
+
+    def test_needs_image_refresh_for_stale_mal_image(self):
+        """Test a stale MAL image is refreshed."""
+        item = Item(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            image="https://myanimelist.net/images/anime/old.webp",
+        )
+
+        self.assertTrue(
+            helpers._needs_image_refresh(
+                item,
+                "https://cdn.myanimelist.net/images/anime/new.jpg",
+            )
+        )
+
+    def test_needs_image_refresh_skips_identical_image(self):
+        """Test an identical provider image is not refreshed."""
+        image = "https://cdn.myanimelist.net/images/anime/new.jpg"
+        item = Item(
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            image=image,
+        )
+
+        self.assertFalse(helpers._needs_image_refresh(item, image))
+
+    def test_needs_image_refresh_skips_absent_provider_images(self):
+        """Test absent provider images do not replace stored images."""
+        for new_image in (None, "", settings.IMG_NONE):
+            item = Item(
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                image="https://cdn.myanimelist.net/images/anime/current.jpg",
+            )
+
+            self.assertFalse(helpers._needs_image_refresh(item, new_image))
+
+    def test_needs_image_refresh_protects_manual_source(self):
+        """Test manual images are not replaced by provider images."""
+        item = Item(
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.ANIME.value,
+            image="https://example.com/custom.jpg",
+        )
+
+        self.assertFalse(
+            helpers._needs_image_refresh(
+                item,
+                "https://cdn.myanimelist.net/images/anime/provider.jpg",
+            )
+        )
+
+    def test_needs_image_refresh_protects_filled_non_mal_source(self):
+        """Test filled non-MAL source images are not refreshed."""
+        item = Item(
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.MOVIE.value,
+            image="https://image.tmdb.org/old.jpg",
+        )
+
+        self.assertFalse(
+            helpers._needs_image_refresh(
+                item,
+                "https://image.tmdb.org/new.jpg",
+            )
+        )
+
+    def test_refresh_item_image_if_missing_refreshes_stale_mal_image(self):
+        """Test refresh_item_image_if_missing updates stale MAL images."""
+        item = Item.objects.create(
+            media_id="59193",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Mushoku Tensei III: Isekai Ittara Honki Dasu",
+            image="https://myanimelist.net/images/anime/old.webp",
+        )
+        new_image = "https://cdn.myanimelist.net/images/anime/1527/158340l.jpg"
+
+        helpers.refresh_item_image_if_missing(item, new_image)
+
+        item.refresh_from_db()
+        self.assertEqual(item.image, new_image)
+
+    def test_refresh_item_image_if_missing_protects_manual_source(self):
+        """Test refresh_item_image_if_missing preserves manual images."""
+        image_custom = "https://example.com/custom.jpg"
+        item = Item.objects.create(
+            media_id="manual-anime",
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Custom Anime",
+            image=image_custom,
+        )
+        new_image = "https://cdn.myanimelist.net/images/anime/provider.jpg"
+
+        helpers.refresh_item_image_if_missing(item, new_image)
+
+        item.refresh_from_db()
+        self.assertEqual(item.image, image_custom)

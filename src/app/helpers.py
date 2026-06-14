@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.encoding import iri_to_uri
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from app.models import BasicMedia, Item, MediaTypes, Status
+from app.models import BasicMedia, Item, MediaTypes, Sources, Status
 
 YEAR_ONLY_PARTS = 1
 YEAR_MONTH_PARTS = 2
@@ -151,15 +151,27 @@ def is_released_date(air_date, current_date=None):
     return normalized_air_date <= current_date
 
 
+def _can_refresh_existing_provider_image(item):
+    """Return whether an existing stored image may be replaced by provider metadata."""
+    return item.source == Sources.MAL.value
+
+
 def _needs_image_refresh(item, new_image):
-    """Return True when ``item.image`` should be replaced with ``new_image``."""
+    """Return True when item.image should be replaced with a real provider image."""
     if item is None or not new_image or new_image == settings.IMG_NONE:
         return False
-    return not item.image or item.image == settings.IMG_NONE
+
+    if not item.image or item.image == settings.IMG_NONE:
+        return True
+
+    if _can_refresh_existing_provider_image(item):
+        return item.image != new_image
+
+    return False
 
 
 def refresh_item_image_if_missing(item, new_image):
-    """Update an Item's stored image when it's missing and a real one is available."""
+    """Update an Item's stored image when missing or stale for provider-owned images."""
     if not _needs_image_refresh(item, new_image):
         return
     item.image = new_image
@@ -177,7 +189,7 @@ def enrich_items_with_user_data(request, items, section_name):
 
     # Enrich items with matched media
     enriched_items = []
-    items_to_refresh = []
+    items_to_refresh_by_id = {}
     for item in items:
         if media_type == MediaTypes.SEASON.value:
             key = (str(item["media_id"]), item["source"], item.get("season_number"))
@@ -194,12 +206,12 @@ def enrich_items_with_user_data(request, items, section_name):
             media_item.item, item.get("image")
         ):
             media_item.item.image = item["image"]
-            items_to_refresh.append(media_item.item)
+            items_to_refresh_by_id[media_item.item_id] = media_item.item
 
         enriched_items.append({"item": item, "media": media_item})
 
-    if items_to_refresh:
-        Item.objects.bulk_update(items_to_refresh, ["image"])
+    if items_to_refresh_by_id:
+        Item.objects.bulk_update(items_to_refresh_by_id.values(), ["image"])
 
     return enriched_items
 
