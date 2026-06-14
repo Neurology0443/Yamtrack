@@ -573,18 +573,19 @@
                         </span>
                         <span>
                           {% if result.item.footer_relation_value %}
-                            {% if result.item.footer_relation_active %}
-                              <span class="px-2 py-0.5 rounded-full bg-gray-700 text-indigo-200 border border-indigo-400/70"
-                                    data-franchise-badge="true"
-                                    data-franchise-badge-type="relation"
-                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
-                                    data-franchise-badge-active="true">{{ result.item.footer_relation_label }}</span>
-                            {% else %}
-                              <span class="px-2 py-0.5 rounded-full border border-gray-400/40 text-gray-400"
-                                    data-franchise-badge="true"
-                                    data-franchise-badge-type="relation"
-                                    data-franchise-badge-value="{{ result.item.footer_relation_value }}"
-                                    data-franchise-badge-active="false">{{ result.item.footer_relation_label }}</span>
+                            {% if result.item.footer_relation_tooltip %}
+                              <span class="relative inline-flex group" tabindex="0">
+                            {% endif %}
+                            <span class="px-2 py-0.5 rounded-full {% if result.item.footer_relation_active %}bg-gray-700 text-indigo-200 border border-indigo-400/70{% else %}border border-gray-400/40 text-gray-400{% endif %}"
+                                  data-franchise-badge="true"
+                                  data-franchise-badge-type="relation"
+                                  data-franchise-badge-value="{{ result.item.footer_relation_value }}"
+                                  data-franchise-badge-active="{% if result.item.footer_relation_active %}true{% else %}false{% endif %}">{{ result.item.footer_relation_label }}</span>
+                            {% if result.item.footer_relation_tooltip %}
+                                <span class="pointer-events-none absolute bottom-full right-0 z-20 mb-2 invisible opacity-0 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-gray-100 shadow-lg border border-gray-700 transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100">
+                                  {{ result.item.footer_relation_tooltip }}
+                                </span>
+                              </span>
                             {% endif %}
                           {% endif %}
                         </span>
