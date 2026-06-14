@@ -47,7 +47,13 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         enriched = enrich_franchise_entries_for_footer(
             entries,
             {},
-            series_entries=[{"media_id": 100, "title": "Season 1"}],
+            series_entries=[
+                {
+                    "media_id": 100,
+                    "series_label": "Season 1",
+                    "title": "Generic Full Title",
+                }
+            ],
         )
 
         self.assertFalse(enriched[0]["footer_relation_active"])
@@ -89,7 +95,47 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
 
         self.assertEqual(enriched[0]["footer_relation_tooltip"], "")
 
-    def test_relation_tooltip_for_active_badge_prefers_season_title(self):
+    def test_relation_tooltip_for_active_badge_uses_current_series_label(self):
+        entries = [
+            {
+                "media_id": 200,
+                "title": "Special",
+                "relation_type": "side_story",
+                "linked_series_line_media_id": 100,
+            }
+        ]
+        media_metadata = {
+            "media_id": 100,
+            "title": "Generic Full Title",
+            "season_title": "Generic Full Title",
+            "related": {
+                "related_anime": [
+                    {"media_id": 200, "relation_type": "side_story"},
+                ]
+            },
+        }
+        series_entries = [
+            {
+                "media_id": 100,
+                "title": "Generic Full Title",
+                "series_label": "Season 1",
+            }
+        ]
+
+        enriched = enrich_franchise_entries_for_footer(
+            entries,
+            media_metadata,
+            series_entries=series_entries,
+        )
+
+        self.assertTrue(enriched[0]["footer_relation_active"])
+        self.assertEqual(enriched[0]["footer_relation_value"], "side_story")
+        self.assertEqual(
+            enriched[0]["footer_relation_tooltip"],
+            "Side story from: Season 1",
+        )
+
+    def test_relation_tooltip_for_active_badge_falls_back_to_season_title(self):
         entries = [
             {
                 "media_id": 200,
@@ -99,6 +145,7 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
             }
         ]
         media_metadata = {
+            "media_id": 999,
             "title": "Generic Anime Title",
             "season_title": "Season 4",
             "related": {
@@ -117,6 +164,43 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertEqual(
             enriched[0]["footer_relation_tooltip"],
             "Prequel to: Season 4",
+        )
+
+    def test_relation_tooltip_for_active_badge_falls_back_when_not_in_series_line(self):
+        entries = [
+            {
+                "media_id": 200,
+                "title": "Special",
+                "relation_type": "side_story",
+                "linked_series_line_media_id": 100,
+            }
+        ]
+        media_metadata = {
+            "media_id": 999,
+            "season_title": "Movie",
+            "related": {
+                "related_anime": [
+                    {"media_id": 200, "relation_type": "side_story"},
+                ]
+            },
+        }
+
+        enriched = enrich_franchise_entries_for_footer(
+            entries,
+            media_metadata,
+            series_entries=[
+                {
+                    "media_id": 100,
+                    "series_label": "Season 1",
+                    "title": "Main Season",
+                }
+            ],
+        )
+
+        self.assertTrue(enriched[0]["footer_relation_active"])
+        self.assertEqual(
+            enriched[0]["footer_relation_tooltip"],
+            "Side story from: Movie",
         )
 
     def test_relation_tooltip_for_active_badge_uses_current_page_title(self):

@@ -101,6 +101,17 @@ def _resolve_footer_relation_source_title(
     return series_titles_by_media_id.get(str(media_id))
 
 
+def _resolve_current_series_title(
+    media_metadata: dict,
+    series_titles_by_media_id: dict[str, str],
+) -> str | None:
+    """Resolve the current page title from series-line display labels."""
+    media_id = media_metadata.get("media_id")
+    if media_id is None:
+        return None
+    return series_titles_by_media_id.get(str(media_id))
+
+
 def _resolve_current_page_title(media_metadata: dict) -> str | None:
     """Resolve the current page title for active page-local relations."""
     return (
@@ -118,8 +129,11 @@ def enrich_franchise_entries_for_footer(
 ) -> list[dict]:
     """Attach page-local footer presentation fields to franchise entries."""
     direct_relation_map = _build_page_local_relation_map(media_metadata)
-    current_page_title = _resolve_current_page_title(media_metadata)
     series_titles_by_media_id = _build_series_title_map(series_entries)
+    current_page_title = (
+        _resolve_current_series_title(media_metadata, series_titles_by_media_id)
+        or _resolve_current_page_title(media_metadata)
+    )
     enriched_entries = []
     for entry in entries:
         media_id = entry.get("media_id")
