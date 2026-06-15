@@ -33,9 +33,11 @@ from app.models import (
 )
 from app.providers import manual, services, tmdb
 from app.services import anime_franchise_cache
+from app.services.anime_franchise import AnimeFranchiseService
 from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
+    serialize_franchise_payload,
 )
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
@@ -278,11 +280,10 @@ def media_search(request):
 
 
 @require_GET
-def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912
+def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912, PLR0915
     """Return the details page for a media item."""
     use_mal_anime_stale_cache = (
-        source == Sources.MAL.value
-        and media_type == MediaTypes.ANIME.value
+        source == Sources.MAL.value and media_type == MediaTypes.ANIME.value
     )
     media_metadata = services.get_media_metadata(
         media_type,
@@ -348,9 +349,8 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                         media_metadata["related"].pop("related_anime", None)
                 else:
                     anime_franchise = None
-            if (
-                not franchise_refresh_considered
-                and not anime_franchise_cache.is_fresh(franchise_meta)
+            if not franchise_refresh_considered and not anime_franchise_cache.is_fresh(
+                franchise_meta
             ):
                 anime_franchise_cache.maybe_schedule_build(
                     franchise_cache_media_id,
@@ -373,6 +373,45 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                     "Franchise complète en préparation. "
                     "Les relations MAL directes sont affichées en attendant.",
                 )
+
+            local_payload = None
+            try:
+                local_franchise = AnimeFranchiseService().build(str(media_id))
+                serialized = serialize_franchise_payload(
+                    local_franchise,
+                    root_media_id=str(media_id),
+                )
+                serialized["schema_version"] = (
+                    settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+                )
+                if anime_franchise_cache.is_valid_payload(serialized) and str(
+                    serialized.get("root_media_id")
+                ) == str(media_id):
+                    local_payload = serialized
+            except Exception:
+                logger.exception(
+                    "Failed to build local MAL anime franchise context for media_id=%s",
+                    media_id,
+                )
+
+            if local_payload is not None:
+                try:
+                    prepared_franchise = prepare_anime_franchise_context(
+                        request,
+                        local_payload,
+                        media_metadata,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to prepare local MAL anime franchise context for "
+                        "media_id=%s",
+                        media_id,
+                    )
+                else:
+                    if has_displayable_franchise_entries(prepared_franchise):
+                        anime_franchise = prepared_franchise
+                        if media_metadata.get("related"):
+                            media_metadata["related"].pop("related_anime", None)
 
     # Enrich related items with user tracking data
     if media_metadata.get("related"):

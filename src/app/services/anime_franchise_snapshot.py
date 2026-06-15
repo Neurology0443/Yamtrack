@@ -12,7 +12,14 @@ if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
-ROOT_STORY_PARENT_RELATIONS = {"full_story"}
+# Local-only TV relations for non-TV roots. These relations are used only to
+# expose direct MAL Related Entries on the current non-TV page and must not
+# imply canonical aliasing or alter the canonical series line.
+ROOT_STORY_PARENT_RELATIONS = {
+    "full_story",
+    "sequel",
+    "prequel",
+}
 
 
 NO_SERIES_LINE_SECONDARY_RELATIONS = {

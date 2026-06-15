@@ -609,6 +609,101 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
+    def test_root_story_parent_full_story_sequel_prequel_go_to_related_series(self):
+        root = AnimeNode(
+            "40489", "Special", "mal", "special", "img-40489", date(2020, 1, 1), []
+        )
+        nodes = {
+            "40489": root,
+            "36474": AnimeNode(
+                "36474", "Full", "mal", "tv", "img", date(2018, 1, 1), []
+            ),
+            "39597": AnimeNode(
+                "39597", "Seq", "mal", "tv", "img", date(2021, 1, 1), []
+            ),
+            "11757": AnimeNode(
+                "11757", "Pre", "mal", "tv", "img", date(2012, 1, 1), []
+            ),
+        }
+        relations = [
+            AnimeRelation("40489", "36474", "full_story"),
+            AnimeRelation("40489", "39597", "sequel"),
+            AnimeRelation("40489", "11757", "prequel"),
+        ]
+        snapshot = SimpleNamespace(
+            root_node=root,
+            nodes_by_media_id=nodes,
+            all_normalized_relations=relations,
+            continuity_component=[root],
+            series_line=[],
+            direct_anchors=[root],
+            direct_candidates=[],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=relations,
+            has_series_line=False,
+            fallback_anchor_media_id="40489",
+            canonical_root_media_id="40489",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["related_series"]["entries"]],
+            ["36474", "39597", "11757"],
+        )
+        for section_key in ["specials", "ignored"]:
+            self.assertFalse(
+                {"36474", "39597", "11757"}
+                & {
+                    entry["media_id"]
+                    for entry in sections.get(section_key, {"entries": []})["entries"]
+                }
+            )
+
+    def test_root_story_parent_targets_already_in_series_are_not_related_series(self):
+        root = AnimeNode(
+            "40489", "Special", "mal", "special", "img-40489", date(2020, 1, 1), []
+        )
+        series_line = [
+            AnimeNode("11757", "Pre", "mal", "tv", "img", date(2012, 1, 1), []),
+            AnimeNode("36474", "Full", "mal", "tv", "img", date(2018, 1, 1), []),
+            AnimeNode("39597", "Seq", "mal", "tv", "img", date(2021, 1, 1), []),
+        ]
+        nodes = {"40489": root, **{node.media_id: node for node in series_line}}
+        relations = [
+            AnimeRelation("40489", "36474", "full_story"),
+            AnimeRelation("40489", "39597", "sequel"),
+            AnimeRelation("40489", "11757", "prequel"),
+        ]
+        snapshot = SimpleNamespace(
+            root_node=root,
+            nodes_by_media_id=nodes,
+            all_normalized_relations=relations,
+            continuity_component=[root, *series_line],
+            series_line=series_line,
+            direct_anchors=[root],
+            direct_candidates=[],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=relations,
+            has_series_line=True,
+            fallback_anchor_media_id="40489",
+            canonical_root_media_id="11757",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertFalse(
+            {"36474", "39597", "11757"}
+            & {
+                entry["media_id"]
+                for entry in sections.get("related_series", {"entries": []})["entries"]
+            }
+        )
+
     def test_full_story_without_root_story_parent_metadata_stays_special(self):
         root = AnimeNode(
             "27891", "Debriefing", "mal", "special", "img-27891", date(2014, 1, 1), []

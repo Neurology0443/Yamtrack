@@ -113,11 +113,9 @@ class MediaDetailsViewTests(TestCase):
         mock_build_delay,
     ):
         """Anime franchise grouping should be injected for MAL anime details."""
-        mock_enrich_items.side_effect = (
-            lambda request, items, section_name: [  # noqa: ARG005
-                {"item": item, "media": None} for item in items
-            ]
-        )
+        mock_enrich_items.side_effect = lambda request, items, section_name: [  # noqa: ARG005
+            {"item": item, "media": None} for item in items
+        ]
         mock_get_metadata.return_value = {
             "media_id": "100",
             "title": "Test Anime",
@@ -171,6 +169,158 @@ class MediaDetailsViewTests(TestCase):
         self.assertIn("related_anime", response.context["media"]["related"])
         self.assertIn("recommendations", response.context["media"]["related"])
 
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_cache_miss_renders_local_payload_for_requested_media(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+        mock_franchise_service,
+    ):
+        """Cache misses should render a valid local payload for requested media."""
+        mock_get_metadata.return_value = {
+            "media_id": "40489",
+            "title": "Special",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "36474",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Full",
+                        "image": "img",
+                    }
+                ],
+            },
+        }
+        mock_franchise_service.return_value.build.return_value = {
+            "root_media_id": "40489",
+            "canonical_root_media_id": "40489",
+            "display_title": "Special",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        {
+                            "media_id": "36474",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Full",
+                            "relation_type": "full_story",
+                        },
+                        {
+                            "media_id": "39597",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Seq",
+                            "relation_type": "sequel",
+                        },
+                        {
+                            "media_id": "11757",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Pre",
+                            "relation_type": "prequel",
+                        },
+                    ],
+                    "visible_in_ui": True,
+                    "hidden_if_empty": True,
+                }
+            ],
+        }
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "40489",
+                    "title": "special",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_build_delay.assert_called_once_with("40489")
+        mock_franchise_service.return_value.build.assert_called_once_with("40489")
+        anime_franchise = response.context["anime_franchise"]
+        self.assertIsNotNone(anime_franchise)
+        related_series = next(
+            section
+            for section in anime_franchise["sections"]
+            if section["key"] == "related_series"
+        )
+        self.assertEqual(
+            [entry["item"]["media_id"] for entry in related_series["entries"]],
+            ["36474", "39597", "11757"],
+        )
+        self.assertEqual(
+            [entry["item"]["relation_type"] for entry in related_series["entries"]],
+            ["full_story", "sequel", "prequel"],
+        )
+        self.assertNotIn("related_anime", response.context["media"]["related"])
+
+    @patch("app.views.AnimeFranchiseService")
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_cache_miss_keeps_related_anime_when_local_payload_invalid(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+        mock_franchise_service,
+    ):
+        """Cache misses should keep MAL relations when local payload is invalid."""
+        mock_get_metadata.return_value = {
+            "media_id": "40489",
+            "title": "Special",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "36474",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Full",
+                    }
+                ]
+            },
+        }
+        mock_franchise_service.return_value.build.return_value = {
+            "root_media_id": "11757",
+            "canonical_root_media_id": "11757",
+            "display_title": "Canonical",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [],
+        }
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "40489",
+                    "title": "special",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_build_delay.assert_called_once_with("40489")
+        self.assertIsNone(response.context["anime_franchise"])
+        self.assertIn("related_anime", response.context["media"]["related"])
+
     @patch("app.views.helpers.enrich_items_with_user_data")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -180,11 +330,9 @@ class MediaDetailsViewTests(TestCase):
         mock_enrich_items,
     ):
         """Regression guard for dedup between franchise and legacy related_anime."""
-        mock_enrich_items.side_effect = (
-            lambda request, items, section_name: [  # noqa: ARG005
-                {"item": item, "media": None} for item in items
-            ]
-        )
+        mock_enrich_items.side_effect = lambda request, items, section_name: [  # noqa: ARG005
+            {"item": item, "media": None} for item in items
+        ]
         mock_get_metadata.return_value = {
             "media_id": "100",
             "title": "Test Anime",
@@ -218,32 +366,36 @@ class MediaDetailsViewTests(TestCase):
                 "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
                 "root_media_id": "100",
                 "display_title": "Test Anime",
-                "series": {"key": "series", "title": "Series", "entries": [
-                    {
-                        "media_id": "100",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Test Anime",
-                        "image": "http://example.com/image.jpg",
-                        "relation_type": None,
-                        "linked_series_line_media_id": None,
-                        "linked_series_line_index": None,
-                        "is_current": True,
-                    },
-                    {
-                        "media_id": "101",
-                        "source": "mal",
-                        "media_type": "anime",
-                        "anime_media_type": "tv",
-                        "title": "Test Anime Season 2",
-                        "image": "http://example.com/image-2.jpg",
-                        "relation_type": None,
-                        "linked_series_line_media_id": None,
-                        "linked_series_line_index": None,
-                        "is_current": False,
-                    }
-                ]},
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "100",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "tv",
+                            "title": "Test Anime",
+                            "image": "http://example.com/image.jpg",
+                            "relation_type": None,
+                            "linked_series_line_media_id": None,
+                            "linked_series_line_index": None,
+                            "is_current": True,
+                        },
+                        {
+                            "media_id": "101",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "tv",
+                            "title": "Test Anime Season 2",
+                            "image": "http://example.com/image-2.jpg",
+                            "relation_type": None,
+                            "linked_series_line_media_id": None,
+                            "linked_series_line_index": None,
+                            "is_current": False,
+                        },
+                    ],
+                },
                 "sections": [
                     {
                         "key": "related_series",
@@ -301,7 +453,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertContains(response, 'data-franchise-badge-active="true"', count=0)
         self.assertContains(response, 'data-franchise-badge-active="false"', count=2)
         self.assertContains(response, "Legacy Recommendation")
-
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -424,7 +575,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertIsNone(response.context["anime_franchise"])
         self.assertIn("related_anime", response.context["media"]["related"])
         mock_build_delay.assert_called_once_with("100")
-
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -677,8 +827,6 @@ class MediaDetailsViewTests(TestCase):
         self.assertNotContains(response, "Franchise complète en préparation")
         mock_build_delay.assert_not_called()
 
-
-
     def _canonical_alias_payload(self):
         return {
             "root_media_id": "223",
@@ -752,7 +900,6 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["anime_franchise"])
-        mock_fallback_payload.assert_not_called()
         mock_build_delay.assert_not_called()
         self.assertNotIn("related_anime", response.context["media"]["related"])
 
@@ -865,7 +1012,6 @@ class MediaDetailsViewTests(TestCase):
                 ],
             },
         }
-        mock_fallback_payload.return_value = None
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -887,7 +1033,6 @@ class MediaDetailsViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_fallback_payload.assert_called_once()
         mock_build_delay.assert_called_once_with("269")
 
     @patch("app.views.anime_franchise_cache.maybe_schedule_build")

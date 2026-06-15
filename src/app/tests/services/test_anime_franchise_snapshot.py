@@ -205,6 +205,70 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
 
         self.assertEqual(snapshot.root_story_parent_candidates, [])
 
+    def test_root_story_parent_supports_full_story_sequel_and_prequel_to_tv(self):
+        root = AnimeNode(
+            "40489",
+            "Special",
+            "mal",
+            "special",
+            "img",
+            date(2020, 1, 1),
+            [
+                AnimeRelation("40489", "36474", "full_story"),
+                AnimeRelation("40489", "39597", "sequel"),
+                AnimeRelation("40489", "11757", "prequel"),
+            ],
+        )
+        nodes = {
+            "40489": root,
+            "36474": AnimeNode(
+                "36474", "Full", "mal", "tv", "img", date(2018, 1, 1), []
+            ),
+            "39597": AnimeNode(
+                "39597", "Seq", "mal", "tv", "img", date(2021, 1, 1), []
+            ),
+            "11757": AnimeNode(
+                "11757", "Pre", "mal", "tv", "img", date(2012, 1, 1), []
+            ),
+        }
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("40489")
+
+        self.assertEqual(
+            snapshot.root_story_parent_candidates,
+            [
+                AnimeRelation("40489", "36474", "full_story"),
+                AnimeRelation("40489", "39597", "sequel"),
+                AnimeRelation("40489", "11757", "prequel"),
+            ],
+        )
+
+    def test_root_story_parent_deduplicates_by_source_target_relation(self):
+        root = AnimeNode(
+            "40489",
+            "Special",
+            "mal",
+            "special",
+            "img",
+            date(2020, 1, 1),
+            [
+                AnimeRelation("40489", "36474", "full_story"),
+                AnimeRelation("40489", "36474", "full_story"),
+            ],
+        )
+        parent = AnimeNode("36474", "Full", "mal", "tv", "img", date(2018, 1, 1), [])
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder({"40489": root, "36474": parent})
+        ).build("40489")
+
+        self.assertEqual(
+            snapshot.root_story_parent_candidates,
+            [AnimeRelation("40489", "36474", "full_story")],
+        )
+
     def test_graph_cache_isolation_between_seeds(self):
         metadata_map = {
             "10": {

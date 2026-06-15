@@ -615,6 +615,45 @@ class AnimeFranchiseCacheTests(TestCase):
         alias = cache.get(anime_franchise_cache.get_alias_key("269"))
         self.assertEqual(alias["canonical_media_id"], "223")
 
+    def test_replace_aliases_uses_aliasable_ids_not_covered_media_ids(self):
+        payload = deepcopy(self.payload)
+        payload["root_media_id"] = "11757"
+        payload["canonical_root_media_id"] = "11757"
+        payload["display_title"] = "Canonical"
+        payload["series"]["entries"] = [
+            dict(self.entry, media_id="11757", title="Pre"),
+            dict(self.entry, media_id="36474", title="Full"),
+            dict(self.entry, media_id="39597", title="Seq"),
+        ]
+        payload["sections"] = [
+            {
+                "key": "related_series",
+                "title": "Related Series",
+                "entries": [
+                    dict(self.entry, media_id="40489", title="Special"),
+                    dict(self.entry, media_id="41341", title="Recap"),
+                ],
+                "visible_in_ui": True,
+                "hidden_if_empty": True,
+            }
+        ]
+        payload["aliasable_media_ids"] = ["11757", "36474", "39597"]
+        payload["covered_media_ids"] = [
+            "11757",
+            "36474",
+            "39597",
+            "40489",
+            "41341",
+        ]
+
+        count = anime_franchise_cache.replace_aliases("11757", payload)
+
+        self.assertEqual(count, 2)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("40489")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("41341")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("36474")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("39597")))
+
     def test_replace_aliases_skips_truncated_payload(self):
         payload = self._dragon_ball_payload()
         payload["aliasable_media_ids"] = ["223", "269"]
