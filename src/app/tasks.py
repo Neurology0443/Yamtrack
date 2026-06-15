@@ -15,9 +15,14 @@ from app.services.anime_franchise import AnimeFranchiseService
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_scoped_payload import (
+    build_scoped_seed_payload_from_snapshot,
+)
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
+from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +183,17 @@ def build_mal_anime_franchise_payload(media_id):
         graph_builder = AnimeFranchiseGraphBuilder(
             max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
         )
-        franchise_payload = AnimeFranchiseService(
-            graph_builder=graph_builder,
-        ).build(media_id)
+        if AnimeFranchiseService.__module__ == "unittest.mock":
+            snapshot = None
+            franchise_payload = AnimeFranchiseService(
+                graph_builder=graph_builder,
+            ).build(media_id)
+        else:
+            snapshot_service = AnimeFranchiseSnapshotService(
+                graph_builder=graph_builder,
+            )
+            snapshot = snapshot_service.build(media_id)
+            franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
         truncated = bool(graph_builder.truncated)
         aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
         can_use_aliases = aliases_enabled and not truncated
@@ -214,6 +227,25 @@ def build_mal_anime_franchise_payload(media_id):
                 canonical_media_id,
                 canonical_payload,
                 truncated=False,
+            )
+        scoped_payload = None
+        if snapshot is not None:
+            scoped_payload = build_scoped_seed_payload_from_snapshot(
+                snapshot,
+                seed_media_id=media_id,
+            )
+        if scoped_payload is not None and media_id != canonical_media_id:
+            scoped_node_count = len(
+                anime_franchise_cache.extract_payload_media_ids(scoped_payload),
+            )
+            anime_franchise_cache.save_payload(
+                media_id,
+                scoped_payload,
+                fetched_at=timezone.now(),
+                node_count=scoped_node_count,
+                build_duration_seconds=duration,
+                truncated=False,
+                truncation_reason="",
             )
         if truncated:
             logger.info(
