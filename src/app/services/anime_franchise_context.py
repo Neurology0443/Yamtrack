@@ -31,10 +31,20 @@ def _payload_get(franchise_payload, key, default=None):
 
 def serialize_franchise_payload(franchise_payload, *, root_media_id=None) -> dict:
     """Convert a franchise UI payload to a cache-safe user-agnostic dict."""
+    serialized_root_media_id = str(
+        root_media_id or _payload_get(franchise_payload, "root_media_id", "")
+    )
+    canonical_root_media_id = _payload_get(
+        franchise_payload,
+        "canonical_root_media_id",
+        "",
+    )
+    if not canonical_root_media_id:
+        canonical_root_media_id = serialized_root_media_id
+
     payload = {
-        "root_media_id": str(
-            root_media_id or _payload_get(franchise_payload, "root_media_id", "")
-        ),
+        "root_media_id": serialized_root_media_id,
+        "canonical_root_media_id": str(canonical_root_media_id),
         "display_title": _payload_get(franchise_payload, "display_title", ""),
         "series": _payload_get(franchise_payload, "series", {}),
         "sections": _payload_get(franchise_payload, "sections", []),
@@ -135,6 +145,10 @@ def prepare_anime_franchise_context(
 
     return {
         "root_media_id": franchise_payload.get("root_media_id", ""),
+        "canonical_root_media_id": franchise_payload.get(
+            "canonical_root_media_id",
+            franchise_payload.get("root_media_id", ""),
+        ),
         "display_title": franchise_payload.get("display_title", ""),
         "series": {
             "key": AnimeFranchiseService.SERIES_LINE_KEY,
