@@ -13,11 +13,20 @@ Non-responsibilities:
 from __future__ import annotations
 
 from collections import deque
+from datetime import date
 from typing import TYPE_CHECKING
 
 from .candidates import UiCandidate
 
 NO_SERIES_LINE_CONTINUITY_RELATIONS = {"prequel", "sequel"}
+NO_SERIES_LINE_SECONDARY_RELATIONS = {
+    "side_story",
+    "spin_off",
+    "parent_story",
+    "alternative_setting",
+    "alternative_version",
+    "character",
+}
 
 if TYPE_CHECKING:
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
@@ -27,7 +36,7 @@ if TYPE_CHECKING:
 class UiCandidateAssembler:
     """Build canonical secondary candidates while keeping Series separate."""
 
-    def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:
+    def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:  # noqa: PLR0915
         """Build secondary candidates and preserve representative relations."""
         series_ids = {node.media_id for node in snapshot.series_line}
         series_index = {
@@ -47,10 +56,34 @@ class UiCandidateAssembler:
         )
 
         candidate_relations = [*snapshot.direct_candidates, *promoted_relations]
+        no_series_line_continuity_keys: set[tuple[str, str, str]] = set()
+        no_series_line_secondary_keys: set[tuple[str, str, str]] = set()
+        no_series_line_order = self._derive_no_series_line_continuity_order(snapshot)
         if not snapshot.has_series_line:
-            candidate_relations.extend(
-                self._derive_no_series_line_continuity_relations(snapshot),
+            no_series_continuity_relations = (
+                self._derive_no_series_line_continuity_relations(snapshot)
             )
+            no_series_secondary_relations = (
+                self._derive_no_series_line_secondary_relations(snapshot)
+            )
+            no_series_line_continuity_keys = {
+                (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                for relation in no_series_continuity_relations
+            }
+            no_series_line_secondary_keys = {
+                (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                for relation in no_series_secondary_relations
+            }
+            candidate_relations.extend(no_series_continuity_relations)
+            candidate_relations.extend(no_series_secondary_relations)
 
         grouped_relations: dict[str, list[AnimeRelation]] = {}
         seen_relations: set[tuple[str, str, str]] = set()
@@ -97,7 +130,9 @@ class UiCandidateAssembler:
             linked_series_line_media_id = self._resolve_best_series_anchor(
                 series_line_sources=series_line_sources,
                 series_index=series_index,
-                promoted_anchor_media_id=promoted_metadata.get("series_anchor_media_id"),
+                promoted_anchor_media_id=promoted_metadata.get(
+                    "series_anchor_media_id"
+                ),
                 promoted_depth=promoted_metadata.get("depth"),
             )
             if linked_series_line_media_id is None and not snapshot.has_series_line:
@@ -126,6 +161,55 @@ class UiCandidateAssembler:
                 in promoted_relation_keys
                 for relation in relations
             )
+            is_no_series_line_continuity = any(
+                (
+                    (
+                        relation.source_media_id,
+                        relation.target_media_id,
+                        relation.relation_type,
+                    )
+                    in no_series_line_continuity_keys
+                    or (
+                        not snapshot.has_series_line
+                        and relation.relation_type
+                        in NO_SERIES_LINE_CONTINUITY_RELATIONS
+                        and relation.source_media_id in no_series_line_order
+                        and relation.target_media_id in no_series_line_order
+                    )
+                )
+                for relation in relations
+            )
+            is_no_series_line_secondary = any(
+                (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                in no_series_line_secondary_keys
+                for relation in relations
+            )
+            metadata = {
+                "is_promoted_continuity": is_promoted_continuity,
+                "promoted_from_series_line_media_id": promoted_metadata.get(
+                    "series_anchor_media_id",
+                ),
+                "promoted_depth": promoted_metadata.get("depth"),
+                "origins": [
+                    {
+                        "source_media_id": relation.source_media_id,
+                        "relation_type": relation.relation_type,
+                        "is_from_series_line": (relation.source_media_id in series_ids),
+                        "is_from_root_node": (
+                            relation.source_media_id == root_media_id
+                        ),
+                    }
+                    for relation in relations
+                ],
+            }
+            if is_no_series_line_continuity:
+                metadata["section_sort_rank"] = no_series_line_order.get(node.media_id)
+            if is_no_series_line_secondary:
+                metadata["is_no_series_line_secondary"] = True
 
             candidates.append(
                 UiCandidate(
@@ -152,31 +236,73 @@ class UiCandidateAssembler:
                     has_root_origin=bool(root_sources),
                     has_non_series_origin=bool(non_series_sources),
                     is_current=node.media_id == snapshot.root_node.media_id,
-                    metadata={
-                        "is_promoted_continuity": is_promoted_continuity,
-                        "promoted_from_series_line_media_id": promoted_metadata.get(
-                            "series_anchor_media_id",
-                        ),
-                        "promoted_depth": promoted_metadata.get("depth"),
-                        "origins": [
-                            {
-                                "source_media_id": relation.source_media_id,
-                                "relation_type": relation.relation_type,
-                                "is_from_series_line": (
-                                    relation.source_media_id in series_ids
-                                ),
-                                "is_from_root_node": (
-                                    relation.source_media_id == root_media_id
-                                ),
-                            }
-                            for relation in relations
-                        ],
-                    },
+                    metadata=metadata,
                 )
             )
 
         return candidates
 
+    @staticmethod
+    def _derive_no_series_line_continuity_order(  # noqa: C901, PLR0912
+        snapshot: AnimeFranchiseSnapshot,
+    ) -> dict[str, int]:
+        if snapshot.has_series_line:
+            return {}
+
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
+        if not continuity_ids:
+            return {}
+
+        node_dates = {
+            node.media_id: node.start_date for node in snapshot.continuity_component
+        }
+
+        def sort_key(media_id: str) -> tuple[date, int]:
+            return (node_dates.get(media_id) or date.max, int(media_id))
+
+        outgoing: dict[str, set[str]] = {media_id: set() for media_id in continuity_ids}
+        indegree: dict[str, int] = dict.fromkeys(continuity_ids, 0)
+        for relation in snapshot.all_normalized_relations:
+            if relation.relation_type not in NO_SERIES_LINE_CONTINUITY_RELATIONS:
+                continue
+            if relation.source_media_id not in continuity_ids:
+                continue
+            if relation.target_media_id not in continuity_ids:
+                continue
+
+            if relation.relation_type == "prequel":
+                before_id, after_id = relation.target_media_id, relation.source_media_id
+            else:
+                before_id, after_id = relation.source_media_id, relation.target_media_id
+
+            if after_id in outgoing[before_id]:
+                continue
+            outgoing[before_id].add(after_id)
+            indegree[after_id] += 1
+
+        ready = deque(
+            sorted(
+                (media_id for media_id, degree in indegree.items() if degree == 0),
+                key=sort_key,
+            )
+        )
+        ordered: list[str] = []
+        while ready:
+            media_id = ready.popleft()
+            ordered.append(media_id)
+            newly_ready: list[str] = []
+            for target_id in sorted(outgoing[media_id], key=sort_key):
+                indegree[target_id] -= 1
+                if indegree[target_id] == 0:
+                    newly_ready.append(target_id)
+            for target_id in sorted(newly_ready, key=sort_key):
+                ready.append(target_id)
+            ready = deque(sorted(ready, key=sort_key))
+
+        remaining = sorted(continuity_ids - set(ordered), key=sort_key)
+        return {
+            media_id: index for index, media_id in enumerate([*ordered, *remaining])
+        }
 
     @staticmethod
     def _derive_no_series_line_continuity_relations(
@@ -213,6 +339,39 @@ class UiCandidateAssembler:
         return relations
 
     @staticmethod
+    def _derive_no_series_line_secondary_relations(
+        snapshot: AnimeFranchiseSnapshot,
+    ) -> list[AnimeRelation]:
+        if snapshot.has_series_line:
+            return []
+
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
+        if not continuity_ids:
+            return []
+
+        relations: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for relation in snapshot.all_normalized_relations:
+            if relation.source_media_id not in continuity_ids:
+                continue
+            if relation.relation_type not in NO_SERIES_LINE_SECONDARY_RELATIONS:
+                continue
+            if relation.target_media_id not in snapshot.nodes_by_media_id:
+                continue
+
+            key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            relations.append(relation)
+
+        return relations
+
+    @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
 
@@ -224,9 +383,7 @@ class UiCandidateAssembler:
     ) -> AnimeRelation | None:
         """Resolve the relation that drives both badge type and tooltip source."""
         series_relations = [
-            relation
-            for relation in relations
-            if relation.source_media_id in series_ids
+            relation for relation in relations if relation.source_media_id in series_ids
         ]
         if series_relations:
             return series_relations[0]
@@ -248,8 +405,7 @@ class UiCandidateAssembler:
         Final tie-break rank is: earliest `series_index`, then lowest depth.
         """
         anchor_candidates: list[tuple[str, int]] = [
-            (source_id, 0)
-            for source_id in series_line_sources
+            (source_id, 0) for source_id in series_line_sources
         ]
         if promoted_anchor_media_id is not None and promoted_depth is not None:
             anchor_candidates.append((promoted_anchor_media_id, promoted_depth))
