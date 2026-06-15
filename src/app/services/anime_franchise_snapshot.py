@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
+ROOT_STORY_PARENT_RELATIONS = {"full_story"}
+
+
 NO_SERIES_LINE_SECONDARY_RELATIONS = {
     "side_story",
     "spin_off",
@@ -40,6 +43,7 @@ class AnimeFranchiseSnapshot:
     no_series_line_secondary_candidates: list[AnimeRelation] = field(
         default_factory=list
     )
+    root_story_parent_candidates: list[AnimeRelation] = field(default_factory=list)
 
 
 class AnimeFranchiseSnapshotService:
@@ -108,6 +112,10 @@ class AnimeFranchiseSnapshotService:
                 nodes_by_media_id=nodes_by_media_id,
             )
         )
+        root_story_parent_candidates = self._derive_root_story_parent_candidates(
+            root_node=root_node,
+            nodes_by_media_id=nodes_by_media_id,
+        )
 
         all_relations = [
             relation
@@ -125,10 +133,46 @@ class AnimeFranchiseSnapshotService:
             direct_candidates=direct_candidates,
             promoted_continuity_candidates=promoted_continuity_candidates,
             no_series_line_secondary_candidates=no_series_line_secondary_candidates,
+            root_story_parent_candidates=root_story_parent_candidates,
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
         )
+
+    def _derive_root_story_parent_candidates(
+        self,
+        *,
+        root_node: AnimeNode,
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> list[AnimeRelation]:
+        if root_node.media_type == "tv":
+            return []
+
+        candidates: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for relation in root_node.relations:
+            if relation.relation_type not in ROOT_STORY_PARENT_RELATIONS:
+                continue
+
+            key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if key in seen:
+                continue
+
+            target_node = self.graph_builder.ensure_node(relation.target_media_id)
+            if target_node is None:
+                continue
+            nodes_by_media_id[relation.target_media_id] = target_node
+            if target_node.media_type != "tv":
+                continue
+
+            seen.add(key)
+            candidates.append(relation)
+
+        return candidates
 
     def _derive_no_series_line_secondary_candidates(
         self,

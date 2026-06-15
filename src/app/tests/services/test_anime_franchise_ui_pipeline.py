@@ -564,6 +564,123 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
+    def test_root_story_parent_goes_to_related_series(self):
+        root = AnimeNode(
+            "27891", "Debriefing", "mal", "special", "img-27891", date(2014, 1, 1), []
+        )
+        parent = AnimeNode(
+            "100", "SAO II", "mal", "tv", "img-100", date(2014, 7, 1), []
+        )
+        snapshot = SimpleNamespace(
+            root_node=root,
+            nodes_by_media_id={"27891": root, "100": parent},
+            all_normalized_relations=[AnimeRelation("27891", "100", "full_story")],
+            continuity_component=[root],
+            series_line=[],
+            direct_anchors=[root],
+            direct_candidates=[],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=[AnimeRelation("27891", "100", "full_story")],
+            has_series_line=False,
+            fallback_anchor_media_id="27891",
+            canonical_root_media_id="27891",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertIn(
+            "100",
+            [entry["media_id"] for entry in sections["related_series"]["entries"]],
+        )
+        self.assertNotIn(
+            "100",
+            [
+                entry["media_id"]
+                for entry in sections.get("specials", {"entries": []})["entries"]
+            ],
+        )
+        self.assertNotIn(
+            "100",
+            [
+                entry["media_id"]
+                for entry in sections.get("ignored", {"entries": []})["entries"]
+            ],
+        )
+
+    def test_full_story_without_root_story_parent_metadata_stays_special(self):
+        root = AnimeNode(
+            "27891", "Debriefing", "mal", "special", "img-27891", date(2014, 1, 1), []
+        )
+        parent = AnimeNode(
+            "100", "SAO II", "mal", "special", "img-100", date(2014, 7, 1), []
+        )
+        snapshot = SimpleNamespace(
+            root_node=root,
+            nodes_by_media_id={"27891": root, "100": parent},
+            all_normalized_relations=[AnimeRelation("27891", "100", "full_story")],
+            continuity_component=[root],
+            series_line=[],
+            direct_anchors=[root],
+            direct_candidates=[AnimeRelation("27891", "100", "full_story")],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=[],
+            has_series_line=False,
+            fallback_anchor_media_id="27891",
+            canonical_root_media_id="27891",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertIn(
+            "100", [entry["media_id"] for entry in sections["specials"]["entries"]]
+        )
+        self.assertNotIn(
+            "100",
+            [
+                entry["media_id"]
+                for entry in sections.get("related_series", {"entries": []})["entries"]
+            ],
+        )
+
+    def test_inverse_tv_to_recap_full_story_stays_specials(self):
+        tv = AnimeNode("100", "SAO II", "mal", "tv", "img-100", date(2014, 7, 1), [])
+        recap = AnimeNode(
+            "27891", "Debriefing", "mal", "special", "img-27891", date(2014, 1, 1), []
+        )
+        snapshot = SimpleNamespace(
+            root_node=tv,
+            nodes_by_media_id={"100": tv, "27891": recap},
+            all_normalized_relations=[AnimeRelation("100", "27891", "full_story")],
+            continuity_component=[tv, recap],
+            series_line=[tv],
+            direct_anchors=[tv],
+            direct_candidates=[AnimeRelation("100", "27891", "full_story")],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="100",
+            canonical_root_media_id="100",
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertIn(
+            "27891", [entry["media_id"] for entry in sections["specials"]["entries"]]
+        )
+        self.assertNotIn(
+            "27891",
+            [
+                entry["media_id"]
+                for entry in sections.get("related_series", {"entries": []})["entries"]
+            ],
+        )
+
     def test_pipeline_output_contains_root_display_and_expected_sections(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
 
