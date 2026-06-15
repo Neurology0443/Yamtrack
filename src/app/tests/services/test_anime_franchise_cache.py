@@ -144,6 +144,39 @@ class AnimeFranchiseCacheTests(TestCase):
             ],
         }
 
+    def _payload_with_special_seed_candidate(self):
+        return {
+            "schema_version": 1,
+            "root_media_id": "40489",
+            "display_title": "Canonical Series",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "11757",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Canonical Series",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "40489",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Special Entry",
+                        },
+                    ],
+                },
+            ],
+        }
+
     def test_extract_payload_media_ids_from_series_and_sections(self):
         payload = self._dragon_ball_payload()
         payload["series"]["entries"] = payload["series"]["entries"][:2]
@@ -409,23 +442,41 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("123456", prepared["aliasable_media_ids"])
         self.assertNotIn("123456", aliasable_ids)
 
-    def test_prepare_payload_for_aliasing_does_not_alias_covered_special_seed(self):
-        payload = self._dragon_ball_payload()
+    def test_prepare_payload_for_aliasing_aliases_covered_special_seed(self):
+        payload = self._payload_with_special_seed_candidate()
 
-        prepared, _canonical_id, aliasable_ids = (
+        prepared, canonical_id, aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 payload,
-                build_seed_media_id="999",
+                build_seed_media_id="40489",
                 truncated=False,
                 aliases_enabled=True,
             )
         )
 
-        self.assertIn("999", prepared["covered_media_ids"])
-        self.assertNotIn("999", prepared["aliasable_media_ids"])
-        self.assertNotIn("999", aliasable_ids)
+        self.assertEqual(canonical_id, "11757")
+        self.assertIn("40489", prepared["covered_media_ids"])
+        self.assertIn("40489", prepared["aliasable_media_ids"])
+        self.assertIn("40489", aliasable_ids)
 
-    def test_prepare_payload_for_aliasing_does_not_alias_covered_spinoff_seed(self):
+    def test_prepare_payload_for_aliasing_does_not_alias_passive_special(self):
+        payload = self._payload_with_special_seed_candidate()
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="11757",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        self.assertEqual(canonical_id, "11757")
+        self.assertIn("40489", prepared["covered_media_ids"])
+        self.assertNotIn("40489", prepared["aliasable_media_ids"])
+        self.assertNotIn("40489", aliasable_ids)
+
+    def test_prepare_payload_for_aliasing_aliases_covered_spinoff_seed(self):
         payload = self._dragon_ball_payload()
 
         prepared, _canonical_id, aliasable_ids = (
@@ -438,10 +489,10 @@ class AnimeFranchiseCacheTests(TestCase):
         )
 
         self.assertIn("998", prepared["covered_media_ids"])
-        self.assertNotIn("998", prepared["aliasable_media_ids"])
-        self.assertNotIn("998", aliasable_ids)
+        self.assertIn("998", prepared["aliasable_media_ids"])
+        self.assertIn("998", aliasable_ids)
 
-    def test_prepare_payload_for_aliasing_does_not_alias_covered_alternative_seed(
+    def test_prepare_payload_for_aliasing_aliases_covered_alternative_seed(
         self,
     ):
         payload = self._dragon_ball_payload()
@@ -456,10 +507,10 @@ class AnimeFranchiseCacheTests(TestCase):
         )
 
         self.assertIn("996", prepared["covered_media_ids"])
-        self.assertNotIn("996", prepared["aliasable_media_ids"])
-        self.assertNotIn("996", aliasable_ids)
+        self.assertIn("996", prepared["aliasable_media_ids"])
+        self.assertIn("996", aliasable_ids)
 
-    def test_prepare_payload_for_aliasing_does_not_alias_covered_related_series_seed(
+    def test_prepare_payload_for_aliasing_aliases_covered_related_series_seed(
         self,
     ):
         payload = self._dragon_ball_payload()
@@ -474,8 +525,8 @@ class AnimeFranchiseCacheTests(TestCase):
         )
 
         self.assertIn("997", prepared["covered_media_ids"])
-        self.assertNotIn("997", prepared["aliasable_media_ids"])
-        self.assertNotIn("997", aliasable_ids)
+        self.assertIn("997", prepared["aliasable_media_ids"])
+        self.assertIn("997", aliasable_ids)
 
     def test_replace_aliases_creates_lightweight_records_after_save_payload(self):
         payload = self._dragon_ball_payload()
@@ -542,7 +593,7 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(lookup.canonical_media_id, "223")
         self.assertEqual(lookup.payload["root_media_id"], "223")
 
-    def test_replace_aliases_preserves_direct_payload_for_non_aliasable_special_seed(
+    def test_replace_aliases_preserves_direct_payload_for_passive_special(
         self,
     ):
         direct_payload = deepcopy(self.payload)
@@ -554,7 +605,7 @@ class AnimeFranchiseCacheTests(TestCase):
         prepared, canonical_id, _aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 self._dragon_ball_payload(),
-                build_seed_media_id="999",
+                build_seed_media_id="223",
                 truncated=False,
                 aliases_enabled=True,
             )

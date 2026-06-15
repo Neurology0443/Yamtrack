@@ -232,7 +232,7 @@ def prepare_payload_for_aliasing(
     if canonical_media_id not in covered_media_ids:
         covered_media_ids.add(canonical_media_id)
 
-    if build_seed_media_id == canonical_media_id:
+    if build_seed_media_id in covered_media_ids:
         aliasable_media_ids.add(build_seed_media_id)
 
     payload["root_media_id"] = canonical_media_id
