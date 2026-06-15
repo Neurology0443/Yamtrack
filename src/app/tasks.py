@@ -11,15 +11,29 @@ from django.utils import timezone
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
-from app.services.anime_franchise import AnimeFranchiseService
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_scoped_payload import (
+    build_scoped_seed_payload_from_snapshot,
+)
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
+from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _build_mal_anime_franchise_payload_for_cache(media_id: str, graph_builder):
+    """Build the franchise snapshot and UI payload for cache serialization."""
+    snapshot_service = AnimeFranchiseSnapshotService(
+        graph_builder=graph_builder,
+    )
+    snapshot = snapshot_service.build(media_id)
+    franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
+    return snapshot, franchise_payload
 
 
 @shared_task(name="Cleanup user messages")
@@ -151,7 +165,7 @@ def import_anime_franchise(
 
 
 @shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
-def build_mal_anime_franchise_payload(media_id):
+def build_mal_anime_franchise_payload(media_id):  # noqa: PLR0915
     """Build and cache the complete MAL anime franchise payload in the background."""
     media_id = str(media_id)
     task_lock_key = anime_franchise_cache.get_task_lock_key(media_id)
@@ -178,9 +192,10 @@ def build_mal_anime_franchise_payload(media_id):
         graph_builder = AnimeFranchiseGraphBuilder(
             max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
         )
-        franchise_payload = AnimeFranchiseService(
-            graph_builder=graph_builder,
-        ).build(media_id)
+        snapshot, franchise_payload = _build_mal_anime_franchise_payload_for_cache(
+            media_id,
+            graph_builder,
+        )
         truncated = bool(graph_builder.truncated)
         aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
         can_use_aliases = aliases_enabled and not truncated
@@ -198,22 +213,82 @@ def build_mal_anime_franchise_payload(media_id):
                 aliases_enabled=aliases_enabled,
             )
         )
+        is_canonical_build = media_id == canonical_media_id
         duration = time.monotonic() - started_at
-        anime_franchise_cache.save_payload(
-            canonical_media_id,
-            canonical_payload,
-            fetched_at=timezone.now(),
-            node_count=node_count,
-            build_duration_seconds=duration,
-            truncated=truncated,
-            truncation_reason=truncation_reason,
-        )
         alias_count = 0
-        if can_use_aliases:
-            alias_count = anime_franchise_cache.replace_aliases(
+        seed_is_aliasable_in_existing_canonical = False
+        if is_canonical_build:
+            anime_franchise_cache.save_payload(
                 canonical_media_id,
                 canonical_payload,
+                fetched_at=timezone.now(),
+                node_count=node_count,
+                build_duration_seconds=duration,
+                truncated=truncated,
+                truncation_reason=truncation_reason,
+            )
+            if can_use_aliases:
+                alias_count = anime_franchise_cache.replace_aliases(
+                    canonical_media_id,
+                    canonical_payload,
+                    truncated=False,
+                )
+        else:
+            logger.info(
+                "Skipping canonical MAL anime franchise cache write for "
+                "non-canonical seed media_id=%s canonical_media_id=%s",
+                media_id,
+                canonical_media_id,
+            )
+            existing_canonical_payload, existing_canonical_meta = (
+                anime_franchise_cache.load_payload(canonical_media_id)
+            )
+            existing_aliasable_ids = set()
+            if existing_canonical_payload:
+                existing_aliasable_ids = {
+                    str(aliasable_media_id)
+                    for aliasable_media_id in existing_canonical_payload.get(
+                        "aliasable_media_ids",
+                        [],
+                    )
+                }
+                if can_use_aliases:
+                    alias_count = anime_franchise_cache.replace_aliases(
+                        canonical_media_id,
+                        existing_canonical_payload,
+                        truncated=False,
+                    )
+            else:
+                anime_franchise_cache.maybe_schedule_build(
+                    canonical_media_id,
+                    existing_canonical_meta,
+                    has_payload=False,
+                )
+            seed_is_aliasable_in_existing_canonical = (
+                media_id in existing_aliasable_ids
+            )
+        scoped_payload = build_scoped_seed_payload_from_snapshot(
+            snapshot,
+            seed_media_id=media_id,
+        )
+        if not is_canonical_build and seed_is_aliasable_in_existing_canonical:
+            anime_franchise_cache.delete_direct_payload(media_id)
+        if (
+            scoped_payload is not None
+            and not is_canonical_build
+            and not seed_is_aliasable_in_existing_canonical
+        ):
+            scoped_node_count = len(
+                anime_franchise_cache.extract_payload_media_ids(scoped_payload),
+            )
+            anime_franchise_cache.save_payload(
+                media_id,
+                scoped_payload,
+                fetched_at=timezone.now(),
+                node_count=scoped_node_count,
+                build_duration_seconds=duration,
                 truncated=False,
+                truncation_reason="",
             )
         if truncated:
             logger.info(
