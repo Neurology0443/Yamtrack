@@ -207,6 +207,31 @@ class AnimeFranchiseCacheTests(TestCase):
         )
         self.assertIn("99999", anime_franchise_cache.extract_payload_media_ids(payload))
 
+    def test_related_series_root_story_parent_is_covered_but_not_aliasable(self):
+        payload = {
+            "series": {"entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "entries": [{"media_id": "27891"}],
+                },
+                {
+                    "key": "specials",
+                    "entries": [{"media_id": "27891"}],
+                },
+                {
+                    "key": "related_series",
+                    "entries": [{"media_id": "100"}],
+                },
+            ],
+        }
+
+        self.assertIn("100", anime_franchise_cache.extract_payload_media_ids(payload))
+        self.assertNotIn(
+            "100",
+            anime_franchise_cache.extract_aliasable_media_ids(payload),
+        )
+
     def test_determine_canonical_media_id_from_series_line(self):
         self.assertEqual(
             anime_franchise_cache.determine_canonical_media_id(

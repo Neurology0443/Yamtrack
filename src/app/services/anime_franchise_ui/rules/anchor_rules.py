@@ -15,6 +15,8 @@ def _is_direct_or_fallback_anchor(candidate, context) -> bool:
         and candidate.section_key == "continuity_extras"
     ):
         return True
+    if candidate.metadata.get("is_root_story_parent"):
+        return True
     if candidate.has_series_line_origin:
         return True
     if not context.snapshot.has_series_line and candidate.metadata.get(

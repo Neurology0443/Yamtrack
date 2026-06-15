@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class UiCandidateAssembler:
     """Build canonical secondary candidates while keeping Series separate."""
 
-    def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:  # noqa: PLR0915
+    def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:  # noqa: C901, PLR0915
         """Build secondary candidates and preserve representative relations."""
         series_ids = {node.media_id for node in snapshot.series_line}
         series_index = {
@@ -45,8 +45,19 @@ class UiCandidateAssembler:
             series_ids=series_ids,
             series_index=series_index,
         )
+        root_story_parent_relations = (
+            getattr(snapshot, "root_story_parent_candidates", []) or []
+        )
+        root_story_parent_keys = {
+            (relation.source_media_id, relation.target_media_id, relation.relation_type)
+            for relation in root_story_parent_relations
+        }
 
-        candidate_relations = [*snapshot.direct_candidates, *promoted_relations]
+        candidate_relations = [
+            *snapshot.direct_candidates,
+            *promoted_relations,
+            *root_story_parent_relations,
+        ]
         no_series_line_continuity_keys: set[tuple[str, str, str]] = set()
         no_series_line_secondary_keys: set[tuple[str, str, str]] = set()
         no_series_line_order = self._derive_no_series_line_continuity_order(snapshot)
@@ -87,7 +98,10 @@ class UiCandidateAssembler:
             if relation_key in seen_relations:
                 continue
             seen_relations.add(relation_key)
-            if relation.target_media_id in series_ids:
+            if (
+                relation.target_media_id in series_ids
+                and relation_key not in root_story_parent_keys
+            ):
                 continue
             grouped_relations.setdefault(relation.target_media_id, []).append(relation)
 
@@ -179,6 +193,15 @@ class UiCandidateAssembler:
                 in no_series_line_secondary_keys
                 for relation in relations
             )
+            is_root_story_parent = any(
+                (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                in root_story_parent_keys
+                for relation in relations
+            )
             metadata = {
                 "is_promoted_continuity": is_promoted_continuity,
                 "promoted_from_series_line_media_id": promoted_metadata.get(
@@ -197,10 +220,12 @@ class UiCandidateAssembler:
                     for relation in relations
                 ],
             }
-            if is_no_series_line_continuity:
+            if is_no_series_line_continuity and not is_root_story_parent:
                 metadata["section_sort_rank"] = no_series_line_order.get(node.media_id)
             if is_no_series_line_secondary:
                 metadata["is_no_series_line_secondary"] = True
+            if is_root_story_parent:
+                metadata["is_root_story_parent"] = True
 
             candidates.append(
                 UiCandidate(
