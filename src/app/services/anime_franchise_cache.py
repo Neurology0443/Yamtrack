@@ -322,7 +322,7 @@ def _normalize_covered_alias_record(alias) -> dict | None:
 
 
 def payload_covers_media_id(payload: dict, media_id) -> bool:
-    """Return whether a cached payload explicitly allows aliasing for media_id."""
+    """Return whether a cached payload allows canonical aliasing for media_id."""
     if not isinstance(payload, dict):
         return False
 
@@ -333,6 +333,7 @@ def payload_covers_media_id(payload: dict, media_id) -> bool:
     return str(media_id) in {str(item) for item in aliasable_media_ids}
 
 
+# covered_media_ids is read-only membership and must not imply canonical aliasability.
 def payload_includes_media_id(payload: dict, media_id) -> bool:
     """Return whether a cached payload explicitly covers media_id for reading."""
     if not isinstance(payload, dict):
@@ -636,7 +637,11 @@ def replace_aliases(  # noqa: C901, PLR0912
     *,
     truncated: bool = False,
 ) -> int:
-    """Replace lightweight alias records for a canonical franchise payload."""
+    """Replace lightweight alias records for a canonical franchise payload.
+
+    Returns the number of canonical aliases created; covered aliases are
+    maintained separately and are not counted.
+    """
     canonical_media_id = str(canonical_media_id)
 
     if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
