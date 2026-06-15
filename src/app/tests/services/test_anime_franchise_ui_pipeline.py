@@ -257,6 +257,83 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
+
+    def test_candidate_assembler_resolves_simple_relation_source_to_series_anchor(self):
+        snapshot = self._snapshot()
+        snapshot.direct_candidates = [AnimeRelation("100", "300", "sequel")]
+
+        candidate = UiCandidateAssembler().build(snapshot)[0]
+
+        self.assertEqual(candidate.relation_type, "sequel")
+        self.assertEqual(candidate.linked_series_line_media_id, "100")
+        self.assertEqual(candidate.relation_source_media_id, "100")
+
+    def test_candidate_assembler_keeps_transitive_relation_source_separate(
+        self,
+    ):
+        tv = AnimeNode("100", "TV", "mal", "tv", "img-100", date(2020, 1, 1), [])
+        movie_1 = AnimeNode(
+            "201", "Movie 1", "mal", "movie", "img-201", date(2021, 1, 1), []
+        )
+        movie_2 = AnimeNode(
+            "202", "Movie 2", "mal", "movie", "img-202", date(2022, 1, 1), []
+        )
+        movie_3 = AnimeNode(
+            "203", "Movie 3", "mal", "movie", "img-203", date(2023, 1, 1), []
+        )
+        promoted = [
+            AnimeRelation("100", "201", "sequel"),
+            AnimeRelation("201", "202", "sequel"),
+            AnimeRelation("202", "203", "sequel"),
+        ]
+        snapshot = SimpleNamespace(
+            root_node=tv,
+            nodes_by_media_id={
+                "100": tv,
+                "201": movie_1,
+                "202": movie_2,
+                "203": movie_3,
+            },
+            series_line=[tv],
+            direct_candidates=[],
+            promoted_continuity_candidates=promoted,
+            has_series_line=True,
+            fallback_anchor_media_id="100",
+        )
+
+        candidates = {
+            candidate.media_id: candidate
+            for candidate in UiCandidateAssembler().build(snapshot)
+        }
+
+        self.assertEqual(candidates["201"].linked_series_line_media_id, "100")
+        self.assertEqual(candidates["202"].linked_series_line_media_id, "100")
+        self.assertEqual(candidates["203"].linked_series_line_media_id, "100")
+        self.assertEqual(candidates["201"].relation_type, "sequel")
+        self.assertEqual(candidates["202"].relation_type, "sequel")
+        self.assertEqual(candidates["203"].relation_type, "sequel")
+        self.assertEqual(candidates["201"].relation_source_media_id, "100")
+        self.assertEqual(candidates["202"].relation_source_media_id, "201")
+        self.assertEqual(candidates["203"].relation_source_media_id, "202")
+
+    def test_candidate_assembler_keeps_badge_and_source_from_same_relation(self):
+        snapshot = self._snapshot()
+        movie_2 = AnimeNode(
+            "301", "Movie 2", "mal", "movie", "img-301", date(2023, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "301": movie_2}
+        snapshot.direct_candidates = [
+            AnimeRelation("100", "300", "sequel"),
+            AnimeRelation("301", "300", "prequel"),
+        ]
+
+        candidate = UiCandidateAssembler().build(snapshot)[0]
+
+        self.assertEqual(candidate.media_id, "300")
+        self.assertEqual(candidate.relation_type, "sequel")
+        self.assertEqual(candidate.relation_source_media_id, "100")
+        self.assertEqual(candidate.linked_series_line_media_id, "100")
+
     def test_pipeline_output_contains_root_display_and_expected_sections(self):
         payload = AnimeFranchiseUiPipeline().run(self._snapshot())
 
@@ -298,6 +375,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertIn("relation_type", entry)
         self.assertIn("linked_series_line_media_id", entry)
         self.assertIn("linked_series_line_index", entry)
+        self.assertIn("relation_source_media_id", entry)
         self.assertIn("is_current", entry)
 
     def test_ignored_section_is_not_visible_in_ui(self):

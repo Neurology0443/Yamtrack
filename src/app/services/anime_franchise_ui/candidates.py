@@ -31,6 +31,7 @@ class UiCandidate:
     episode_count: int | None
     linked_series_line_media_id: str | None
     linked_series_line_index: int | None
+    relation_source_media_id: str | None = None
     linked_root_media_id: str | None = None
     relation_types: list[str] = field(default_factory=list)
     source_media_ids: list[str] = field(default_factory=list)
