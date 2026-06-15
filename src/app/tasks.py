@@ -165,7 +165,7 @@ def import_anime_franchise(
 
 
 @shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
-def build_mal_anime_franchise_payload(media_id):
+def build_mal_anime_franchise_payload(media_id):  # noqa: PLR0915
     """Build and cache the complete MAL anime franchise payload in the background."""
     media_id = str(media_id)
     task_lock_key = anime_franchise_cache.get_task_lock_key(media_id)
@@ -213,37 +213,70 @@ def build_mal_anime_franchise_payload(media_id):
                 aliases_enabled=aliases_enabled,
             )
         )
-        canonical_aliasable_ids = {
-            str(aliasable_media_id)
-            for aliasable_media_id in canonical_payload.get("aliasable_media_ids", [])
-        }
+        is_canonical_build = media_id == canonical_media_id
         duration = time.monotonic() - started_at
-        anime_franchise_cache.save_payload(
-            canonical_media_id,
-            canonical_payload,
-            fetched_at=timezone.now(),
-            node_count=node_count,
-            build_duration_seconds=duration,
-            truncated=truncated,
-            truncation_reason=truncation_reason,
-        )
         alias_count = 0
-        if can_use_aliases:
-            alias_count = anime_franchise_cache.replace_aliases(
+        seed_is_aliasable_in_existing_canonical = False
+        if is_canonical_build:
+            anime_franchise_cache.save_payload(
                 canonical_media_id,
                 canonical_payload,
-                truncated=False,
+                fetched_at=timezone.now(),
+                node_count=node_count,
+                build_duration_seconds=duration,
+                truncated=truncated,
+                truncation_reason=truncation_reason,
+            )
+            if can_use_aliases:
+                alias_count = anime_franchise_cache.replace_aliases(
+                    canonical_media_id,
+                    canonical_payload,
+                    truncated=False,
+                )
+        else:
+            logger.info(
+                "Skipping canonical MAL anime franchise cache write for "
+                "non-canonical seed media_id=%s canonical_media_id=%s",
+                media_id,
+                canonical_media_id,
+            )
+            existing_canonical_payload, existing_canonical_meta = (
+                anime_franchise_cache.load_payload(canonical_media_id)
+            )
+            existing_aliasable_ids = set()
+            if existing_canonical_payload:
+                existing_aliasable_ids = {
+                    str(aliasable_media_id)
+                    for aliasable_media_id in existing_canonical_payload.get(
+                        "aliasable_media_ids",
+                        [],
+                    )
+                }
+                if can_use_aliases:
+                    alias_count = anime_franchise_cache.replace_aliases(
+                        canonical_media_id,
+                        existing_canonical_payload,
+                        truncated=False,
+                    )
+            else:
+                anime_franchise_cache.maybe_schedule_build(
+                    canonical_media_id,
+                    existing_canonical_meta,
+                    has_payload=False,
+                )
+            seed_is_aliasable_in_existing_canonical = (
+                media_id in existing_aliasable_ids
             )
         scoped_payload = build_scoped_seed_payload_from_snapshot(
             snapshot,
             seed_media_id=media_id,
         )
-        if media_id != canonical_media_id and media_id in canonical_aliasable_ids:
+        if not is_canonical_build and seed_is_aliasable_in_existing_canonical:
             anime_franchise_cache.delete_direct_payload(media_id)
         if (
             scoped_payload is not None
-            and media_id != canonical_media_id
-            and media_id not in canonical_aliasable_ids
+            and not is_canonical_build
+            and not seed_is_aliasable_in_existing_canonical
         ):
             scoped_node_count = len(
                 anime_franchise_cache.extract_payload_media_ids(scoped_payload),
