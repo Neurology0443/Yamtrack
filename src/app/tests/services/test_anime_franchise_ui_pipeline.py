@@ -77,6 +77,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             direct_anchors=[series_1, series_2],
             direct_candidates=direct_candidates,
             promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
             has_series_line=True,
             fallback_anchor_media_id="200",
             canonical_root_media_id="100",
@@ -362,6 +363,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
                 AnimeRelation("33569", "42364", "sequel"),
             ],
             promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
             has_series_line=False,
             fallback_anchor_media_id="33569",
             canonical_root_media_id="33142",
@@ -416,14 +418,13 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             )
         )
 
-    def test_no_series_line_pipeline_adds_deep_parent_story_secondary(self):
+    def test_no_series_line_pipeline_consumes_snapshot_secondary_candidates(self):
         snapshot = self._no_series_line_snapshot()
         parent = AnimeNode(
             "99999", "Re:Zero S4", "mal", "tv", "img-99999", date(2026, 1, 1), []
         )
         snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "99999": parent}
-        snapshot.all_normalized_relations = [
-            *snapshot.all_normalized_relations,
+        snapshot.no_series_line_secondary_candidates = [
             AnimeRelation("63830", "99999", "parent_story"),
         ]
 
@@ -439,12 +440,17 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
         )
 
-    def test_no_series_line_pipeline_ignores_unhydrated_secondary_target(self):
+    def test_no_series_line_pipeline_does_not_derive_secondary_candidates(self):
         snapshot = self._no_series_line_snapshot()
+        parent = AnimeNode(
+            "99999", "Re:Zero S4", "mal", "tv", "img-99999", date(2026, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "99999": parent}
         snapshot.all_normalized_relations = [
             *snapshot.all_normalized_relations,
             AnimeRelation("63830", "99999", "parent_story"),
         ]
+        snapshot.no_series_line_secondary_candidates = []
 
         payload = AnimeFranchiseUiPipeline().run(snapshot)
         section_ids = {

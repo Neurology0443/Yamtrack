@@ -19,15 +19,6 @@ from typing import TYPE_CHECKING
 from .candidates import UiCandidate
 
 NO_SERIES_LINE_CONTINUITY_RELATIONS = {"prequel", "sequel"}
-NO_SERIES_LINE_SECONDARY_RELATIONS = {
-    "side_story",
-    "spin_off",
-    "parent_story",
-    "alternative_setting",
-    "alternative_version",
-    "character",
-}
-
 if TYPE_CHECKING:
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
     from app.services.anime_franchise_types import AnimeRelation
@@ -64,7 +55,7 @@ class UiCandidateAssembler:
                 self._derive_no_series_line_continuity_relations(snapshot)
             )
             no_series_secondary_relations = (
-                self._derive_no_series_line_secondary_relations(snapshot)
+                getattr(snapshot, "no_series_line_secondary_candidates", []) or []
             )
             no_series_line_continuity_keys = {
                 (
@@ -324,39 +315,6 @@ class UiCandidateAssembler:
             if relation.source_media_id not in continuity_ids:
                 continue
             if relation.target_media_id not in continuity_ids:
-                continue
-
-            key = (
-                relation.source_media_id,
-                relation.target_media_id,
-                relation.relation_type,
-            )
-            if key in seen:
-                continue
-            seen.add(key)
-            relations.append(relation)
-
-        return relations
-
-    @staticmethod
-    def _derive_no_series_line_secondary_relations(
-        snapshot: AnimeFranchiseSnapshot,
-    ) -> list[AnimeRelation]:
-        if snapshot.has_series_line:
-            return []
-
-        continuity_ids = {node.media_id for node in snapshot.continuity_component}
-        if not continuity_ids:
-            return []
-
-        relations: list[AnimeRelation] = []
-        seen: set[tuple[str, str, str]] = set()
-        for relation in snapshot.all_normalized_relations:
-            if relation.source_media_id not in continuity_ids:
-                continue
-            if relation.relation_type not in NO_SERIES_LINE_SECONDARY_RELATIONS:
-                continue
-            if relation.target_media_id not in snapshot.nodes_by_media_id:
                 continue
 
             key = (

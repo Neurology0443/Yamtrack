@@ -1,10 +1,10 @@
-# ruff: noqa: D101,D102,D107
+# ruff: noqa: D101,D102,D107,ARG002,ARG005,FBT002
 from datetime import date
 
 from django.test import SimpleTestCase
 
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
@@ -29,11 +29,32 @@ class FakeGraphBuilder:
 class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
-            "10": AnimeNode("10", "S1", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("10", "20", "sequel")]),
-            "20": AnimeNode("20", "S2", "mal", "tv", "img", date(2021, 1, 1), [AnimeRelation("20", "10", "prequel"), AnimeRelation("20", "30", "sequel")]),
+            "10": AnimeNode(
+                "10",
+                "S1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("10", "20", "sequel")],
+            ),
+            "20": AnimeNode(
+                "20",
+                "S2",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [
+                    AnimeRelation("20", "10", "prequel"),
+                    AnimeRelation("20", "30", "sequel"),
+                ],
+            ),
             "30": AnimeNode("30", "Movie", "mal", "movie", "img", date(2022, 1, 1), []),
         }
-        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("20")
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("20")
         self.assertEqual([node.media_id for node in snapshot.series_line], ["10", "20"])
         self.assertEqual(snapshot.canonical_root_media_id, "10")
 
@@ -54,7 +75,9 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         self.assertFalse(snapshot.has_series_line)
         self.assertEqual(snapshot.fallback_anchor_media_id, "500")
         self.assertEqual([node.media_id for node in snapshot.direct_anchors], ["500"])
-        self.assertEqual([rel.target_media_id for rel in snapshot.direct_candidates], ["501"])
+        self.assertEqual(
+            [rel.target_media_id for rel in snapshot.direct_candidates], ["501"]
+        )
         self.assertEqual(snapshot.canonical_root_media_id, "500")
 
     def test_continuity_from_intermediate_seed_is_transitive(self):
@@ -75,7 +98,10 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "tv",
                 "img",
                 date(2021, 1, 1),
-                [AnimeRelation("200", "100", "prequel"), AnimeRelation("200", "300", "sequel")],
+                [
+                    AnimeRelation("200", "100", "prequel"),
+                    AnimeRelation("200", "300", "sequel"),
+                ],
             ),
             "300": AnimeNode(
                 "300",
@@ -117,7 +143,9 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         }
 
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
         )
         service = AnimeFranchiseSnapshotService(graph_builder=builder)
         snapshot_a = service.build("10")
@@ -161,14 +189,24 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
             "related": {"related_anime": []},
         }
 
-        builder = AnimeFranchiseGraphBuilder(metadata_fetcher=lambda media_id, refresh_cache=False: metadata)  # noqa: ARG005
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata
+        )
         node = builder.ensure_node("40")
 
         self.assertEqual(node.episode_count, 13)
 
     def test_non_series_line_root_is_included_in_direct_anchors(self):
         nodes = {
-            "100": AnimeNode("100", "TV", "mal", "tv", "img", date(2011, 1, 1), [AnimeRelation("100", "200", "sequel")]),
+            "100": AnimeNode(
+                "100",
+                "TV",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
             "200": AnimeNode(
                 "200",
                 "Special",
@@ -176,18 +214,41 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "special",
                 "img",
                 date(2011, 2, 1),
-                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+                [
+                    AnimeRelation("200", "300", "sequel"),
+                    AnimeRelation("200", "100", "prequel"),
+                ],
             ),
-            "300": AnimeNode("300", "Movie", "mal", "movie", "img", date(2011, 3, 1), [AnimeRelation("300", "200", "prequel")]),
+            "300": AnimeNode(
+                "300",
+                "Movie",
+                "mal",
+                "movie",
+                "img",
+                date(2011, 3, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
         }
-        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("200")
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("200")
 
         self.assertEqual([node.media_id for node in snapshot.series_line], ["100"])
-        self.assertEqual([node.media_id for node in snapshot.direct_anchors], ["100", "200"])
+        self.assertEqual(
+            [node.media_id for node in snapshot.direct_anchors], ["100", "200"]
+        )
 
     def test_special_root_can_surface_its_direct_continuity_neighbor(self):
         nodes = {
-            "100": AnimeNode("100", "TV", "mal", "tv", "img", date(2011, 1, 1), [AnimeRelation("100", "200", "sequel")]),
+            "100": AnimeNode(
+                "100",
+                "TV",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
             "200": AnimeNode(
                 "200",
                 "Special",
@@ -195,20 +256,44 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "special",
                 "img",
                 date(2011, 2, 1),
-                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+                [
+                    AnimeRelation("200", "300", "sequel"),
+                    AnimeRelation("200", "100", "prequel"),
+                ],
             ),
-            "300": AnimeNode("300", "Movie", "mal", "movie", "img", date(2011, 3, 1), [AnimeRelation("300", "200", "prequel")]),
+            "300": AnimeNode(
+                "300",
+                "Movie",
+                "mal",
+                "movie",
+                "img",
+                date(2011, 3, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
         }
-        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("200")
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("200")
 
         self.assertEqual(
-            {(rel.source_media_id, rel.target_media_id, rel.relation_type) for rel in snapshot.direct_candidates},
+            {
+                (rel.source_media_id, rel.target_media_id, rel.relation_type)
+                for rel in snapshot.direct_candidates
+            },
             {("100", "200", "sequel"), ("200", "300", "sequel")},
         )
 
     def test_series_line_root_behavior_does_not_over_expand(self):
         nodes = {
-            "100": AnimeNode("100", "TV", "mal", "tv", "img", date(2011, 1, 1), [AnimeRelation("100", "200", "sequel")]),
+            "100": AnimeNode(
+                "100",
+                "TV",
+                "mal",
+                "tv",
+                "img",
+                date(2011, 1, 1),
+                [AnimeRelation("100", "200", "sequel")],
+            ),
             "200": AnimeNode(
                 "200",
                 "Special",
@@ -216,21 +301,45 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "special",
                 "img",
                 date(2011, 2, 1),
-                [AnimeRelation("200", "300", "sequel"), AnimeRelation("200", "100", "prequel")],
+                [
+                    AnimeRelation("200", "300", "sequel"),
+                    AnimeRelation("200", "100", "prequel"),
+                ],
             ),
-            "300": AnimeNode("300", "Movie", "mal", "movie", "img", date(2011, 3, 1), [AnimeRelation("300", "200", "prequel")]),
+            "300": AnimeNode(
+                "300",
+                "Movie",
+                "mal",
+                "movie",
+                "img",
+                date(2011, 3, 1),
+                [AnimeRelation("300", "200", "prequel")],
+            ),
         }
-        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("100")
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("100")
 
         self.assertEqual([node.media_id for node in snapshot.direct_anchors], ["100"])
         self.assertEqual(
-            [(rel.source_media_id, rel.target_media_id, rel.relation_type) for rel in snapshot.direct_candidates],
+            [
+                (rel.source_media_id, rel.target_media_id, rel.relation_type)
+                for rel in snapshot.direct_candidates
+            ],
             [("100", "200", "sequel")],
         )
 
     def test_series_root_promotes_transitive_non_tv_continuity_chain_for_ui(self):
         nodes = {
-            "100": AnimeNode("100", "Season 1", "mal", "tv", "img", date(2020, 1, 1), [AnimeRelation("100", "101", "sequel")]),
+            "100": AnimeNode(
+                "100",
+                "Season 1",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("100", "101", "sequel")],
+            ),
             "101": AnimeNode(
                 "101",
                 "Season 2",
@@ -238,7 +347,10 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "tv",
                 "img",
                 date(2021, 1, 1),
-                [AnimeRelation("101", "100", "prequel"), AnimeRelation("101", "200", "sequel")],
+                [
+                    AnimeRelation("101", "100", "prequel"),
+                    AnimeRelation("101", "200", "sequel"),
+                ],
             ),
             "200": AnimeNode(
                 "200",
@@ -247,7 +359,10 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "movie",
                 "img",
                 date(2022, 1, 1),
-                [AnimeRelation("200", "101", "prequel"), AnimeRelation("200", "201", "sequel")],
+                [
+                    AnimeRelation("200", "101", "prequel"),
+                    AnimeRelation("200", "201", "sequel"),
+                ],
             ),
             "201": AnimeNode(
                 "201",
@@ -256,19 +371,121 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 "movie",
                 "img",
                 date(2023, 1, 1),
-                [AnimeRelation("201", "200", "prequel"), AnimeRelation("201", "202", "sequel")],
+                [
+                    AnimeRelation("201", "200", "prequel"),
+                    AnimeRelation("201", "202", "sequel"),
+                ],
             ),
-            "202": AnimeNode("202", "Movie 3", "mal", "movie", "img", date(2024, 1, 1), [AnimeRelation("202", "201", "prequel")]),
+            "202": AnimeNode(
+                "202",
+                "Movie 3",
+                "mal",
+                "movie",
+                "img",
+                date(2024, 1, 1),
+                [AnimeRelation("202", "201", "prequel")],
+            ),
         }
-        snapshot = AnimeFranchiseSnapshotService(graph_builder=FakeGraphBuilder(nodes)).build("101")
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build("101")
 
-        self.assertEqual([node.media_id for node in snapshot.series_line], ["100", "101"])
         self.assertEqual(
-            [(rel.source_media_id, rel.target_media_id, rel.relation_type) for rel in snapshot.direct_candidates],
+            [node.media_id for node in snapshot.series_line], ["100", "101"]
+        )
+        self.assertEqual(
+            [
+                (rel.source_media_id, rel.target_media_id, rel.relation_type)
+                for rel in snapshot.direct_candidates
+            ],
             [("101", "200", "sequel")],
         )
-        promoted_targets = {rel.target_media_id for rel in snapshot.promoted_continuity_candidates}
+        promoted_targets = {
+            rel.target_media_id for rel in snapshot.promoted_continuity_candidates
+        }
         self.assertEqual(promoted_targets, {"200", "201", "202"})
+
+    def test_no_series_line_hydrates_deep_parent_story_secondary_candidate(self):
+        metadata_map = self._break_time_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build("33569")
+
+        self.assertFalse(snapshot.has_series_line)
+        self.assertIn("99999", snapshot.nodes_by_media_id)
+        self.assertIn(
+            AnimeRelation("63830", "99999", "parent_story"),
+            snapshot.no_series_line_secondary_candidates,
+        )
+        self.assertNotIn(
+            "99999",
+            [node.media_id for node in snapshot.continuity_component],
+        )
+
+    def test_no_series_line_secondary_candidates_ignored_when_series_line_exists(self):
+        metadata_map = self._break_time_metadata_map(media_type="tv")
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build("33569")
+
+        self.assertTrue(snapshot.has_series_line)
+        self.assertEqual(snapshot.no_series_line_secondary_candidates, [])
+
+    def test_no_series_line_secondary_candidate_respects_max_nodes(self):
+        metadata_map = self._break_time_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+            max_nodes=5,
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build("33569")
+
+        self.assertNotIn("99999", snapshot.nodes_by_media_id)
+        self.assertEqual(snapshot.no_series_line_secondary_candidates, [])
+        self.assertTrue(builder.truncated)
+
+    @staticmethod
+    def _break_time_metadata_map(media_type="special"):
+        def node(media_id, title, start_date, related):
+            return {
+                "media_id": media_id,
+                "title": title,
+                "source": "mal",
+                "details": {"raw_media_type": media_type, "start_date": start_date},
+                "image": f"img-{media_id}",
+                "related": {
+                    "related_anime": [
+                        {"media_id": target_id, "relation_type": relation_type}
+                        for target_id, relation_type in related
+                    ]
+                },
+            }
+
+        return {
+            "33142": node("33142", "Break Time", "2016-04-08", [("33569", "sequel")]),
+            "33569": node(
+                "33569",
+                "Re:Petit",
+                "2016-06-24",
+                [("33142", "prequel"), ("42364", "sequel")],
+            ),
+            "42364": node("42364", "Break Time 2", "2020-07-10", [("60012", "sequel")]),
+            "60012": node("60012", "Break Time 3", "2024-10-02", [("63830", "sequel")]),
+            "63830": node(
+                "63830", "Break Time 4", "2025-07-01", [("99999", "parent_story")]
+            ),
+            "99999": node("99999", "Re:Zero S4", "2026-01-01", []),
+        }
 
 
 class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
@@ -297,7 +514,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
                 "source": "mal",
                 "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
                 "image": "s1",
-                "related": {"related_anime": [{"media_id": "200", "relation_type": "sequel"}]},
+                "related": {
+                    "related_anime": [{"media_id": "200", "relation_type": "sequel"}]
+                },
             },
             "200": {
                 "media_id": "200",
@@ -305,7 +524,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
                 "source": "mal",
                 "details": {"raw_media_type": "tv", "start_date": "2021-01-01"},
                 "image": "s2",
-                "related": {"related_anime": [{"media_id": "300", "relation_type": "sequel"}]},
+                "related": {
+                    "related_anime": [{"media_id": "300", "relation_type": "sequel"}]
+                },
             },
             "300": {
                 "media_id": "300",
@@ -317,7 +538,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
             },
         }
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=2,
         )
 
@@ -351,7 +574,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
             },
         }
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=1,
         )
         service = AnimeFranchiseSnapshotService(graph_builder=builder)
@@ -366,7 +591,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_graph_builder_max_nodes_zero_is_unlimited(self):
         metadata_map = self._chain_metadata_map()
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=0,
         )
 
@@ -378,7 +605,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_graph_builder_max_nodes_negative_is_unlimited(self):
         metadata_map = self._chain_metadata_map()
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=-1,
         )
 
@@ -390,7 +619,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_graph_builder_max_nodes_one_keeps_root(self):
         metadata_map = self._chain_metadata_map()
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=1,
         )
 
@@ -404,7 +635,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
     def test_ensure_node_returns_cached_node_even_when_limit_reached(self):
         metadata_map = self._chain_metadata_map()
         builder = AnimeFranchiseGraphBuilder(
-            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[str(media_id)],  # noqa: ARG005
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
             max_nodes=1,
         )
         graph = builder.build("100")
@@ -422,7 +655,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
                 "source": "mal",
                 "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
                 "image": "s1",
-                "related": {"related_anime": [{"media_id": "200", "relation_type": "sequel"}]},
+                "related": {
+                    "related_anime": [{"media_id": "200", "relation_type": "sequel"}]
+                },
             },
             "200": {
                 "media_id": "200",
@@ -430,7 +665,9 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
                 "source": "mal",
                 "details": {"raw_media_type": "tv", "start_date": "2021-01-01"},
                 "image": "s2",
-                "related": {"related_anime": [{"media_id": "300", "relation_type": "sequel"}]},
+                "related": {
+                    "related_anime": [{"media_id": "300", "relation_type": "sequel"}]
+                },
             },
             "300": {
                 "media_id": "300",
