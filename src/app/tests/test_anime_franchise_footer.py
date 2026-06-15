@@ -81,6 +81,28 @@ class AnimeFranchiseFooterTests(SimpleTestCase):
         self.assertFalse(enriched[0]["footer_relation_active"])
         self.assertEqual(enriched[0]["footer_relation_tooltip"], "Movie 1")
 
+
+    def test_relation_tooltip_for_transitive_inactive_entry_uses_movie_source(self):
+        entries = [
+            {
+                "media_id": "203",
+                "title": "Movie 3",
+                "relation_type": "sequel",
+                "linked_series_line_media_id": "100",
+                "relation_source_media_id": "202",
+            }
+        ]
+
+        enriched = enrich_franchise_entries_for_footer(
+            entries,
+            {},
+            series_entries=[{"media_id": "100", "title": "TV"}],
+            all_entries=[{"media_id": "202", "title": "Movie 2"}],
+        )
+
+        self.assertFalse(enriched[0]["footer_relation_active"])
+        self.assertEqual(enriched[0]["footer_relation_tooltip"], "Movie 2")
+
     def test_relation_tooltip_falls_back_to_linked_series_line_for_old_cache(self):
         entries = [
             {

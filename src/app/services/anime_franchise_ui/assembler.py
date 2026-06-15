@@ -26,6 +26,7 @@ class UiCandidateAssembler:
     """Build canonical secondary candidates while keeping Series separate."""
 
     def build(self, snapshot: AnimeFranchiseSnapshot) -> list[UiCandidate]:
+        """Build secondary candidates and preserve representative relations."""
         series_ids = {node.media_id for node in snapshot.series_line}
         series_index = {
             node.media_id: idx for idx, node in enumerate(snapshot.series_line)
@@ -93,10 +94,19 @@ class UiCandidateAssembler:
             )
             if linked_series_line_media_id is None and not snapshot.has_series_line:
                 linked_series_line_media_id = snapshot.fallback_anchor_media_id
-            relation_source_media_id = self._resolve_relation_source_media_id(
+            representative_relation = self._resolve_representative_relation(
                 relations=relations,
                 series_ids=series_ids,
-                linked_series_line_media_id=linked_series_line_media_id,
+            )
+            representative_relation_type = (
+                representative_relation.relation_type
+                if representative_relation is not None
+                else "unknown"
+            )
+            relation_source_media_id = (
+                representative_relation.source_media_id
+                if representative_relation is not None
+                else linked_series_line_media_id
             )
             linked_root_media_id = root_media_id if root_sources else None
             is_promoted_continuity = any(
@@ -116,7 +126,7 @@ class UiCandidateAssembler:
                     image=node.image,
                     source=node.source,
                     media_type=node.media_type,
-                    relation_type=relation_types[0] if relation_types else "unknown",
+                    relation_type=representative_relation_type,
                     start_date=node.start_date,
                     runtime_minutes=node.runtime_minutes,
                     episode_count=node.episode_count,
@@ -163,31 +173,22 @@ class UiCandidateAssembler:
     def _ordered_unique(values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
 
-    def _resolve_relation_source_media_id(
-        self,
+    @staticmethod
+    def _resolve_representative_relation(
         *,
         relations: list[AnimeRelation],
         series_ids: set[str],
-        linked_series_line_media_id: str | None,
-    ) -> str | None:
-        """Resolve the real relation source separately from the UI anchor."""
-        source_ids = self._ordered_unique(
-            [relation.source_media_id for relation in relations],
-        )
-
-        non_series_sources = [
-            source_id for source_id in source_ids if source_id not in series_ids
+    ) -> AnimeRelation | None:
+        """Resolve the relation that drives both badge type and tooltip source."""
+        series_relations = [
+            relation
+            for relation in relations
+            if relation.source_media_id in series_ids
         ]
-        if non_series_sources:
-            return non_series_sources[0]
+        if series_relations:
+            return series_relations[0]
 
-        series_sources = [
-            source_id for source_id in source_ids if source_id in series_ids
-        ]
-        if series_sources:
-            return series_sources[0]
-
-        return linked_series_line_media_id
+        return relations[0] if relations else None
 
     @staticmethod
     def _resolve_best_series_anchor(
