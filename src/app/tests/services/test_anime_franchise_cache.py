@@ -739,6 +739,62 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
 
+    def test_replace_aliases_creates_covered_aliases_for_non_aliasable_summaries(self):
+        payload = self._dragon_ball_payload()
+        payload["root_media_id"] = "11757"
+        payload["canonical_root_media_id"] = "11757"
+        payload["display_title"] = "Sword Art Online"
+        payload["aliasable_media_ids"] = [
+            "11757",
+            "21881",
+            "36474",
+            "39597",
+            "40540",
+        ]
+        payload["covered_media_ids"] = [
+            "11757",
+            "21881",
+            "36474",
+            "39597",
+            "40540",
+            "40489",
+            "41341",
+        ]
+        anime_franchise_cache.save_payload("11757", payload)
+
+        anime_franchise_cache.replace_aliases("11757", payload, truncated=False)
+
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("40489")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("41341")))
+        covered_40489 = cache.get(
+            anime_franchise_cache.get_covered_alias_key("40489")
+        )
+        covered_41341 = cache.get(
+            anime_franchise_cache.get_covered_alias_key("41341")
+        )
+        self.assertEqual(covered_40489["canonical_media_id"], "11757")
+        self.assertEqual(covered_40489["covered_media_id"], "40489")
+        self.assertEqual(covered_41341["canonical_media_id"], "11757")
+        self.assertEqual(covered_41341["covered_media_id"], "41341")
+
+    def test_load_payload_for_media_covered_alias_hit_loads_canonical_payload(self):
+        payload = self._dragon_ball_payload()
+        payload["root_media_id"] = "11757"
+        payload["canonical_root_media_id"] = "11757"
+        payload["display_title"] = "Sword Art Online"
+        payload["aliasable_media_ids"] = ["11757", "36474", "39597"]
+        payload["covered_media_ids"] = ["11757", "36474", "39597", "40489"]
+        anime_franchise_cache.save_payload("11757", payload)
+        anime_franchise_cache.replace_aliases("11757", payload, truncated=False)
+
+        lookup = anime_franchise_cache.load_payload_for_media("40489")
+
+        self.assertFalse(lookup.alias_hit)
+        self.assertTrue(lookup.covered_alias_hit)
+        self.assertEqual(lookup.requested_media_id, "40489")
+        self.assertEqual(lookup.canonical_media_id, "11757")
+        self.assertEqual(lookup.payload["root_media_id"], "11757")
+
     def test_save_and_load_payload_updates_access_metadata(self):
         anime_franchise_cache.save_payload("100", self.payload, node_count=1)
 

@@ -50,6 +50,16 @@ def get_alias_index_key(canonical_media_id) -> str:
     return f"{get_payload_key(canonical_media_id)}:aliases"
 
 
+def get_covered_alias_key(media_id) -> str:
+    """Return the covered-only lookup alias key for a MAL anime franchise payload."""
+    return f"mal_anime_franchise_covered_alias_{media_id}"
+
+
+def get_covered_alias_index_key(canonical_media_id) -> str:
+    """Return the index key listing covered aliases for a canonical payload."""
+    return f"{get_payload_key(canonical_media_id)}:covered_aliases"
+
+
 @dataclass(frozen=True)
 class FranchisePayloadLookup:
     """Resolved complete franchise payload lookup result."""
@@ -59,6 +69,7 @@ class FranchisePayloadLookup:
     payload: dict | None
     meta: dict
     alias_hit: bool = False
+    covered_alias_hit: bool = False
 
 
 def get_queue_lock_key(media_id) -> str:
@@ -258,6 +269,20 @@ def _build_alias_record(*, canonical_media_id: str, aliased_media_id: str) -> di
     }
 
 
+def _build_covered_alias_record(
+    *,
+    canonical_media_id: str,
+    covered_media_id: str,
+) -> dict:
+    now = timezone.now().isoformat()
+    return {
+        "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "canonical_media_id": str(canonical_media_id),
+        "covered_media_id": str(covered_media_id),
+        "created_at": now,
+    }
+
+
 def _normalize_alias_record(alias) -> dict | None:
     if not isinstance(alias, dict):
         return None
@@ -277,6 +302,25 @@ def _normalize_alias_record(alias) -> dict | None:
     }
 
 
+def _normalize_covered_alias_record(alias) -> dict | None:
+    if not isinstance(alias, dict):
+        return None
+    if alias.get("schema_version") != settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION:
+        return None
+
+    canonical_media_id = alias.get("canonical_media_id")
+    covered_media_id = alias.get("covered_media_id")
+    if canonical_media_id in (None, "") or covered_media_id in (None, ""):
+        return None
+
+    return {
+        "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "canonical_media_id": str(canonical_media_id),
+        "covered_media_id": str(covered_media_id),
+        "created_at": alias.get("created_at") or "",
+    }
+
+
 def payload_covers_media_id(payload: dict, media_id) -> bool:
     """Return whether a cached payload explicitly allows aliasing for media_id."""
     if not isinstance(payload, dict):
@@ -287,6 +331,18 @@ def payload_covers_media_id(payload: dict, media_id) -> bool:
         return False
 
     return str(media_id) in {str(item) for item in aliasable_media_ids}
+
+
+def payload_includes_media_id(payload: dict, media_id) -> bool:
+    """Return whether a cached payload explicitly covers media_id for reading."""
+    if not isinstance(payload, dict):
+        return False
+
+    covered_media_ids = payload.get("covered_media_ids")
+    if not isinstance(covered_media_ids, list):
+        return False
+
+    return str(media_id) in {str(item) for item in covered_media_ids}
 
 
 def _serialize_datetime(value):
@@ -547,7 +603,34 @@ def delete_aliases_for_canonical(canonical_media_id) -> None:
     cache.delete(get_alias_index_key(canonical_media_id))
 
 
-def replace_aliases(
+def _delete_covered_alias_if_owned_by(media_id, canonical_media_id) -> bool:
+    """Delete a covered alias only if it currently points to canonical_media_id."""
+    media_id = str(media_id)
+    canonical_media_id = str(canonical_media_id)
+
+    alias = _normalize_covered_alias_record(cache.get(get_covered_alias_key(media_id)))
+    if alias is None:
+        cache.delete(get_covered_alias_key(media_id))
+        return True
+
+    if alias["canonical_media_id"] != canonical_media_id:
+        return False
+
+    cache.delete(get_covered_alias_key(media_id))
+    return True
+
+
+def delete_covered_aliases_for_canonical(canonical_media_id) -> None:
+    """Delete all covered aliases currently indexed for a canonical payload."""
+    canonical_media_id = str(canonical_media_id)
+    alias_ids = cache.get(get_covered_alias_index_key(canonical_media_id))
+    if isinstance(alias_ids, list):
+        for media_id in alias_ids:
+            _delete_covered_alias_if_owned_by(media_id, canonical_media_id)
+    cache.delete(get_covered_alias_index_key(canonical_media_id))
+
+
+def replace_aliases(  # noqa: C901, PLR0912
     canonical_media_id,
     payload: dict,
     *,
@@ -561,6 +644,7 @@ def replace_aliases(
 
     if truncated:
         delete_aliases_for_canonical(canonical_media_id)
+        delete_covered_aliases_for_canonical(canonical_media_id)
         return 0
 
     payload = dict(payload)
@@ -574,10 +658,18 @@ def replace_aliases(
     aliasable_media_ids = payload.get("aliasable_media_ids")
     if not isinstance(aliasable_media_ids, list):
         return 0
+    covered_media_ids = payload.get("covered_media_ids")
+    if not isinstance(covered_media_ids, list):
+        covered_media_ids = []
 
     new_alias_ids = {
         str(media_id)
         for media_id in aliasable_media_ids
+        if str(media_id) != canonical_media_id
+    }
+    new_covered_alias_ids = {
+        str(media_id)
+        for media_id in covered_media_ids
         if str(media_id) != canonical_media_id
     }
 
@@ -590,6 +682,14 @@ def replace_aliases(
         if str(old_media_id) not in new_alias_ids:
             _delete_alias_if_owned_by(old_media_id, canonical_media_id)
 
+    old_covered_alias_ids = cache.get(get_covered_alias_index_key(canonical_media_id))
+    if not isinstance(old_covered_alias_ids, list):
+        old_covered_alias_ids = []
+
+    for old_media_id in old_covered_alias_ids:
+        if str(old_media_id) not in new_covered_alias_ids:
+            _delete_covered_alias_if_owned_by(old_media_id, canonical_media_id)
+
     for aliased_media_id in sorted(new_alias_ids):
         delete_direct_payload(aliased_media_id)
         cache.set(
@@ -601,9 +701,24 @@ def replace_aliases(
             timeout=ttl,
         )
 
+    for covered_media_id in sorted(new_covered_alias_ids):
+        cache.set(
+            get_covered_alias_key(covered_media_id),
+            _build_covered_alias_record(
+                canonical_media_id=canonical_media_id,
+                covered_media_id=covered_media_id,
+            ),
+            timeout=ttl,
+        )
+
     cache.set(
         get_alias_index_key(canonical_media_id),
         sorted(new_alias_ids),
+        timeout=ttl,
+    )
+    cache.set(
+        get_covered_alias_index_key(canonical_media_id),
+        sorted(new_covered_alias_ids),
         timeout=ttl,
     )
 
@@ -621,6 +736,17 @@ def _load_alias_for_media(media_id) -> dict | None:
     return alias
 
 
+def _load_covered_alias_for_media(media_id) -> dict | None:
+    media_id = str(media_id)
+    alias = _normalize_covered_alias_record(cache.get(get_covered_alias_key(media_id)))
+    if alias is None:
+        return None
+    if alias["covered_media_id"] != media_id:
+        cache.delete(get_covered_alias_key(media_id))
+        return None
+    return alias
+
+
 def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup:
     return FranchisePayloadLookup(
         requested_media_id=requested_media_id,
@@ -631,7 +757,7 @@ def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup
     )
 
 
-def load_payload_for_media(media_id) -> FranchisePayloadLookup:
+def load_payload_for_media(media_id) -> FranchisePayloadLookup:  # noqa: C901
     """Load a complete payload for media_id, resolving canonical aliases safely."""
     requested_media_id = str(media_id)
 
@@ -649,26 +775,56 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
         return _empty_lookup(requested_media_id, direct_meta)
 
     alias = _load_alias_for_media(requested_media_id)
-    if alias is None:
+    if alias is not None:
+        canonical_media_id = alias["canonical_media_id"]
+        canonical_payload = None
+        canonical_meta = direct_meta
+        if canonical_media_id != requested_media_id:
+            canonical_payload, canonical_meta = load_payload(canonical_media_id)
+            if canonical_payload is not None and not payload_covers_media_id(
+                canonical_payload,
+                requested_media_id,
+            ):
+                canonical_payload = None
+
+        if canonical_payload is None:
+            cache.delete(get_alias_key(requested_media_id))
+        else:
+            logger.info(
+                "MAL anime franchise alias hit for media_id=%s canonical_media_id=%s",
+                requested_media_id,
+                canonical_media_id,
+            )
+
+            return FranchisePayloadLookup(
+                requested_media_id=requested_media_id,
+                canonical_media_id=canonical_media_id,
+                payload=canonical_payload,
+                meta=canonical_meta,
+                alias_hit=True,
+            )
+
+    covered_alias = _load_covered_alias_for_media(requested_media_id)
+    if covered_alias is None:
         return _empty_lookup(requested_media_id, direct_meta)
 
-    canonical_media_id = alias["canonical_media_id"]
+    canonical_media_id = covered_alias["canonical_media_id"]
     canonical_payload = None
     canonical_meta = direct_meta
     if canonical_media_id != requested_media_id:
         canonical_payload, canonical_meta = load_payload(canonical_media_id)
-        if canonical_payload is not None and not payload_covers_media_id(
+        if canonical_payload is not None and not payload_includes_media_id(
             canonical_payload,
             requested_media_id,
         ):
             canonical_payload = None
 
     if canonical_payload is None:
-        cache.delete(get_alias_key(requested_media_id))
+        cache.delete(get_covered_alias_key(requested_media_id))
         return _empty_lookup(requested_media_id, direct_meta)
 
     logger.info(
-        "MAL anime franchise alias hit for media_id=%s canonical_media_id=%s",
+        "MAL anime franchise covered alias hit for media_id=%s canonical_media_id=%s",
         requested_media_id,
         canonical_media_id,
     )
@@ -678,7 +834,8 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
         canonical_media_id=canonical_media_id,
         payload=canonical_payload,
         meta=canonical_meta,
-        alias_hit=True,
+        alias_hit=False,
+        covered_alias_hit=True,
     )
 
 

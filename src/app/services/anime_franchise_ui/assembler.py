@@ -98,10 +98,7 @@ class UiCandidateAssembler:
             if relation_key in seen_relations:
                 continue
             seen_relations.add(relation_key)
-            if (
-                relation.target_media_id in series_ids
-                and relation_key not in root_story_parent_keys
-            ):
+            if relation.target_media_id in series_ids:
                 continue
             grouped_relations.setdefault(relation.target_media_id, []).append(relation)
 

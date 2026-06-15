@@ -707,6 +707,73 @@ class MediaDetailsViewTests(TestCase):
             "aliasable_media_ids": ["223", "269"],
         }
 
+    def _sao_covered_payload(self):
+        return {
+            "root_media_id": "11757",
+            "canonical_root_media_id": "11757",
+            "display_title": "Sword Art Online",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "11757",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Sword Art Online",
+                        "image": "img-11757",
+                    },
+                    {
+                        "media_id": "36474",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Sword Art Online: Alicization",
+                        "image": "img-36474",
+                    },
+                    {
+                        "media_id": "39597",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "War of Underworld",
+                        "image": "img-39597",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "40489",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Reflection",
+                            "image": "img-40489",
+                        },
+                        {
+                            "media_id": "41341",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Recap",
+                            "image": "img-41341",
+                        },
+                    ],
+                    "visible_in_ui": True,
+                    "hidden_if_empty": True,
+                },
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [],
+                    "visible_in_ui": True,
+                    "hidden_if_empty": True,
+                },
+            ],
+            "aliasable_media_ids": ["11757", "36474", "39597"],
+            "covered_media_ids": ["11757", "36474", "39597", "40489", "41341"],
+        }
+
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
     @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
@@ -752,9 +819,83 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["anime_franchise"])
-        mock_fallback_payload.assert_not_called()
         mock_build_delay.assert_not_called()
         self.assertNotIn("related_anime", response.context["media"]["related"])
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_covered_alias_hit_displays_canonical_payload(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Covered alias hits should render canonical payloads without fallback."""
+        for media_id in ("40489", "41341"):
+            with self.subTest(media_id=media_id):
+                cache.clear()
+                mock_build_delay.reset_mock()
+                mock_get_metadata.return_value = {
+                    "media_id": media_id,
+                    "title": "Summary",
+                    "media_type": MediaTypes.ANIME.value,
+                    "source": Sources.MAL.value,
+                    "image": "img",
+                    "related": {
+                        "related_anime": [
+                            {
+                                "media_id": "36474",
+                                "media_type": "anime",
+                                "source": "mal",
+                                "title": "Alicization",
+                                "image": "img",
+                            },
+                        ],
+                    },
+                }
+                payload = self._sao_covered_payload()
+                anime_franchise_cache.save_payload("11757", payload)
+                anime_franchise_cache.replace_aliases("11757", payload)
+
+                response = self.client.get(
+                    reverse(
+                        "media_details",
+                        kwargs={
+                            "source": Sources.MAL.value,
+                            "media_type": MediaTypes.ANIME.value,
+                            "media_id": media_id,
+                            "title": "summary",
+                        },
+                    ),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                anime_franchise = response.context["anime_franchise"]
+                self.assertIsNotNone(anime_franchise)
+                self.assertEqual(anime_franchise["root_media_id"], "11757")
+                self.assertNotIn("related_anime", response.context["media"]["related"])
+                mock_build_delay.assert_not_called()
+                specials = next(
+                    section
+                    for section in anime_franchise["sections"]
+                    if section["key"] == "specials"
+                )
+                current_specials = [
+                    entry["item"]["media_id"]
+                    for entry in specials["entries"]
+                    if entry["item"]["is_current"]
+                ]
+                self.assertEqual(current_specials, [media_id])
+                related = next(
+                    section
+                    for section in anime_franchise["sections"]
+                    if section["key"] == "related_series"
+                )
+                related_ids = [
+                    entry["item"]["media_id"] for entry in related["entries"]
+                ]
+                self.assertNotIn("36474", related_ids)
+                self.assertNotIn("39597", related_ids)
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -865,7 +1006,6 @@ class MediaDetailsViewTests(TestCase):
                 ],
             },
         }
-        mock_fallback_payload.return_value = None
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -887,7 +1027,6 @@ class MediaDetailsViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_fallback_payload.assert_called_once()
         mock_build_delay.assert_called_once_with("269")
 
     @patch("app.views.anime_franchise_cache.maybe_schedule_build")
