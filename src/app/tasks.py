@@ -211,6 +211,10 @@ def build_mal_anime_franchise_payload(media_id):
                 aliases_enabled=aliases_enabled,
             )
         )
+        canonical_aliasable_ids = {
+            str(aliasable_media_id)
+            for aliasable_media_id in canonical_payload.get("aliasable_media_ids", [])
+        }
         duration = time.monotonic() - started_at
         anime_franchise_cache.save_payload(
             canonical_media_id,
@@ -234,7 +238,13 @@ def build_mal_anime_franchise_payload(media_id):
                 snapshot,
                 seed_media_id=media_id,
             )
-        if scoped_payload is not None and media_id != canonical_media_id:
+        if media_id != canonical_media_id and media_id in canonical_aliasable_ids:
+            anime_franchise_cache.delete_direct_payload(media_id)
+        if (
+            scoped_payload is not None
+            and media_id != canonical_media_id
+            and media_id not in canonical_aliasable_ids
+        ):
             scoped_node_count = len(
                 anime_franchise_cache.extract_payload_media_ids(scoped_payload),
             )

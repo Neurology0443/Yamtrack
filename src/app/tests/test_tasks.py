@@ -696,6 +696,187 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         ]
         self.assertEqual(related_ids, ["36474", "39597"])
 
+    @patch("app.tasks.AnimeFranchiseUiPipeline")
+    @patch("app.tasks.AnimeFranchiseSnapshotService")
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    def test_build_mal_anime_franchise_payload_skips_scoped_for_aliasable_seed(
+        self,
+        mock_graph_builder_class,
+        mock_snapshot_service_class,
+        mock_ui_pipeline_class,
+    ):
+        relation = AnimeRelation("34428", "29803", "sequel")
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        nodes = {
+            "34161": AnimeNode("34161", "Season 1", "mal", "tv", "img", None, []),
+            "34428": AnimeNode(
+                "34428",
+                "Extra",
+                "mal",
+                "tv_special",
+                "img",
+                None,
+                [relation],
+            ),
+            "29803": AnimeNode("29803", "Related", "mal", "tv", "img", None, []),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["34428"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[relation],
+            continuity_component=list(nodes.values()),
+            series_line=[nodes["34161"]],
+            direct_anchors=[],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="34428",
+            canonical_root_media_id="34161",
+        )
+        mock_snapshot_service_class.return_value.build.return_value = snapshot
+        mock_ui_pipeline_class.return_value.run.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "34428",
+                "canonical_root_media_id": "34161",
+                "display_title": "Extra",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "34161",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Season 1",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "34428",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Extra",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("34428")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["canonical_media_id"], "34161")
+        canonical_payload, _canonical_meta = anime_franchise_cache.load_payload("34161")
+        self.assertIsNotNone(canonical_payload)
+        self.assertIn("34428", canonical_payload["aliasable_media_ids"])
+        direct_payload, _direct_meta = anime_franchise_cache.load_payload("34428")
+        self.assertIsNone(direct_payload)
+        alias = cache.get(anime_franchise_cache.get_alias_key("34428"))
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias["canonical_media_id"], "34161")
+
+    @patch("app.tasks.AnimeFranchiseUiPipeline")
+    @patch("app.tasks.AnimeFranchiseSnapshotService")
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    def test_build_mal_anime_franchise_payload_deletes_old_direct_for_aliasable_seed(
+        self,
+        mock_graph_builder_class,
+        mock_snapshot_service_class,
+        mock_ui_pipeline_class,
+    ):
+        old_scoped_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": "34428",
+            "canonical_root_media_id": "34428",
+            "display_title": "Old Scoped",
+            "series": {"key": "series_line", "title": "Series", "entries": []},
+            "sections": [],
+        }
+        anime_franchise_cache.save_payload("34428", old_scoped_payload)
+
+        relation = AnimeRelation("34428", "29803", "sequel")
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 3
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        nodes = {
+            "34161": AnimeNode("34161", "Season 1", "mal", "tv", "img", None, []),
+            "34428": AnimeNode(
+                "34428",
+                "Extra",
+                "mal",
+                "tv_special",
+                "img",
+                None,
+                [relation],
+            ),
+            "29803": AnimeNode("29803", "Related", "mal", "tv", "img", None, []),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["34428"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[relation],
+            continuity_component=list(nodes.values()),
+            series_line=[nodes["34161"]],
+            direct_anchors=[],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="34428",
+            canonical_root_media_id="34161",
+        )
+        mock_snapshot_service_class.return_value.build.return_value = snapshot
+        mock_ui_pipeline_class.return_value.run.return_value = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "34428",
+                "canonical_root_media_id": "34161",
+                "display_title": "Extra",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "34161",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Season 1",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "34428",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Extra",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+
+        result = build_mal_anime_franchise_payload("34428")
+
+        self.assertTrue(result["built"])
+        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("34428")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("34428")))
+
     @patch("app.tasks.AnimeFranchiseService")
     def test_build_mal_anime_franchise_payload_preserves_previous_payload_on_error(
         self,
