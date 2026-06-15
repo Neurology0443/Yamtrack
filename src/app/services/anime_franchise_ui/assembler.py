@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 from .candidates import UiCandidate
 
+NO_SERIES_LINE_CONTINUITY_RELATIONS = {"prequel", "sequel"}
+
 if TYPE_CHECKING:
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
     from app.services.anime_franchise_types import AnimeRelation
@@ -44,9 +46,15 @@ class UiCandidateAssembler:
             series_index=series_index,
         )
 
+        candidate_relations = [*snapshot.direct_candidates, *promoted_relations]
+        if not snapshot.has_series_line:
+            candidate_relations.extend(
+                self._derive_no_series_line_continuity_relations(snapshot),
+            )
+
         grouped_relations: dict[str, list[AnimeRelation]] = {}
         seen_relations: set[tuple[str, str, str]] = set()
-        for relation in [*snapshot.direct_candidates, *promoted_relations]:
+        for relation in candidate_relations:
             relation_key = (
                 relation.source_media_id,
                 relation.target_media_id,
@@ -168,6 +176,41 @@ class UiCandidateAssembler:
             )
 
         return candidates
+
+
+    @staticmethod
+    def _derive_no_series_line_continuity_relations(
+        snapshot: AnimeFranchiseSnapshot,
+    ) -> list[AnimeRelation]:
+        if snapshot.has_series_line:
+            return []
+
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
+        if len(continuity_ids) <= 1:
+            return []
+
+        relations: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+
+        for relation in snapshot.all_normalized_relations:
+            if relation.relation_type not in NO_SERIES_LINE_CONTINUITY_RELATIONS:
+                continue
+            if relation.source_media_id not in continuity_ids:
+                continue
+            if relation.target_media_id not in continuity_ids:
+                continue
+
+            key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            relations.append(relation)
+
+        return relations
 
     @staticmethod
     def _ordered_unique(values: list[str]) -> list[str]:

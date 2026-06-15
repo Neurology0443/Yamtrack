@@ -163,16 +163,16 @@ def determine_canonical_media_id(payload: dict, fallback_media_id) -> str:
         return fallback_media_id
 
     series = payload.get("series")
-    if not isinstance(series, dict):
-        return fallback_media_id
+    if isinstance(series, dict):
+        entries = series.get("entries")
+        if isinstance(entries, list) and entries:
+            first_media_id = _entry_media_id(entries[0])
+            if first_media_id:
+                return first_media_id
 
-    entries = series.get("entries")
-    if not isinstance(entries, list) or not entries:
-        return fallback_media_id
-
-    first_media_id = _entry_media_id(entries[0])
-    if first_media_id:
-        return first_media_id
+    canonical_root_media_id = payload.get("canonical_root_media_id")
+    if canonical_root_media_id not in (None, ""):
+        return str(canonical_root_media_id)
 
     return fallback_media_id
 

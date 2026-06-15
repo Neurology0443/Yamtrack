@@ -187,6 +187,85 @@ class AnimeFranchiseCacheTests(TestCase):
             "223",
         )
 
+
+    def test_determine_canonical_media_id_prefers_series_over_canonical_root(
+        self,
+    ):
+        payload = {
+            "series": {"entries": [{"media_id": "100"}]},
+            "canonical_root_media_id": "999",
+        }
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "100",
+        )
+
+    def test_determine_canonical_media_id_uses_canonical_root_without_series(self):
+        payload = {
+            "series": {"entries": []},
+            "canonical_root_media_id": "33142",
+        }
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "33142",
+        )
+
+    def test_determine_canonical_media_id_falls_back_for_legacy_payload(self):
+        payload = {"series": {"entries": []}}
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "33569",
+        )
+
+    def test_prepare_payload_for_aliasing_uses_mini_franchise_canonical_root(self):
+        payload = {
+            "schema_version": 1,
+            "root_media_id": "33569",
+            "canonical_root_media_id": "33142",
+            "display_title": "Re:Petit",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": media_id,
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": title,
+                        }
+                        for media_id, title in [
+                            ("33569", "Re:Petit"),
+                            ("42364", "Break Time 2"),
+                            ("60012", "Break Time 3"),
+                            ("63830", "Break Time 4"),
+                        ]
+                    ],
+                }
+            ],
+        }
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="33569",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        expected_ids = {"33142", "33569", "42364", "60012", "63830"}
+        self.assertEqual(canonical_id, "33142")
+        self.assertEqual(prepared["root_media_id"], "33142")
+        self.assertEqual(prepared["canonical_root_media_id"], "33142")
+        self.assertEqual(set(prepared["aliasable_media_ids"]), expected_ids)
+        self.assertEqual(aliasable_ids, expected_ids)
+        self.assertEqual(set(prepared["covered_media_ids"]), expected_ids)
+
     def test_prepare_payload_for_aliasing_adds_internal_metadata(self):
         prepared, canonical_id, aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(

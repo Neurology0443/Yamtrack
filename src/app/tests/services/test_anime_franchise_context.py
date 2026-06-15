@@ -191,6 +191,59 @@ class AnimeFranchiseContextTests(TestCase):
         section_entry = context["sections"][0]["entries"][0]
         self.assertTrue(section_entry["item"]["is_current"])
 
+
+    @patch("app.services.anime_franchise_context.enrich_franchise_entries_for_footer")
+    @patch("app.services.anime_franchise_context.helpers.enrich_items_with_user_data")
+    def test_prepare_context_marks_current_no_series_line_continuity_entry(
+        self,
+        mock_enrich_items,
+        mock_footer,
+    ):
+        payload = {
+            "root_media_id": "33142",
+            "canonical_root_media_id": "33142",
+            "display_title": "Break Time",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": "33142",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Break Time",
+                            "is_current": True,
+                        },
+                        {
+                            "media_id": "33569",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Re:Petit",
+                            "is_current": False,
+                        },
+                    ],
+                },
+            ],
+        }
+        mock_footer.side_effect = lambda entries, media_metadata, **kwargs: entries  # noqa: ARG005
+        mock_enrich_items.side_effect = lambda request, items, section: [  # noqa: ARG005
+            {"item": item, "media": None} for item in items
+        ]
+
+        context = prepare_anime_franchise_context(
+            self._request(self.user_a),
+            payload,
+            {"media_id": "33569"},
+        )
+
+        entries = context["sections"][0]["entries"]
+        by_media_id = {entry["item"]["media_id"]: entry["item"] for entry in entries}
+        self.assertIn("33569", by_media_id)
+        self.assertTrue(by_media_id["33569"]["is_current"])
+        self.assertFalse(by_media_id["33142"]["is_current"])
+
     @patch("app.services.anime_franchise_context.enrich_franchise_entries_for_footer")
     @patch("app.services.anime_franchise_context.helpers.enrich_items_with_user_data")
     def test_prepare_context_skips_malformed_sections(
