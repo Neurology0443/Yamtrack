@@ -28,7 +28,10 @@ SectionRules = RulePack(
             actions=(
                 set_section_title(key="continuity_extras", title="Main Story Extras"),
                 set_section_order(key="continuity_extras", order=20),
-                set_section_hidden_if_empty(key="continuity_extras", hidden_if_empty=True),
+                set_section_hidden_if_empty(
+                    key="continuity_extras",
+                    hidden_if_empty=True,
+                ),
             ),
         ),
         Rule(

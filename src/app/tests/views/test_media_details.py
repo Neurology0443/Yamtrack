@@ -752,9 +752,86 @@ class MediaDetailsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.context["anime_franchise"])
-        mock_fallback_payload.assert_not_called()
         mock_build_delay.assert_not_called()
         self.assertNotIn("related_anime", response.context["media"]["related"])
+
+    @patch("app.tasks.build_mal_anime_franchise_payload.delay")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=True)
+    def test_mal_anime_covered_only_payload_does_not_load_canonical_franchise(
+        self,
+        mock_get_metadata,
+        mock_build_delay,
+    ):
+        """Covered media IDs should not act as cache lookup aliases."""
+        mock_get_metadata.return_value = {
+            "media_id": "40489",
+            "title": "Reflection",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "img-40489",
+            "related": {
+                "related_anime": [
+                    {
+                        "media_id": "39597",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "War of Underworld",
+                        "image": "img-39597",
+                        "relation_type": "sequel",
+                    },
+                    {
+                        "media_id": "36474",
+                        "media_type": "anime",
+                        "source": "mal",
+                        "title": "Alicization",
+                        "image": "img-36474",
+                        "relation_type": "full_story",
+                    },
+                ],
+            },
+        }
+        payload = self._canonical_alias_payload()
+        payload["root_media_id"] = "11757"
+        payload["canonical_root_media_id"] = "11757"
+        payload["display_title"] = "Sword Art Online"
+        payload["aliasable_media_ids"] = ["11757", "36474", "39597"]
+        payload["covered_media_ids"] = ["11757", "36474", "39597", "40489"]
+        anime_franchise_cache.save_payload("11757", payload)
+        anime_franchise_cache.replace_aliases("11757", payload)
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "40489",
+                    "title": "reflection",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        anime_franchise = response.context["anime_franchise"]
+        if anime_franchise is not None:
+            self.assertNotEqual(anime_franchise["root_media_id"], "11757")
+        self.assertIn("related_anime", response.context["media"]["related"])
+        related_entries = response.context["media"]["related"]["related_anime"]
+        related_ids = [
+            (entry.get("item") or entry).get("media_id") for entry in related_entries
+        ]
+        relation_types = {
+            (entry.get("item") or entry).get("media_id"): (
+                entry.get("relation_type")
+                or (entry.get("item") or entry).get("relation_type")
+            )
+            for entry in related_entries
+        }
+        self.assertEqual(related_ids, ["39597", "36474"])
+        self.assertEqual(relation_types["39597"], "sequel")
+        self.assertEqual(relation_types["36474"], "full_story")
+        mock_build_delay.assert_called_once_with("40489")
 
     @patch("app.tasks.build_mal_anime_franchise_payload.delay")
     @patch("app.providers.services.get_media_metadata")
@@ -865,7 +942,6 @@ class MediaDetailsViewTests(TestCase):
                 ],
             },
         }
-        mock_fallback_payload.return_value = None
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -887,7 +963,6 @@ class MediaDetailsViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        mock_fallback_payload.assert_called_once()
         mock_build_delay.assert_called_once_with("269")
 
     @patch("app.views.anime_franchise_cache.maybe_schedule_build")

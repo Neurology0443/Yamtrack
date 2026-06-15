@@ -714,6 +714,36 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
 
+    def test_replace_aliases_does_not_create_aliases_for_covered_only_summaries(self):
+        payload = self._dragon_ball_payload()
+        payload["root_media_id"] = "11757"
+        payload["canonical_root_media_id"] = "11757"
+        payload["display_title"] = "Sword Art Online"
+        payload["aliasable_media_ids"] = [
+            "11757",
+            "21881",
+            "36474",
+            "39597",
+            "40540",
+        ]
+        payload["covered_media_ids"] = [
+            "11757",
+            "21881",
+            "36474",
+            "39597",
+            "40540",
+            "40489",
+            "41341",
+        ]
+        anime_franchise_cache.save_payload("11757", payload)
+
+        anime_franchise_cache.replace_aliases("11757", payload, truncated=False)
+
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("40489")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("41341")))
+        self.assertIsNone(cache.get("mal_anime_franchise_covered_alias_40489"))
+        self.assertIsNone(cache.get("mal_anime_franchise_covered_alias_41341"))
+
     def test_save_and_load_payload_updates_access_metadata(self):
         anime_franchise_cache.save_payload("100", self.payload, node_count=1)
 

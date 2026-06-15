@@ -278,7 +278,7 @@ def _normalize_alias_record(alias) -> dict | None:
 
 
 def payload_covers_media_id(payload: dict, media_id) -> bool:
-    """Return whether a cached payload explicitly allows aliasing for media_id."""
+    """Return whether a cached payload allows canonical aliasing for media_id."""
     if not isinstance(payload, dict):
         return False
 
@@ -553,7 +553,10 @@ def replace_aliases(
     *,
     truncated: bool = False,
 ) -> int:
-    """Replace lightweight alias records for a canonical franchise payload."""
+    """Replace lightweight alias records for a canonical franchise payload.
+
+    Returns the number of canonical aliases created.
+    """
     canonical_media_id = str(canonical_media_id)
 
     if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:

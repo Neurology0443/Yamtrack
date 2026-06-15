@@ -19,7 +19,13 @@ def _continuity(candidate, _context) -> bool:
 
 
 def _specials(candidate, _context) -> bool:
+    if candidate.metadata.get("is_root_story_parent"):
+        return False
     return bool(_facts(candidate).get("has_specials"))
+
+
+def _root_story_parent(candidate, _context) -> bool:
+    return bool(candidate.metadata.get("is_root_story_parent"))
 
 
 def _related(candidate, _context) -> bool:
@@ -41,6 +47,11 @@ RelationRules = RulePack(
             key="continuity_by_relations",
             when=_continuity,
             actions=(place_in("continuity_extras"),),
+        ),
+        Rule(
+            key="root_story_parent_to_related_series",
+            when=_root_story_parent,
+            actions=(place_in("related_series"),),
         ),
         Rule(
             key="specials_by_relations",

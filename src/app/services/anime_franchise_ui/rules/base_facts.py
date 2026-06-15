@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.services.anime_franchise_ui.rule_types import Rule, RulePack
 
-
 RELATED_RELATIONS = {
     "spin_off",
     "parent_story",
@@ -22,7 +21,9 @@ def _set_relation_facts(candidate, _context) -> None:
         "has_continuity": bool({"prequel", "sequel"} & rels),
         "has_specials": bool({"side_story", "summary", "full_story"} & rels),
         "has_related": bool(RELATED_RELATIONS & rels),
-        "has_series_origin": any(origin.get("is_from_series_line") for origin in origins),
+        "has_series_origin": any(
+            origin.get("is_from_series_line") for origin in origins
+        ),
         "has_root_origin": any(origin.get("is_from_root_node") for origin in origins),
     }
 

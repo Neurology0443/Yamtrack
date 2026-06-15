@@ -12,6 +12,11 @@ if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
+# Local-only TV relations for non-TV roots, used to display direct TV entries
+# on summary/special pages. They must not imply canonical aliasing.
+ROOT_LOCAL_TV_RELATIONS = {"full_story", "sequel", "prequel", "parent_story"}
+
+
 NO_SERIES_LINE_SECONDARY_RELATIONS = {
     "side_story",
     "spin_off",
@@ -40,6 +45,7 @@ class AnimeFranchiseSnapshot:
     no_series_line_secondary_candidates: list[AnimeRelation] = field(
         default_factory=list
     )
+    root_story_parent_candidates: list[AnimeRelation] = field(default_factory=list)
 
 
 class AnimeFranchiseSnapshotService:
@@ -61,8 +67,16 @@ class AnimeFranchiseSnapshotService:
         nodes_by_media_id = dict(self.graph_builder.build(root_media_id))
         root_node = nodes_by_media_id[root_media_id]
 
+        root_story_parent_candidates = self._derive_root_story_parent_candidates(
+            root_node=root_node,
+            nodes_by_media_id=nodes_by_media_id,
+        )
         continuity_component = list(nodes_by_media_id.values())
-        series_line = self._derive_series_line(nodes_by_media_id)
+        has_local_tv_story_parent = bool(root_story_parent_candidates)
+        if root_node.media_type != "tv" and has_local_tv_story_parent:
+            series_line = []
+        else:
+            series_line = self._derive_series_line(nodes_by_media_id)
         has_series_line = bool(series_line)
 
         direct_anchors = self._derive_direct_anchors(series_line, root_node)
@@ -108,7 +122,6 @@ class AnimeFranchiseSnapshotService:
                 nodes_by_media_id=nodes_by_media_id,
             )
         )
-
         all_relations = [
             relation
             for node in nodes_by_media_id.values()
@@ -125,10 +138,46 @@ class AnimeFranchiseSnapshotService:
             direct_candidates=direct_candidates,
             promoted_continuity_candidates=promoted_continuity_candidates,
             no_series_line_secondary_candidates=no_series_line_secondary_candidates,
+            root_story_parent_candidates=root_story_parent_candidates,
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
         )
+
+    def _derive_root_story_parent_candidates(
+        self,
+        *,
+        root_node: AnimeNode,
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> list[AnimeRelation]:
+        if root_node.media_type == "tv":
+            return []
+
+        candidates: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for relation in root_node.relations:
+            if relation.relation_type not in ROOT_LOCAL_TV_RELATIONS:
+                continue
+
+            key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if key in seen:
+                continue
+
+            target_node = self.graph_builder.ensure_node(relation.target_media_id)
+            if target_node is None:
+                continue
+            nodes_by_media_id[relation.target_media_id] = target_node
+            if target_node.media_type != "tv":
+                continue
+
+            seen.add(key)
+            candidates.append(relation)
+
+        return candidates
 
     def _derive_no_series_line_secondary_candidates(
         self,

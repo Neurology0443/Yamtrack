@@ -26,7 +26,8 @@ FormatRules = RulePack(
             key="specials_require_specific_formats",
             when=lambda candidate, _context: (
                 candidate.section_key == "specials"
-                and candidate.media_type not in {"ova", "movie", "special", "tv_special"}
+                and candidate.media_type
+                not in {"ova", "movie", "special", "tv_special"}
             ),
             actions=(place_in("ignored"),),
         ),
