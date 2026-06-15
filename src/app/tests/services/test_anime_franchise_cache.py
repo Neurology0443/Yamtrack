@@ -51,7 +51,6 @@ class AnimeFranchiseCacheTests(TestCase):
             "node_count": 2,
         }
 
-
     def _dragon_ball_payload(self):
         return {
             "schema_version": 1,
@@ -178,6 +177,36 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("997", aliasable_ids)
         self.assertNotIn("996", aliasable_ids)
 
+    def test_related_parent_story_target_is_not_aliasable(self):
+        payload = {
+            "series": {"entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "entries": [
+                        {"media_id": media_id}
+                        for media_id in [
+                            "33142",
+                            "33569",
+                            "42364",
+                            "60012",
+                            "63830",
+                        ]
+                    ],
+                },
+                {
+                    "key": "related_series",
+                    "entries": [{"media_id": "99999"}],
+                },
+            ],
+        }
+
+        self.assertNotIn(
+            "99999",
+            anime_franchise_cache.extract_aliasable_media_ids(payload),
+        )
+        self.assertIn("99999", anime_franchise_cache.extract_payload_media_ids(payload))
+
     def test_determine_canonical_media_id_from_series_line(self):
         self.assertEqual(
             anime_franchise_cache.determine_canonical_media_id(
@@ -186,7 +215,6 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
             "223",
         )
-
 
     def test_determine_canonical_media_id_prefers_series_over_canonical_root(
         self,
@@ -716,7 +744,6 @@ class AnimeFranchiseCacheTests(TestCase):
             anime_franchise_cache.can_schedule_build(meta, has_payload=True),
         )
 
-
     def test_missing_payload_returns_empty_meta(self):
         payload, meta = anime_franchise_cache.load_payload("404")
 
@@ -759,8 +786,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(meta["truncated"], before_meta["truncated"])
         self.assertEqual(meta["truncation_reason"], before_meta["truncation_reason"])
         self.assertEqual(meta["last_error_message"], "boom")
-
-
 
     def test_normalize_meta_empty_dict_keeps_required_defaults(self):
         meta = anime_franchise_cache.normalize_meta({})
@@ -824,7 +849,9 @@ class AnimeFranchiseCacheTests(TestCase):
             with self.subTest(forbidden_key=forbidden_key):
                 with self.assertRaises(ValueError):
                     anime_franchise_cache.save_payload("100", payload)
-                self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("100")))
+                self.assertIsNone(
+                    cache.get(anime_franchise_cache.get_payload_key("100"))
+                )
 
     def test_invalid_payload_load_returns_none_and_normalized_meta(self):
         cache.set(
@@ -837,8 +864,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(payload)
         self.assertEqual(meta["schema_version"], 1)
         self.assertTrue(meta["last_accessed_at"])
-
-
 
     def test_normalize_meta_with_invalid_node_count_falls_back_to_zero(self):
         meta = anime_franchise_cache.normalize_meta({"node_count": "abc"})
