@@ -122,6 +122,89 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         )
         self.assertEqual(snapshot.canonical_root_media_id, "100")
 
+    def test_root_story_parent_full_story_to_tv_is_hydrated(self):
+        root = AnimeNode(
+            "27891",
+            "Debriefing",
+            "mal",
+            "special",
+            "img",
+            date(2014, 1, 1),
+            [AnimeRelation("27891", "100", "full_story")],
+        )
+        parent = AnimeNode("100", "SAO II", "mal", "tv", "img", date(2014, 7, 1), [])
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder({"27891": root, "100": parent})
+        ).build("27891")
+
+        self.assertIn("100", snapshot.nodes_by_media_id)
+        self.assertIn(
+            AnimeRelation("27891", "100", "full_story"),
+            snapshot.root_story_parent_candidates,
+        )
+
+    def test_root_story_parent_ignores_tv_root(self):
+        root = AnimeNode(
+            "100",
+            "SAO II",
+            "mal",
+            "tv",
+            "img",
+            date(2014, 7, 1),
+            [AnimeRelation("100", "27891", "full_story")],
+        )
+        recap = AnimeNode(
+            "27891", "Debriefing", "mal", "special", "img", date(2014, 1, 1), []
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder({"100": root, "27891": recap})
+        ).build("100")
+
+        self.assertEqual(snapshot.root_story_parent_candidates, [])
+
+    def test_root_story_parent_ignores_non_tv_target(self):
+        root = AnimeNode(
+            "27891",
+            "Debriefing",
+            "mal",
+            "special",
+            "img",
+            date(2014, 1, 1),
+            [AnimeRelation("27891", "200", "full_story")],
+        )
+        movie = AnimeNode("200", "Movie", "mal", "movie", "img", date(2014, 7, 1), [])
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder({"27891": root, "200": movie})
+        ).build("27891")
+
+        self.assertEqual(snapshot.root_story_parent_candidates, [])
+
+    def test_root_story_parent_ignores_missing_target(self):
+        class MissingTargetGraphBuilder(FakeGraphBuilder):
+            def ensure_node(self, media_id):
+                if str(media_id) == "100":
+                    return None
+                return super().ensure_node(media_id)
+
+        root = AnimeNode(
+            "27891",
+            "Debriefing",
+            "mal",
+            "special",
+            "img",
+            date(2014, 1, 1),
+            [AnimeRelation("27891", "100", "full_story")],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(
+            graph_builder=MissingTargetGraphBuilder({"27891": root})
+        ).build("27891")
+
+        self.assertEqual(snapshot.root_story_parent_candidates, [])
+
     def test_graph_cache_isolation_between_seeds(self):
         metadata_map = {
             "10": {
