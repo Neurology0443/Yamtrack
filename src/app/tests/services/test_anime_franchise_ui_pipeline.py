@@ -257,7 +257,6 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ],
         )
 
-
     def test_candidate_assembler_resolves_simple_relation_source_to_series_anchor(self):
         snapshot = self._snapshot()
         snapshot.direct_candidates = [AnimeRelation("100", "300", "sequel")]
@@ -334,7 +333,6 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(candidate.relation_source_media_id, "100")
         self.assertEqual(candidate.linked_series_line_media_id, "100")
 
-
     def _no_series_line_snapshot(self):
         nodes = [
             AnimeNode(media_id, title, "mal", "special", f"img-{media_id}", start, [])
@@ -379,6 +377,119 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             ["33142", "33569", "42364", "60012", "63830"],
         )
 
+    def test_no_series_line_pipeline_orders_continuity_extras_canonically(self):
+        snapshot = self._no_series_line_snapshot()
+        snapshot.all_normalized_relations = [
+            AnimeRelation("33569", "42364", "sequel"),
+            AnimeRelation("60012", "63830", "sequel"),
+            AnimeRelation("33142", "33569", "sequel"),
+            AnimeRelation("42364", "60012", "sequel"),
+        ]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
+            ["33142", "33569", "42364", "60012", "63830"],
+        )
+
+    def test_series_line_pipeline_ignores_no_series_line_order_metadata(self):
+        snapshot = self._snapshot()
+        deep_extra = AnimeNode(
+            "777", "Deep Extra", "mal", "special", "img-777", date(2024, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "777": deep_extra}
+        snapshot.continuity_component = [*snapshot.continuity_component, deep_extra]
+        snapshot.all_normalized_relations = [
+            *snapshot.all_normalized_relations,
+            AnimeRelation("300", "777", "sequel"),
+        ]
+
+        candidates = UiCandidateAssembler().build(snapshot)
+
+        self.assertNotIn("777", {candidate.media_id for candidate in candidates})
+        self.assertTrue(
+            all(
+                "section_sort_rank" not in candidate.metadata
+                for candidate in candidates
+            )
+        )
+
+    def test_no_series_line_pipeline_adds_deep_parent_story_secondary(self):
+        snapshot = self._no_series_line_snapshot()
+        parent = AnimeNode(
+            "99999", "Re:Zero S4", "mal", "tv", "img-99999", date(2026, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "99999": parent}
+        snapshot.all_normalized_relations = [
+            *snapshot.all_normalized_relations,
+            AnimeRelation("63830", "99999", "parent_story"),
+        ]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertIn(
+            "99999",
+            [entry["media_id"] for entry in sections["related_series"]["entries"]],
+        )
+        self.assertNotIn(
+            "99999",
+            [entry["media_id"] for entry in sections["continuity_extras"]["entries"]],
+        )
+
+    def test_no_series_line_pipeline_ignores_unhydrated_secondary_target(self):
+        snapshot = self._no_series_line_snapshot()
+        snapshot.all_normalized_relations = [
+            *snapshot.all_normalized_relations,
+            AnimeRelation("63830", "99999", "parent_story"),
+        ]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        section_ids = {
+            entry["media_id"]
+            for section in payload.sections
+            for entry in section["entries"]
+        }
+
+        self.assertNotIn("99999", section_ids)
+
+    def test_no_series_line_pipeline_does_not_absorb_other_secondary(self):
+        snapshot = self._no_series_line_snapshot()
+        other = AnimeNode(
+            "88888", "Other", "mal", "special", "img-88888", date(2026, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "88888": other}
+        snapshot.all_normalized_relations = [
+            *snapshot.all_normalized_relations,
+            AnimeRelation("63830", "88888", "other"),
+        ]
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        section_ids = {
+            entry["media_id"]
+            for section in payload.sections
+            for entry in section["entries"]
+        }
+
+        self.assertNotIn("88888", section_ids)
+
+    def test_series_line_pipeline_ignores_deep_parent_story_secondary(self):
+        snapshot = self._snapshot()
+        parent = AnimeNode(
+            "99999", "Deep Parent", "mal", "tv", "img-99999", date(2026, 1, 1), []
+        )
+        snapshot.nodes_by_media_id = {**snapshot.nodes_by_media_id, "99999": parent}
+        snapshot.all_normalized_relations = [
+            *snapshot.all_normalized_relations,
+            AnimeRelation("300", "99999", "parent_story"),
+        ]
+
+        candidates = UiCandidateAssembler().build(snapshot)
+
+        self.assertNotIn("99999", {candidate.media_id for candidate in candidates})
+
     def test_no_series_line_pipeline_does_not_absorb_related_relations(self):
         snapshot = self._no_series_line_snapshot()
         extra_nodes = {
@@ -397,8 +508,7 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         payload = AnimeFranchiseUiPipeline().run(snapshot)
         sections = {section["key"]: section for section in payload.sections}
         main_story_ids = [
-            entry["media_id"]
-            for entry in sections["continuity_extras"]["entries"]
+            entry["media_id"] for entry in sections["continuity_extras"]["entries"]
         ]
 
         self.assertCountEqual(
