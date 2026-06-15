@@ -12,6 +12,19 @@ if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
+ROOT_STORY_PARENT_RELATIONS = {"full_story"}
+
+
+NO_SERIES_LINE_SECONDARY_RELATIONS = {
+    "side_story",
+    "spin_off",
+    "parent_story",
+    "alternative_setting",
+    "alternative_version",
+    "character",
+}
+
+
 @dataclass
 class AnimeFranchiseSnapshot:
     """Normalized snapshot of a MAL anime franchise around a seed node."""
@@ -27,6 +40,10 @@ class AnimeFranchiseSnapshot:
     fallback_anchor_media_id: str
     canonical_root_media_id: str
     promoted_continuity_candidates: list[AnimeRelation] = field(default_factory=list)
+    no_series_line_secondary_candidates: list[AnimeRelation] = field(
+        default_factory=list
+    )
+    root_story_parent_candidates: list[AnimeRelation] = field(default_factory=list)
 
 
 class AnimeFranchiseSnapshotService:
@@ -88,6 +105,17 @@ class AnimeFranchiseSnapshotService:
             nodes_by_media_id=nodes_by_media_id,
             direct_candidates=direct_candidates,
         )
+        no_series_line_secondary_candidates = (
+            self._derive_no_series_line_secondary_candidates(
+                has_series_line=has_series_line,
+                continuity_component=continuity_component,
+                nodes_by_media_id=nodes_by_media_id,
+            )
+        )
+        root_story_parent_candidates = self._derive_root_story_parent_candidates(
+            root_node=root_node,
+            nodes_by_media_id=nodes_by_media_id,
+        )
 
         all_relations = [
             relation
@@ -104,10 +132,91 @@ class AnimeFranchiseSnapshotService:
             direct_anchors=direct_anchors,
             direct_candidates=direct_candidates,
             promoted_continuity_candidates=promoted_continuity_candidates,
+            no_series_line_secondary_candidates=no_series_line_secondary_candidates,
+            root_story_parent_candidates=root_story_parent_candidates,
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
         )
+
+    def _derive_root_story_parent_candidates(
+        self,
+        *,
+        root_node: AnimeNode,
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> list[AnimeRelation]:
+        if root_node.media_type == "tv":
+            return []
+
+        candidates: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for relation in root_node.relations:
+            if relation.relation_type not in ROOT_STORY_PARENT_RELATIONS:
+                continue
+
+            key = (
+                relation.source_media_id,
+                relation.target_media_id,
+                relation.relation_type,
+            )
+            if key in seen:
+                continue
+
+            target_node = self.graph_builder.ensure_node(relation.target_media_id)
+            if target_node is None:
+                continue
+            nodes_by_media_id[relation.target_media_id] = target_node
+            if target_node.media_type != "tv":
+                continue
+
+            seen.add(key)
+            candidates.append(relation)
+
+        return candidates
+
+    def _derive_no_series_line_secondary_candidates(
+        self,
+        *,
+        has_series_line: bool,
+        continuity_component: list[AnimeNode],
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> list[AnimeRelation]:
+        if has_series_line:
+            return []
+
+        continuity_ids = {node.media_id for node in continuity_component}
+        if not continuity_ids:
+            return []
+
+        candidates: list[AnimeRelation] = []
+        seen: set[tuple[str, str, str]] = set()
+        for node in continuity_component:
+            for relation in node.relations:
+                if relation.source_media_id not in continuity_ids:
+                    continue
+                if relation.relation_type not in NO_SERIES_LINE_SECONDARY_RELATIONS:
+                    continue
+
+                key = (
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    relation.relation_type,
+                )
+                if key in seen:
+                    continue
+
+                if relation.target_media_id not in nodes_by_media_id:
+                    target_node = self.graph_builder.ensure_node(
+                        relation.target_media_id,
+                    )
+                    if target_node is None:
+                        continue
+                    nodes_by_media_id[relation.target_media_id] = target_node
+
+                seen.add(key)
+                candidates.append(relation)
+
+        return candidates
 
     def _derive_promoted_continuity_candidates(  # noqa: C901
         self,
@@ -194,9 +303,7 @@ class AnimeFranchiseSnapshotService:
 
     def _derive_series_line(self, graph: dict[str, AnimeNode]) -> list[AnimeNode]:
         tv_nodes = {
-            node.media_id: node
-            for node in graph.values()
-            if node.media_type == "tv"
+            node.media_id: node for node in graph.values() if node.media_type == "tv"
         }
         if not tv_nodes:
             return []

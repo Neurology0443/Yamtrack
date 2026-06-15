@@ -6,9 +6,11 @@ The adapter is a compatibility layer only: no placement or business logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from .rule_types import CompiledSection
-from .series import SeriesBlock
+if TYPE_CHECKING:
+    from .rule_types import CompiledSection
+    from .series import SeriesBlock
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,7 @@ class AnimeFranchiseUiPayload:
     """UI payload with fixed series block and dynamic secondary sections."""
 
     root_media_id: str
+    canonical_root_media_id: str
     display_title: str
     series: dict
     sections: list[dict]
@@ -28,12 +31,15 @@ class ViewModelAdapter:
         self,
         *,
         root_media_id: str,
+        canonical_root_media_id: str,
         display_title: str,
         series_block: SeriesBlock,
         sections: list[CompiledSection],
     ) -> AnimeFranchiseUiPayload:
+        """Return a cache/template-safe UI payload dataclass."""
         return AnimeFranchiseUiPayload(
             root_media_id=root_media_id,
+            canonical_root_media_id=canonical_root_media_id,
             display_title=display_title,
             series={
                 "key": series_block.key,
@@ -77,8 +83,15 @@ class ViewModelAdapter:
                             "start_date": candidate.start_date,
                             "runtime_minutes": candidate.runtime_minutes,
                             "episode_count": candidate.episode_count,
-                            "linked_series_line_media_id": candidate.linked_series_line_media_id,
-                            "linked_series_line_index": candidate.linked_series_line_index,
+                            "linked_series_line_media_id": (
+                                candidate.linked_series_line_media_id
+                            ),
+                            "linked_series_line_index": (
+                                candidate.linked_series_line_index
+                            ),
+                            "relation_source_media_id": (
+                                candidate.relation_source_media_id
+                            ),
                             "is_current": candidate.is_current,
                             "badges": list(candidate.badges),
                         }

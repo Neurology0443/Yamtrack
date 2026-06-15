@@ -15,7 +15,13 @@ def _is_direct_or_fallback_anchor(candidate, context) -> bool:
         and candidate.section_key == "continuity_extras"
     ):
         return True
+    if candidate.metadata.get("is_root_story_parent"):
+        return True
     if candidate.has_series_line_origin:
+        return True
+    if not context.snapshot.has_series_line and candidate.metadata.get(
+        "is_no_series_line_secondary"
+    ):
         return True
     if (
         context.snapshot.has_series_line
@@ -26,12 +32,14 @@ def _is_direct_or_fallback_anchor(candidate, context) -> bool:
         return True
     return (
         not context.snapshot.has_series_line
-        and candidate.linked_series_line_media_id == context.snapshot.fallback_anchor_media_id
+        and candidate.linked_series_line_media_id
+        == context.snapshot.fallback_anchor_media_id
     )
 
 
 def _is_indirect_without_fallback_anchor(candidate, context) -> bool:
     return not _is_direct_or_fallback_anchor(candidate, context)
+
 
 AnchorRules = RulePack(
     key="anchor_rules",

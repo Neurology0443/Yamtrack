@@ -43,6 +43,7 @@ class AnimeFranchiseUiPipeline:
         sections = self.layout_compiler.compile(candidates=candidates, context=context)
         return self.adapter.adapt(
             root_media_id=snapshot.root_node.media_id,
+            canonical_root_media_id=snapshot.canonical_root_media_id,
             display_title=snapshot.root_node.title,
             series_block=series_block,
             sections=sections,

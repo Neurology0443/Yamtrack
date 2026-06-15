@@ -31,10 +31,20 @@ def _payload_get(franchise_payload, key, default=None):
 
 def serialize_franchise_payload(franchise_payload, *, root_media_id=None) -> dict:
     """Convert a franchise UI payload to a cache-safe user-agnostic dict."""
+    serialized_root_media_id = str(
+        root_media_id or _payload_get(franchise_payload, "root_media_id", "")
+    )
+    canonical_root_media_id = _payload_get(
+        franchise_payload,
+        "canonical_root_media_id",
+        "",
+    )
+    if not canonical_root_media_id:
+        canonical_root_media_id = serialized_root_media_id
+
     payload = {
-        "root_media_id": str(
-            root_media_id or _payload_get(franchise_payload, "root_media_id", "")
-        ),
+        "root_media_id": serialized_root_media_id,
+        "canonical_root_media_id": str(canonical_root_media_id),
         "display_title": _payload_get(franchise_payload, "display_title", ""),
         "series": _payload_get(franchise_payload, "series", {}),
         "sections": _payload_get(franchise_payload, "sections", []),
@@ -94,8 +104,20 @@ def prepare_anime_franchise_context(
             start=1,
         )
     ]
-    franchise_sections = []
+    copied_sections = []
+    all_footer_entries = [*prepared_series_entries]
     for section in franchise_payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        copied_entries = [
+            _with_current_entry(entry, current_media_id)
+            for entry in _copy_entries(section.get("entries", []))
+        ]
+        copied_sections.append((section, copied_entries))
+        all_footer_entries.extend(copied_entries)
+
+    franchise_sections = []
+    for section, section_entries in copied_sections:
         if not isinstance(section, dict):
             continue
         section_key = section.get("key")
@@ -109,12 +131,10 @@ def prepare_anime_franchise_context(
                 "entries": helpers.enrich_items_with_user_data(
                     request,
                     enrich_franchise_entries_for_footer(
-                        [
-                            _with_current_entry(entry, current_media_id)
-                            for entry in _copy_entries(section.get("entries", []))
-                        ],
+                        section_entries,
                         media_metadata,
                         series_entries=prepared_series_entries,
+                        all_entries=all_footer_entries,
                     ),
                     section_key,
                 ),
@@ -125,6 +145,10 @@ def prepare_anime_franchise_context(
 
     return {
         "root_media_id": franchise_payload.get("root_media_id", ""),
+        "canonical_root_media_id": franchise_payload.get(
+            "canonical_root_media_id",
+            franchise_payload.get("root_media_id", ""),
+        ),
         "display_title": franchise_payload.get("display_title", ""),
         "series": {
             "key": AnimeFranchiseService.SERIES_LINE_KEY,

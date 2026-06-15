@@ -51,7 +51,6 @@ class AnimeFranchiseCacheTests(TestCase):
             "node_count": 2,
         }
 
-
     def _dragon_ball_payload(self):
         return {
             "schema_version": 1,
@@ -145,6 +144,39 @@ class AnimeFranchiseCacheTests(TestCase):
             ],
         }
 
+    def _payload_with_special_seed_candidate(self):
+        return {
+            "schema_version": 1,
+            "root_media_id": "40489",
+            "display_title": "Canonical Series",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "11757",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Canonical Series",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        {
+                            "media_id": "40489",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Special Entry",
+                        },
+                    ],
+                },
+            ],
+        }
+
     def test_extract_payload_media_ids_from_series_and_sections(self):
         payload = self._dragon_ball_payload()
         payload["series"]["entries"] = payload["series"]["entries"][:2]
@@ -178,6 +210,61 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("997", aliasable_ids)
         self.assertNotIn("996", aliasable_ids)
 
+    def test_related_parent_story_target_is_not_aliasable(self):
+        payload = {
+            "series": {"entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "entries": [
+                        {"media_id": media_id}
+                        for media_id in [
+                            "33142",
+                            "33569",
+                            "42364",
+                            "60012",
+                            "63830",
+                        ]
+                    ],
+                },
+                {
+                    "key": "related_series",
+                    "entries": [{"media_id": "99999"}],
+                },
+            ],
+        }
+
+        self.assertNotIn(
+            "99999",
+            anime_franchise_cache.extract_aliasable_media_ids(payload),
+        )
+        self.assertIn("99999", anime_franchise_cache.extract_payload_media_ids(payload))
+
+    def test_related_series_root_story_parent_is_covered_but_not_aliasable(self):
+        payload = {
+            "series": {"entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "entries": [{"media_id": "27891"}],
+                },
+                {
+                    "key": "specials",
+                    "entries": [{"media_id": "27891"}],
+                },
+                {
+                    "key": "related_series",
+                    "entries": [{"media_id": "100"}],
+                },
+            ],
+        }
+
+        self.assertIn("100", anime_franchise_cache.extract_payload_media_ids(payload))
+        self.assertNotIn(
+            "100",
+            anime_franchise_cache.extract_aliasable_media_ids(payload),
+        )
+
     def test_determine_canonical_media_id_from_series_line(self):
         self.assertEqual(
             anime_franchise_cache.determine_canonical_media_id(
@@ -186,6 +273,84 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
             "223",
         )
+
+    def test_determine_canonical_media_id_prefers_series_over_canonical_root(
+        self,
+    ):
+        payload = {
+            "series": {"entries": [{"media_id": "100"}]},
+            "canonical_root_media_id": "999",
+        }
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "100",
+        )
+
+    def test_determine_canonical_media_id_uses_canonical_root_without_series(self):
+        payload = {
+            "series": {"entries": []},
+            "canonical_root_media_id": "33142",
+        }
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "33142",
+        )
+
+    def test_determine_canonical_media_id_falls_back_for_legacy_payload(self):
+        payload = {"series": {"entries": []}}
+
+        self.assertEqual(
+            anime_franchise_cache.determine_canonical_media_id(payload, "33569"),
+            "33569",
+        )
+
+    def test_prepare_payload_for_aliasing_uses_mini_franchise_canonical_root(self):
+        payload = {
+            "schema_version": 1,
+            "root_media_id": "33569",
+            "canonical_root_media_id": "33142",
+            "display_title": "Re:Petit",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": media_id,
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": title,
+                        }
+                        for media_id, title in [
+                            ("33569", "Re:Petit"),
+                            ("42364", "Break Time 2"),
+                            ("60012", "Break Time 3"),
+                            ("63830", "Break Time 4"),
+                        ]
+                    ],
+                }
+            ],
+        }
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="33569",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        expected_ids = {"33142", "33569", "42364", "60012", "63830"}
+        self.assertEqual(canonical_id, "33142")
+        self.assertEqual(prepared["root_media_id"], "33142")
+        self.assertEqual(prepared["canonical_root_media_id"], "33142")
+        self.assertEqual(set(prepared["aliasable_media_ids"]), expected_ids)
+        self.assertEqual(aliasable_ids, expected_ids)
+        self.assertEqual(set(prepared["covered_media_ids"]), expected_ids)
 
     def test_prepare_payload_for_aliasing_adds_internal_metadata(self):
         prepared, canonical_id, aliasable_ids = (
@@ -278,20 +443,38 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("123456", aliasable_ids)
 
     def test_prepare_payload_for_aliasing_does_not_alias_covered_special_seed(self):
-        payload = self._dragon_ball_payload()
+        payload = self._payload_with_special_seed_candidate()
 
-        prepared, _canonical_id, aliasable_ids = (
+        prepared, canonical_id, aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 payload,
-                build_seed_media_id="999",
+                build_seed_media_id="40489",
                 truncated=False,
                 aliases_enabled=True,
             )
         )
 
-        self.assertIn("999", prepared["covered_media_ids"])
-        self.assertNotIn("999", prepared["aliasable_media_ids"])
-        self.assertNotIn("999", aliasable_ids)
+        self.assertEqual(canonical_id, "11757")
+        self.assertIn("40489", prepared["covered_media_ids"])
+        self.assertNotIn("40489", prepared["aliasable_media_ids"])
+        self.assertNotIn("40489", aliasable_ids)
+
+    def test_prepare_payload_for_aliasing_does_not_alias_passive_special(self):
+        payload = self._payload_with_special_seed_candidate()
+
+        prepared, canonical_id, aliasable_ids = (
+            anime_franchise_cache.prepare_payload_for_aliasing(
+                payload,
+                build_seed_media_id="11757",
+                truncated=False,
+                aliases_enabled=True,
+            )
+        )
+
+        self.assertEqual(canonical_id, "11757")
+        self.assertIn("40489", prepared["covered_media_ids"])
+        self.assertNotIn("40489", prepared["aliasable_media_ids"])
+        self.assertNotIn("40489", aliasable_ids)
 
     def test_prepare_payload_for_aliasing_does_not_alias_covered_spinoff_seed(self):
         payload = self._dragon_ball_payload()
@@ -367,7 +550,7 @@ class AnimeFranchiseCacheTests(TestCase):
         prepared, canonical_id, aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 self._dragon_ball_payload(),
-                build_seed_media_id="223",
+                build_seed_media_id="999",
                 truncated=False,
                 aliases_enabled=True,
             )
@@ -422,7 +605,7 @@ class AnimeFranchiseCacheTests(TestCase):
         prepared, canonical_id, _aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 self._dragon_ball_payload(),
-                build_seed_media_id="999",
+                build_seed_media_id="223",
                 truncated=False,
                 aliases_enabled=True,
             )
@@ -637,7 +820,6 @@ class AnimeFranchiseCacheTests(TestCase):
             anime_franchise_cache.can_schedule_build(meta, has_payload=True),
         )
 
-
     def test_missing_payload_returns_empty_meta(self):
         payload, meta = anime_franchise_cache.load_payload("404")
 
@@ -680,8 +862,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(meta["truncated"], before_meta["truncated"])
         self.assertEqual(meta["truncation_reason"], before_meta["truncation_reason"])
         self.assertEqual(meta["last_error_message"], "boom")
-
-
 
     def test_normalize_meta_empty_dict_keeps_required_defaults(self):
         meta = anime_franchise_cache.normalize_meta({})
@@ -745,7 +925,9 @@ class AnimeFranchiseCacheTests(TestCase):
             with self.subTest(forbidden_key=forbidden_key):
                 with self.assertRaises(ValueError):
                     anime_franchise_cache.save_payload("100", payload)
-                self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("100")))
+                self.assertIsNone(
+                    cache.get(anime_franchise_cache.get_payload_key("100"))
+                )
 
     def test_invalid_payload_load_returns_none_and_normalized_meta(self):
         cache.set(
@@ -758,8 +940,6 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(payload)
         self.assertEqual(meta["schema_version"], 1)
         self.assertTrue(meta["last_accessed_at"])
-
-
 
     def test_normalize_meta_with_invalid_node_count_falls_back_to_zero(self):
         meta = anime_franchise_cache.normalize_meta({"node_count": "abc"})
