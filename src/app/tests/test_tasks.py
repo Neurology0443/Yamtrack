@@ -325,11 +325,42 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
     def setUp(self):
         cache.clear()
 
+    def _snapshot_for_task(self, media_id="100", *, canonical_media_id=None):
+        node = AnimeNode(str(media_id), "Seed", "mal", "tv", "img", None, [])
+        return AnimeFranchiseSnapshot(
+            root_node=node,
+            nodes_by_media_id={str(media_id): node},
+            all_normalized_relations=[],
+            continuity_component=[node],
+            series_line=[node],
+            direct_anchors=[],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id=str(media_id),
+            canonical_root_media_id=str(canonical_media_id or media_id),
+        )
+
+    def _set_payload_for_cache(
+        self,
+        mock_build_for_cache,
+        payload,
+        *,
+        media_id="100",
+        canonical_media_id=None,
+    ):
+        mock_build_for_cache.return_value = (
+            self._snapshot_for_task(
+                media_id,
+                canonical_media_id=canonical_media_id,
+            ),
+            payload,
+        )
+
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_saves_payload_and_meta(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         mock_graph_builder = mock_graph_builder_class.return_value
@@ -337,7 +368,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         mock_graph_builder.truncated = True
         mock_graph_builder.truncation_reason = "max_nodes"
         cache.add(anime_franchise_cache.get_queue_lock_key("100"), "1", timeout=60)
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -358,6 +389,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 "sections": [],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="100")
 
         result = build_mal_anime_franchise_payload("100")
 
@@ -371,8 +403,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         mock_graph_builder_class.assert_called_once_with(
             max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
         )
-        mock_service.assert_called_once_with(graph_builder=mock_graph_builder)
-        mock_service.return_value.build.assert_called_once_with("100")
+        mock_build_for_cache.assert_called_once_with("100", mock_graph_builder)
         self.assertEqual(result["node_count"], 2)
         self.assertTrue(result["truncated"])
         self.assertEqual(result["truncation_reason"], "max_nodes")
@@ -381,17 +412,17 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
 
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_from_noncanonical_saves_canonical(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         mock_graph_builder = mock_graph_builder_class.return_value
         mock_graph_builder.node_count = 3
         mock_graph_builder.truncated = False
         mock_graph_builder.truncation_reason = ""
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -418,6 +449,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 "sections": [],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="269")
 
         result = build_mal_anime_franchise_payload("269")
 
@@ -434,17 +466,17 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(lookup.canonical_media_id, "223")
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_aliases_continuity_extra_seed(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         mock_graph_builder = mock_graph_builder_class.return_value
         mock_graph_builder.node_count = 4
         mock_graph_builder.truncated = False
         mock_graph_builder.truncation_reason = ""
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -484,6 +516,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 ],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="38040")
 
         result = build_mal_anime_franchise_payload("38040")
 
@@ -498,17 +531,17 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(lookup.canonical_media_id, "30831")
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_truncated_build_skips_aliases(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         mock_graph_builder = mock_graph_builder_class.return_value
         mock_graph_builder.node_count = 3
         mock_graph_builder.truncated = True
         mock_graph_builder.truncation_reason = "max_nodes"
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -535,6 +568,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 "sections": [],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="269")
 
         result = build_mal_anime_franchise_payload("269")
 
@@ -549,17 +583,17 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_aliases_disabled_saves_under_seed(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         mock_graph_builder = mock_graph_builder_class.return_value
         mock_graph_builder.node_count = 2
         mock_graph_builder.truncated = False
         mock_graph_builder.truncation_reason = ""
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -586,6 +620,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 "sections": [],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="269")
 
         result = build_mal_anime_franchise_payload("269")
 
@@ -877,10 +912,10 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("34428")))
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("34428")))
 
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_preserves_previous_payload_on_error(
         self,
-        mock_service,
+        mock_build_for_cache,
     ):
         previous_payload = {
             "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
@@ -903,7 +938,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
             "node_count": 1,
         }
         anime_franchise_cache.save_payload("100", previous_payload)
-        mock_service.return_value.build.side_effect = RuntimeError("boom")
+        mock_build_for_cache.side_effect = RuntimeError("boom")
 
         result = build_mal_anime_franchise_payload("100")
 
@@ -916,10 +951,10 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
 
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_task_preserves_previous_payload_when_save_payload_rejects_invalid_payload(
         self,
-        mock_service,
+        mock_build_for_cache,
         mock_graph_builder_class,
     ):
         previous_payload = {
@@ -947,7 +982,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         mock_graph_builder.node_count = 1
         mock_graph_builder.truncated = False
         mock_graph_builder.truncation_reason = ""
-        mock_service.return_value.build.return_value = type(
+        payload = type(
             "FranchiseVM",
             (),
             {
@@ -969,6 +1004,7 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
                 "sections": [],
             },
         )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="100")
 
         result = build_mal_anime_franchise_payload("100")
 
@@ -979,14 +1015,14 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
 
-    @patch("app.tasks.AnimeFranchiseService")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_task_lock_skips_duplicate(
         self,
-        mock_service,
+        mock_build_for_cache,
     ):
         cache.add(anime_franchise_cache.get_task_lock_key("100"), "1", timeout=60)
 
         result = build_mal_anime_franchise_payload("100")
 
         self.assertTrue(result["skipped"])
-        mock_service.assert_not_called()
+        mock_build_for_cache.assert_not_called()

@@ -11,7 +11,6 @@ from django.utils import timezone
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
-from app.services.anime_franchise import AnimeFranchiseService
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_import import AnimeFranchiseImportService
@@ -25,6 +24,16 @@ from app.services.anime_franchise_task_names import (
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _build_mal_anime_franchise_payload_for_cache(media_id: str, graph_builder):
+    """Build the franchise snapshot and UI payload for cache serialization."""
+    snapshot_service = AnimeFranchiseSnapshotService(
+        graph_builder=graph_builder,
+    )
+    snapshot = snapshot_service.build(media_id)
+    franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
+    return snapshot, franchise_payload
 
 
 @shared_task(name="Cleanup user messages")
@@ -183,17 +192,10 @@ def build_mal_anime_franchise_payload(media_id):
         graph_builder = AnimeFranchiseGraphBuilder(
             max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
         )
-        if AnimeFranchiseService.__module__ == "unittest.mock":
-            snapshot = None
-            franchise_payload = AnimeFranchiseService(
-                graph_builder=graph_builder,
-            ).build(media_id)
-        else:
-            snapshot_service = AnimeFranchiseSnapshotService(
-                graph_builder=graph_builder,
-            )
-            snapshot = snapshot_service.build(media_id)
-            franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
+        snapshot, franchise_payload = _build_mal_anime_franchise_payload_for_cache(
+            media_id,
+            graph_builder,
+        )
         truncated = bool(graph_builder.truncated)
         aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
         can_use_aliases = aliases_enabled and not truncated
@@ -232,12 +234,10 @@ def build_mal_anime_franchise_payload(media_id):
                 canonical_payload,
                 truncated=False,
             )
-        scoped_payload = None
-        if snapshot is not None:
-            scoped_payload = build_scoped_seed_payload_from_snapshot(
-                snapshot,
-                seed_media_id=media_id,
-            )
+        scoped_payload = build_scoped_seed_payload_from_snapshot(
+            snapshot,
+            seed_media_id=media_id,
+        )
         if media_id != canonical_media_id and media_id in canonical_aliasable_ids:
             anime_franchise_cache.delete_direct_payload(media_id)
         if (
