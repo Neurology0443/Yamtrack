@@ -94,7 +94,7 @@ Users remain responsible for moving imported entries to another status when they
 - Excludes MAL media types `cm` and `pv`.
 - `tv_special` requires known runtime greater than 15 minutes.
 - Other targets require known runtime at least 15 minutes.
-- Single-episode entries with runtime `<= 30` minutes are treated as short satellite candidates.
+- For non-`tv_special` targets, single-episode entries with runtime `<= 30` minutes are treated as short satellite candidates.
 - Short satellite candidates are accepted only when their local `prequel`/`sequel` branch is fully available in the snapshot.
 - Every entry in that local branch must have a known runtime of at least 15 minutes.
 - If the local branch contains a missing node, unknown runtime, or runtime below 15 minutes, the candidate is excluded.
