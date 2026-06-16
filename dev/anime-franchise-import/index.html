@@ -628,7 +628,7 @@
 <li>Adds selected side content around the main continuity.</li>
 <li>More aggressive than <code>continuity</code>.</li>
 <li>Useful when users want side stories, alternatives, or selected spin-offs.</li>
-<li>Short single-episode satellites are allowed only when their local prequel/sequel branch has known runtimes of at least 15 minutes.</li>
+<li>Short non-<code>tv_special</code> single-episode satellites are allowed only when their local <code>prequel</code>/<code>sequel</code> branch is fully known and has runtimes of at least 15 minutes.</li>
 </ul>
 <h3 id="complete"><code>complete</code><a class="headerlink" href="#complete" title="Permanent link">&para;</a></h3>
 <ul>
@@ -656,7 +656,10 @@
 <li>Excludes MAL media types <code>cm</code> and <code>pv</code>.</li>
 <li><code>tv_special</code> requires known runtime greater than 15 minutes.</li>
 <li>Other targets require known runtime at least 15 minutes.</li>
-<li>Single-episode entries with runtime <code>&lt;= 30</code> minutes are excluded.</li>
+<li>Single-episode entries with runtime <code>&lt;= 30</code> minutes are treated as short satellite candidates.</li>
+<li>Short satellite candidates are accepted only when their local <code>prequel</code>/<code>sequel</code> branch is fully available in the snapshot.</li>
+<li>Every entry in that local branch must have a known runtime of at least 15 minutes.</li>
+<li>If the local branch contains a missing node, unknown runtime, or runtime below 15 minutes, the candidate is excluded.</li>
 </ul>
 <h3 id="complete_1"><code>complete</code><a class="headerlink" href="#complete_1" title="Permanent link">&para;</a></h3>
 <ul>

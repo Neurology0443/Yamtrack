@@ -676,6 +676,8 @@
 <li>Import profiles read the snapshot directly.</li>
 <li><code>continuity</code> uses the continuity component with import-specific exclusions.</li>
 <li><code>satellites</code> uses direct candidates and profile-specific relation/runtime rules.</li>
+<li><code>satellites</code> may inspect local <code>prequel</code>/<code>sequel</code> relations already present in the snapshot when validating short single-episode candidates.</li>
+<li>This inspection is import selection policy only; the snapshot still owns franchise facts, not import decisions.</li>
 <li><code>complete</code> combines continuity and satellites.</li>
 </ul>
 <p>Import selection must not blindly follow UI sections. UI grouping and import selection are separate projections.</p>
