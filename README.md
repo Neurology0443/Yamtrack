@@ -59,6 +59,76 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   - Makes automatic additions easy to spot and review.
   - Helps you keep track of changes made to your library.
 
+
+<table>
+<tr>
+<td align="center" width="33%">
+<a href="docs/assets/konosuba-franchise-grouping-full.png">
+<img src="docs/assets/konosuba-franchise-grouping-thumb.png" width="260">
+</a>
+<br>
+<b> Konosuba Main Franchise Grouping</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/kimetsu-no-yaiba-grouping-full.png">
+<img src="docs/assets/kimetsu-no-yaiba-grouping-thumb.png" width="260">
+</a>
+<br>
+<b> Entry Badges</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/franchise-cache.png">
+<img src="docs/assets/konosuba-franchise-grouping-thumb.png" width="260">
+</a>
+<br>
+<b>Faster Franchise Pages</b>
+<br>
+Large franchise pages stay responsive.
+</td>
+</tr>
+
+<tr>
+<td align="center" width="33%">
+<a href="docs/assets/automatic-imports.png">
+<img src="docs/assets/automatic-imports-thumb.png" width="260">
+</a>
+<br>
+<b>Automatic Imports</b>
+<br>
+Missing franchise entries can be imported automatically.
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/import-profiles.png">
+<img src="docs/assets/import-profiles-thumb.png" width="260">
+</a>
+<br>
+<b>Import Profiles</b>
+<br>
+Continuity, Satellites and Complete modes.
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/import-notifications.png">
+<img src="docs/assets/import-notifications-thumb.png" width="260">
+</a>
+<br>
+<b>Import Notifications</b>
+<br>
+Automatic additions are easy to review.
+</td>
+</tr>
+</table>
+
+
+
+
+
+
 Detailed fork docs are available in `docs/`:
 
 - [Architecture overview](docs/architecture-overview.md)
