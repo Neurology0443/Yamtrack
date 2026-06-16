@@ -25,45 +25,40 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   - Spin-offs
 - Makes large franchises easier to understand and navigate.
 - Reduces clutter from flat related-anime lists.
-- Highlights important franchise entries with badges and contextual information.
-- Shows helpful badges on franchise entries:
+- Highlights important franchise entries with badges and contextual information:
   - relation type
   - anime format
   - current entry indicator
 - Helps explain why an anime appears in a section.
-- Provides additional context directly on each franchise entry.
-
-### 📥 Smarter franchise imports
-
-- Missing franchise entries can be discovered automatically.
-- New entries are added with the `Planning` status for easy review.
-- Helps keep franchise collections complete with less manual work.
-- Supports different import styles, from main-story only to broader franchise coverage.
-
-### 🔄 Automatic franchise maintenance
-
-- Regularly rechecks tracked franchises.
-- Detects newly available franchise entries.
-- Helps keep collections complete as franchises grow over time.
 
 ### ⚡ Faster franchise pages
 
 - Franchise pages stay responsive, even for large franchises.
-- Previously prepared franchise data can be reused instead of rebuilt every time.
-- Related entries from the same franchise can reuse prepared franchise data when appropriate.
-- Updates happen in the background when needed.
+- Franchise data is cached and refreshed in the background when needed.
+  - Previously prepared franchise data can be reused instead of rebuilt every time.
+  - Related entries from the same franchise can reuse prepared franchise data when appropriate.
+
+### 📥 Automatic franchise imports
+
+- Regularly keeps an eye on the franchises in your library.
+  - Detects newly available franchise entries.
+  - Missing franchise entries can be imported automatically.
+  - New entries are added with the `Planning` status for easy review.
+  - Helps keep franchise collections complete without manually checking MAL.
+
+### ⚙️ Flexible import automation
+
+- Choose how franchise imports should behave:
+  - Continuity
+  - Satellites
+  - Complete
+- Configure scan frequency.
 
 ### 🔔 Import notifications
 
 - Receive notifications when franchise imports add new entries.
-- Makes automated additions easy to review.
-- Helps you spot newly discovered franchise content.
-
-### ⚙️ Flexible franchise automation
-
-- Choose how much franchise content should be imported automatically.
-- Pick the import style that best matches your collection goals.
-- Adjust update frequency and MAL usage limits to match your setup.
+  - Makes automatic additions easy to spot and review.
+  - Helps you keep track of changes made to your library.
 
 Detailed fork docs are available in `docs/`:
 
