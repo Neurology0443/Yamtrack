@@ -10,25 +10,67 @@
 
 Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.
 
-## 🔀 This fork
+## ✨ Fork additions
 
-Compared to upstream Yamtrack, this fork adds MAL anime franchise grouping/import automation, incremental scan-state scheduling, and entry-added notifications.
+This fork extends Yamtrack with additional features focused on MyAnimeList (MAL) anime franchises.
 
-For MAL anime details pages, the current grouping product behavior is:
+### 📚 Better franchise pages
 
-- a fixed **Series** block built from franchise continuity TV line data,
-- plus dynamic secondary sections (`Main Story Extras`, `Specials`, `Related Series`) assigned by ordered rule packs.
+- Organizes anime franchises into dedicated sections when relevant:
+  - Series
+  - Main Story Extras
+  - Specials
+  - Related Series
+  - Alternatives
+  - Spin-offs
+- Makes large franchises easier to understand and navigate.
+- Reduces clutter from flat related-anime lists.
+- Highlights important franchise entries with badges and contextual information:
+  - relation type
+  - anime format
+  - current entry indicator
+- Helps explain why an anime appears in a section.
 
-This keeps the page behavior stable for continuity while allowing section placement policy to evolve without changing templates.
+### ⚡ Faster franchise pages
 
-Detailed docs are in `docs/`:
+- Franchise pages stay responsive, even for large franchises.
+- Franchise data is cached and refreshed in the background when needed.
+  - Previously prepared franchise data can be reused instead of rebuilt every time.
+  - Related entries from the same franchise can reuse prepared franchise data when appropriate.
+
+### 📥 Automatic franchise imports
+
+- Regularly keeps an eye on the franchises in your library.
+  - Detects newly available franchise entries.
+  - Missing franchise entries can be imported automatically.
+  - New entries are added with the `Planning` status for easy review.
+  - Helps keep franchise collections complete without manually checking MAL.
+
+### ⚙️ Flexible import automation
+
+- Choose how franchise imports should behave:
+  - Continuity
+  - Satellites
+  - Complete
+- Configure scan frequency.
+
+### 🔔 Import notifications
+
+- Receive notifications when franchise imports add new entries.
+  - Makes automatic additions easy to spot and review.
+  - Helps you keep track of changes made to your library.
+
+Detailed fork docs are available in `docs/`:
 
 - [Architecture overview](docs/architecture-overview.md)
+- [Anime franchise snapshot](docs/anime-franchise-snapshot.md)
 - [Anime franchise grouping](docs/anime-franchise-grouping.md)
 - [Anime franchise import](docs/anime-franchise-import.md)
+- [Anime franchise cache](docs/anime-franchise-cache.md)
 - [Anime franchise customization](docs/anime-franchise-customization.md)
-- [Anime franchise debugging runbook](docs/anime-franchise-debugging.md)
-- [Testing runbook](docs/testing-runbook.md)
+- [Anime franchise debugging runbook](docs/anime-franchise-debugging-runbook.md)
+- [Docker testing runbook](docs/docker-testing-runbook.md)
+- [Operational commands](docs/operational-commands.md)
 
 
 <!-- --8<-- [end:docs-index-intro] -->

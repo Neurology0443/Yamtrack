@@ -95,6 +95,7 @@ def prepare_anime_franchise_context(
         _with_current_entry(
             {
                 **entry,
+                # Legacy cache compatibility: older payloads may still carry this key.
                 "series_label": entry.get("series_label") or f"Season {index}",
             },
             current_media_id,

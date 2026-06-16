@@ -60,6 +60,7 @@ def _build_title_map(*entry_groups: list[dict] | None) -> dict[str, str]:
             media_id = entry.get("media_id")
             if media_id is None:
                 continue
+            # Legacy cache compatibility: prefer real titles, fall back for old payloads.
             title = entry.get("title") or entry.get("series_label")
             if not title:
                 continue
