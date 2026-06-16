@@ -1,131 +1,247 @@
-# Anime Franchise Customization Guide
+# Anime franchise customization
 
-Use this guide to change behavior safely while staying aligned with the current architecture.
+## Understanding ownership
 
-## Architecture reminder before editing
+A franchise change should start by identifying which layer owns the behavior.
 
-- Main UI grouping path: `AnimeFranchiseService -> AnimeFranchiseUiPipeline`.
-- `Series` is fixed from `snapshot.series_line`.
-- Secondary sections are rule-driven.
-- `layout.py` is structural-only.
-- `adapter.py` is compatibility-only.
-- `views.py` + `anime_franchise_footer.py` are integration/presentation enrichment.
+```text
+Snapshot
+    ↓
+UI Projection
+Import Projection
+Cache Projection
+    ↓
+Rendering
+```
 
-## Where to change what
+The snapshot describes the franchise facts. UI grouping decides how those facts are shown on a detail page. Import profiles decide which missing entries should be created. Cache code decides how prepared payloads are stored and refreshed. Rendering turns prepared context into HTML.
 
-### 1) UI grouping rule packs (main path)
+A change should normally affect one main layer. If it appears to require several layers, verify that the behavior truly belongs in each of them.
 
-Directory: `src/app/services/anime_franchise_ui/rules/`
+## Before changing behavior
 
-Use for:
+When changing franchise behavior:
 
-- `base_facts.py`
-  - add/update normalized candidate facts used by later packs,
-  - tune relation/provenance-derived helper signals.
-- `base_placement.py`
-  - declare section definitions,
-  - set initial fallback placement for unclassified candidates.
-- `relation_rules.py`
-  - relation-based section assignment/refinement.
-- `anchor_rules.py`
-  - directness/fallback-anchor gating behavior.
-- `format_rules.py`
-  - conservative format/runtime gating and exclusions.
-- `section_rules.py`
-  - metadata policy only (titles/order/hidden); no candidate moves.
+1. Identify the owning layer.
+2. Change that layer only when possible.
+3. Update the targeted tests for that layer.
+4. Update documentation when product behavior or operational behavior changes.
 
-Also relevant:
+Most fragile changes happen when a fix is applied in a downstream layer instead of the layer that owns the behavior.
 
-- `src/app/services/anime_franchise_ui/presets/default.py` for pack order.
-- `src/app/services/anime_franchise_ui/engine.py` for override trace behavior.
+## Changing franchise facts
 
-### 2) Import heuristics and profile behavior
+Change franchise facts when the base model of the franchise is wrong before UI, import, or cache policy runs. This includes canonical root selection, continuity discovery, relation normalization, series-line calculation, direct candidate discovery, and promoted continuity candidates.
 
-File: `src/app/services/anime_franchise_import_profiles.py`
+The main files are:
 
-Use for:
+- `src/app/services/anime_franchise_graph.py` for graph hydration and relation walking;
+- `src/app/services/anime_franchise_snapshot.py` for canonical franchise facts and derived snapshot fields;
+- `src/app/providers/mal.py` when normalized MAL relation semantics are wrong.
 
-- tuning `continuity` / `satellites` / `complete` profile semantics,
-- changing profile eligibility/selection logic,
-- adjusting how snapshot facts map to import decisions.
+For field definitions and invariants, see `docs/anime-franchise-snapshot.md`.
 
-### 3) Scan scheduling/backoff
+## Changing page grouping
 
-File: `src/app/services/anime_import_state.py`
+Page grouping controls where franchise entries appear on the anime detail page. It consumes snapshot facts but does not change them.
 
-Use for:
+Visible grouping can include:
 
-- retry/backoff windows,
-- error-state progression,
-- incremental rescan cadence and state transitions.
+- Series
+- Main Story Extras
+- Specials
+- Related Series
+- Alternatives
+- Spin-offs
 
-### 4) Task/scheduler automation
+Typical changes include adding a visible section, moving entries between sections, adjusting relation rules, changing anchor gating, changing format/runtime filtering, or changing rule-pack order.
 
-Files:
+The main files are:
 
-- `src/app/tasks.py`
-- `src/app/schedules.py`
-- `src/config/settings.py`
+- `src/app/services/anime_franchise_ui/rules/` for placement, refinement, filtering, and metadata policy;
+- `src/app/services/anime_franchise_ui/presets/default.py` for rule-pack order;
+- `src/app/services/anime_franchise_ui/assembler.py` when candidate facts/provenance are missing;
+- `src/app/services/anime_franchise_ui/layout.py` for structural section grouping;
+- `src/app/services/anime_franchise_ui/adapter.py` for compatibility-shaped output.
 
-Use for:
+For the decision model, see `docs/anime-franchise-grouping.md`.
 
-- Celery task trigger cadence,
-- automation on/off and periodic schedule wiring,
-- operational defaults for franchise import jobs.
+## Changing import behavior
 
-### 5) Notification behavior
+Import behavior controls which missing franchise entries are automatically created in a user's library. New imported entries are created with the `Planning` status.
 
-Files:
+Import profiles are independent from UI grouping sections. A section being visible on the detail page does not automatically mean it should be imported.
 
-- `src/events/notifications.py`
-- `src/events/tasks.py`
-- `src/users/models.py`
-- `src/users/forms.py`
-- `src/templates/users/notifications.html`
+Typical changes include profile selection, runtime thresholds, relation inclusion/exclusion, seed selection, full-rescan behavior, scan-state fingerprinting, and backoff/jitter.
 
-Use for:
+The main files are:
 
-- opt-in settings,
-- async dispatch behavior,
-- payload formatting and endpoint delivery policy.
+- `src/app/services/anime_franchise_import_profiles.py` for profile selection policy;
+- `src/app/services/anime_franchise_import.py` for import orchestration and entry creation;
+- `src/app/services/anime_import_state.py` for due scans, fingerprints, backoff, and jitter;
+- `src/app/tasks.py` for Celery import execution;
+- `src/app/schedules.py` for Beat schedule construction.
 
-### 6) Rendering and footer badges
+For profile behavior and commands, see `docs/anime-franchise-import.md`.
 
-Files:
+## Changing cache behavior
 
-- `src/app/views.py`
-- `src/app/anime_franchise_footer.py`
-- `src/templates/app/media_details.html`
+Cache behavior controls how complete franchise payloads are stored, refreshed, reused, and delivered to detail pages.
 
-Use for:
+The cache does not decide grouping behavior. The cache does not decide import behavior. It stores and delivers the result of those layers.
 
-- integration shape between service payload and page context,
-- `series_label` and footer relation/format badge presentation,
-- template-level display structure.
+Typical changes include cache TTL, freshness, payload validation, canonical aliases, warmup, cooldowns, queue/task locks, and the serialization contract.
 
-Do not use this area to implement new grouping placement policy.
+The main files are:
 
-## Practical guardrails (Do / Don’t)
+- `src/app/services/anime_franchise_cache.py` for payload keys, metadata, validation, freshness, aliases, and scheduling gates;
+- `src/app/services/anime_franchise_cache_warmer.py` for after-import warmup scheduling;
+- `src/app/services/anime_franchise_scoped_payload.py` for scoped/truncated payload handling;
+- `src/app/services/anime_franchise_context.py` for request-time enrichment of cached payloads;
+- `src/app/tasks.py` for background cache builds.
 
-### Do
+For cache lifecycle and settings, see `docs/anime-franchise-cache.md`.
 
-- Keep grouping business logic in rule packs.
-- Keep snapshot semantics canonical for both UI and import projections.
-- Keep `Series` exclusively sourced from `snapshot.series_line`.
-- Keep override behavior explicit and debuggable (`placement_trace`).
-- Update tests + docs in the same change when behavior shifts.
+## Changing rendering
 
-### Don’t
+Rendering turns prepared franchise data into page content. This layer is appropriate for labels, badges, tooltips, current-entry markers, and display-only template structure.
 
-- Don’t move placement rules into `layout.py`, adapter, or templates.
-- Don’t document legacy UI logic as active runtime path.
-- Don’t mix import projection decisions into UI placement documentation.
-- Don’t overstate provenance fields (`metadata["origins"]`) as fully mature policy drivers unless code truly does that.
+Franchise badges and relation tooltips are rendering helpers. They should explain already-classified entries, not classify them.
+
+Rendering-time enrichment can also improve display data such as franchise entry images when fresher media information is already available locally.
+
+Typical rendering changes include:
+
+- labels;
+- badges;
+- tooltips;
+- current-entry markers;
+- display-only image enrichment;
+- template display structure.
+
+Rendering should not classify franchise entries. If placement is wrong, fix the snapshot facts or UI rule packs first.
+
+The main files are:
+
+- `src/app/services/anime_franchise_context.py` for request/user enrichment;
+- `src/app/anime_franchise_footer.py` for footer labels, badges, and tooltips;
+- `src/app/views.py` for orchestration of cache lookup and context preparation;
+- `src/templates/app/media_details.html` for HTML rendering.
+
+## Notifications
+
+Entry-added notifications belong to the import flow. They are triggered after import-created entries commit, use the existing notification/event subsystem, and should not fire before transaction commit.
+
+The main files are:
+
+- `src/app/services/anime_franchise_import.py` for the import creation path;
+- `src/events/notifications.py` for notification helpers;
+- `src/events/tasks.py` for event task delivery;
+- notification preference code/tests when delivery preferences change.
+
+## Choosing the correct layer
+
+| Goal | Layer |
+| --- | --- |
+| Change canonical franchise facts | Snapshot |
+| Change continuity or series-line logic | Snapshot |
+| Change section placement | UI grouping |
+| Change section order or visibility | UI grouping / layout metadata |
+| Change imported entries | Import profiles |
+| Change imported entry status | Import creation path |
+| Change scan cadence/backoff | Import state |
+| Change cache TTL or freshness | Cache |
+| Change canonical aliases | Cache |
+| Change badges/tooltips/current markers | Rendering |
+| Change entry-added notifications | Import / Events |
+
+## Common change scenarios
+
+| I want to... | Start with |
+| --- | --- |
+| Change canonical root behavior | Snapshot |
+| Change continuity or `Series` entries | Snapshot + `SeriesBuilder` |
+| Add a new visible section | UI grouping rules + section metadata |
+| Move entries between sections | UI grouping rules |
+| Change spin-off or alternative refinement | `secondary_refinement_rules.py` |
+| Change which entries are imported | Import profiles |
+| Change import scan timing | Import scan state / scheduler settings |
+| Change cache TTL or freshness | Cache settings and cache service |
+| Change cache alias policy | Cache alias helpers |
+| Change badges, tooltips, or displayed images | Rendering/context enrichment |
+| Change notifications for imported entries | Import flow / events |
+
+Use this table as the first routing step. Once the owning layer is clear, use the sections below for the main files and tests.
+
+## Common mistakes
+
+### Fixing grouping in templates
+
+Templates render prepared context. If placement is wrong, the fix usually belongs in rule packs or snapshot facts, not in `media_details.html`.
+
+### Using UI sections for import decisions
+
+UI sections are optimized for detail-page readability. Import profiles decide what should be created in a user library and should not blindly mirror visible sections.
+
+### Fixing import behavior through UI rules
+
+Import profiles and UI grouping are independent projections.
+
+If imported entries are wrong, fix the import profile logic instead of changing section placement.
+
+### Putting user data into cached payloads
+
+Complete franchise cache payloads must stay user-agnostic. Status, progress, and current-user item data belong in request-time enrichment.
+
+### Duplicating snapshot logic
+
+If multiple layers need the same franchise fact, add it to the snapshot instead of recalculating it in UI, import, or cache code.
+
+### Changing cache lookup to fix placement
+
+Cache lookup decides which prepared payload is loaded. It should not be used to move entries between sections.
+
+### Adding one-off view patches
+
+Views orchestrate cache and context preparation. Placement policy belongs in the UI rule pipeline.
+
+## Where to add tests
+
+Snapshot changes should normally update:
+
+- `src/app/tests/services/test_anime_franchise_snapshot.py`
+- `src/app/tests/services/test_anime_franchise.py`
+
+UI grouping changes should normally update:
+
+- `src/app/tests/services/test_anime_franchise_ui_pipeline.py`
+
+Import changes should normally update:
+
+- `src/app/tests/services/test_anime_franchise_import_profiles.py`
+- `src/app/tests/test_anime_franchise_import.py`
+- `src/app/tests/test_import_anime_franchise_command.py`
+
+Cache changes should normally update:
+
+- `src/app/tests/services/test_anime_franchise_cache.py`
+- `src/app/tests/services/test_anime_franchise_scoped_payload.py`
+- `src/app/tests/services/test_anime_franchise_context.py`
+- `src/app/tests/test_anime_franchise_cache_warmer.py`
+
+Rendering, task, and view changes should normally update:
+
+- `src/app/tests/views/test_media_details.py`
+- `src/app/tests/test_anime_franchise_footer.py`
+- `src/app/tests/test_tasks.py`
 
 ## Safe change checklist
 
-1. Identify the concern: facts, placement, relation, anchor, format, metadata, or integration display.
-2. Patch the minimal layer that owns that concern.
-3. Run targeted tests from `docs/testing-runbook.md` and franchise debug checks.
-4. Validate no regressions in fallback no-series behavior.
-5. Update architecture/grouping/debug docs to match actual runtime behavior.
+- The owning layer is identified.
+- Snapshot fields remain deterministic.
+- UI/import/cache projections stay separate.
+- Rule placement changes are covered by placement tests.
+- Cache payload compatibility is considered.
+- User-specific data is not written to complete franchise cache.
+- Settings docs are updated if defaults/settings change.
+- Runbook commands remain valid.

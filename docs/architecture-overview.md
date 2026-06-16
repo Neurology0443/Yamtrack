@@ -1,156 +1,202 @@
-# Architecture Overview
-
-This fork uses a **snapshot-first architecture** for MAL anime franchise behavior.
-
-The snapshot is canonical. UI grouping and import are separate projections on top of that same snapshot.
+# Architecture overview
 
 ## Scope
 
-- Applies only to MAL anime franchise behavior (`source=mal`, `media_type=anime`).
-- UI grouping and import each have their own projection path.
-- This document describes the **currently active path** in app runtime.
+This fork is scoped to MAL anime franchise handling:
 
-## Stable vocabulary used in docs
+- MAL anime only.
+- Anime detail pages for grouping and display.
+- Import automation only for existing user library entries whose source is MAL anime.
+- Non-MAL anime providers and other media types keep upstream Yamtrack behavior.
 
-- **Principal / active path**: code executed by current UI grouping flow.
-- **Structural-only**: assembly/ordering utilities that do not make business placement decisions.
-- **Compatibility layer**: shape translation for integration with existing view/template contracts.
-- **Integration + presentation enrichment**: view-level assembly and display metadata work.
-- **Transitional / legacy**: historical behavior still present in repository but not the main grouping engine.
+The goal is to keep the user-facing page stable while letting provider fetching, graph normalization, UI placement, import selection, and cache delivery evolve independently.
 
-## Layer map
-
-## 1) Provider + graph discovery (principal)
-
-- `src/app/providers/mal.py`
-- `src/app/services/anime_franchise_graph.py`
-
-Responsibilities:
-
-- fetch MAL data,
-- normalize relation signals,
-- build franchise graph inputs for snapshot construction.
-
-## 2) Canonical franchise snapshot (principal)
-
-- `src/app/services/anime_franchise_snapshot.py`
-
-`AnimeFranchiseSnapshot` is the canonical domain object used by both projections. Current fields used by UI/import logic include:
-
-- `continuity_component`
-- `series_line`
-- `direct_anchors`
-- `direct_candidates`
-- `promoted_continuity_candidates` (UI-only promoted transitive non-TV continuity projection)
-- `canonical_root_media_id`
-- `fallback_anchor_media_id`
-- `has_series_line`
-
-## 3) UI projection (principal)
-
-- Facade: `src/app/services/anime_franchise.py` (`AnimeFranchiseService`)
-- Pipeline: `src/app/services/anime_franchise_ui/__init__.py` (`AnimeFranchiseUiPipeline`)
-- Fixed series builder: `src/app/services/anime_franchise_ui/series.py` (`SeriesBuilder`)
-- Candidate assembly: `src/app/services/anime_franchise_ui/assembler.py` (`UiCandidateAssembler`)
-- Rule engine: `src/app/services/anime_franchise_ui/engine.py` (`RulePipeline`)
-- Rule packs: `src/app/services/anime_franchise_ui/rules/*.py`
-- Section compilation: `src/app/services/anime_franchise_ui/layout.py` (`LayoutCompiler`, structural-only)
-- Payload adaptation: `src/app/services/anime_franchise_ui/adapter.py` (`ViewModelAdapter`, compatibility layer)
-
-Current active preset order (from `anime_franchise_ui/presets/default.py`):
-
-1. `base_facts`
-2. `base_placement`
-3. `relation_rules`
-4. `secondary_refinement_rules`
-5. `anchor_rules`
-6. `format_rules`
-7. `section_rules`
-
-Notes on the added refinement phase:
-
-- `relation_rules` performs coarse section classification first.
-- `secondary_refinement_rules` then refines coarse secondary placement:
-  - TV `side_story` entries are reclassified from `specials` to `related_series`,
-  - very short `side_story` entries (known runtime < 15) are reclassified from `specials` to `related_series`,
-  - `alternative_version` / `alternative_setting` move to `alternatives`,
-  - TV spin-offs move from `related_series` to `spin_offs`.
-- Section order is intentionally `spin_offs`, then `alternatives`, then residual `related_series`.
-- `alternatives` ordering is rule-driven with candidate metadata (`section_sort_rank`), and layout applies only a generic structural sort when that metadata exists.
-- `related_series` remains the residual fallback for related entries that do not match refinement rules.
-
-## 4) Import projection (principal, separate from UI projection)
-
-- `src/app/services/anime_franchise_import_profiles.py`
-- `src/app/services/anime_franchise_import.py`
-- `src/app/services/anime_import_state.py`
-
-Responsibilities:
-
-- import profile behavior,
-- profile-driven selection logic,
-- incremental scan-state/backoff.
-
-This reuses the snapshot model but is not part of the UI rendering path.
-
-## 5) App delivery / integration
-
-### UI integration + presentation enrichment
-
-- `src/app/views.py` (`media_details`)
-- `src/app/anime_franchise_footer.py`
-- `src/templates/app/media_details.html`
-
-Current integration behavior:
-
-- calls `AnimeFranchiseService` to get pipeline payload,
-- rebuilds page context into the `anime_franchise` block expected by template,
-- adds `series_label` to series entries,
-- enriches section entries for footer labels/badges,
-- passes prepared context to template rendering.
-
-Template role is presentation (looping/display), not placement business logic.
-
-### Import automation / scheduling / notifications
-
-- `src/app/tasks.py`
-- `src/app/schedules.py`
-- `src/config/settings.py`
-- `src/events/notifications.py`
-- `src/events/tasks.py`
-
-## UI flow (active path)
+## High-level model
 
 ```text
-app/providers/mal.py
-   -> app/services/anime_franchise_graph.py
-   -> app/services/anime_franchise_snapshot.py
-   -> app/services/anime_franchise.py (AnimeFranchiseService)
-   -> app/services/anime_franchise_ui/__init__.py (AnimeFranchiseUiPipeline)
-      -> SeriesBuilder (fixed Series from snapshot.series_line)
-      -> UiCandidateAssembler
-      -> RulePipeline (ordered packs with overrides)
-      -> LayoutCompiler (structural-only)
-      -> ViewModelAdapter (compatibility shape)
-   -> app/views.py (integration + presentation enrichment)
-   -> app/anime_franchise_footer.py
-   -> templates/app/media_details.html
+MAL Provider
+    ↓
+Franchise Graph
+    ↓
+Franchise Snapshot
+    ↓
+├── UI Projection
+├── Import Projection
+└── Cache Projection
 ```
 
-## Import flow (separate projection)
+The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.
+
+## Mental model
+
+Think of the franchise snapshot as the single source of franchise truth.
 
 ```text
-app/providers/mal.py
-   -> app/services/anime_franchise_graph.py
-   -> app/services/anime_franchise_snapshot.py
-   -> app/services/anime_franchise_import_profiles.py
-   -> app/services/anime_franchise_import.py
-   -> app/services/anime_import_state.py
-   -> app/tasks.py / management command / schedules+settings
+Snapshot
+    ↓
+├── UI grouping
+├── Import selection
+└── Cache payload
+    ↓
+Rendering
 ```
 
-## Legacy note
+The snapshot describes what a franchise is. UI grouping, import selection, and cache delivery are independent consumers of that same snapshot.
 
-Some older UI grouping concepts may still exist historically in the repository or tests, but they are not the principal runtime path for MAL anime franchise UI grouping.
+This separation allows page layout, import automation, and cache delivery to evolve without changing franchise semantics.
 
-When updating behavior, treat the `AnimeFranchiseService -> AnimeFranchiseUiPipeline` path as the source of truth.
+## What this fork changes compared to upstream
+
+Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on top of the existing tracker:
+
+- clearer MAL anime franchise pages;
+- automatic grouping of related MAL anime entries;
+- optional automatic import of useful missing franchise entries;
+- persistent scan scheduling for franchise imports;
+- complete franchise cache payloads for responsive detail pages;
+- cache warmup after import-created entries;
+- entry-added notifications for automatically imported anime;
+- configurable MAL provider rate limiting.
+
+These additions are scoped to MAL anime franchise behavior. Existing Yamtrack features for other media types and providers remain upstream-compatible.
+
+## Core concepts
+
+- **Franchise graph**: hydrated MAL anime nodes plus normalized relation edges. Built by `AnimeFranchiseGraphBuilder` from MAL metadata and direct neighbors.
+- **Franchise snapshot**: normalized, deterministic representation around one seed. Built by `AnimeFranchiseSnapshotService`.
+- `continuity_component`: nodes reached by the graph builder for the franchise continuity component.
+- `series_line`: ordered TV-only continuity line derived from prequel/sequel direction and dates. This feeds the fixed UI `Series` block.
+- `direct_anchors`: nodes used for direct secondary candidate discovery. Usually the full TV series line; for a non-TV root it can include the root too.
+- `direct_candidates`: direct relations from anchors after excluding entries already in the TV series line.
+- `promoted_continuity_candidates`: non-TV prequel/sequel chains promoted from the series line so transitive OVAs/movies can still be considered as main-story extras.
+- `no_series_line_secondary_candidates`: secondary candidates used when the snapshot has no TV series line.
+- `root_story_parent_candidates`: direct `full_story` links from a non-TV root to a TV parent.
+- `canonical_root_media_id`: stable root used for scan state and canonical cache payloads. It is the first series-line item when available, otherwise the earliest continuity node.
+- `fallback_anchor_media_id`: root media ID used for anchoring no-series-line layouts.
+- `has_series_line`: boolean guard for UI and candidate assembly when no TV line exists.
+
+## Main runtime flows
+
+### Detail page
+
+```text
+media_details view
+ -> load complete franchise cache / alias
+ -> prepare request-specific context if payload is valid
+ -> render media_details.html
+ -> schedule background build on miss/stale/invalid when allowed
+```
+
+The view does not synchronously build a large franchise on a cache miss. It keeps the standard related-anime fallback for that request and asks Celery to build the full payload.
+
+### Background cache build
+
+```text
+Build MAL anime franchise payload task
+ -> graph build
+ -> snapshot build
+ -> UI projection
+ -> serialize user-agnostic payload
+ -> save canonical payload, metadata, and safe aliases
+```
+
+### Import automation
+
+```text
+Existing user MAL anime
+ -> due seed selection
+ -> snapshot build
+ -> profile selection
+ -> missing Item/Anime creation
+ -> scan-state update
+ -> entry-added notification
+ -> cache warmup scheduling
+```
+
+## UI projection
+
+The UI projection builds the anime detail-page franchise layout:
+
+- `Series` is fixed and comes only from `snapshot.series_line`.
+- Secondary sections are rule-driven.
+- Classification belongs in rule packs, not in templates.
+- The adapter is a compatibility layer; it should not decide placement.
+
+Current UI pipeline:
+
+```text
+AnimeFranchiseSnapshot
+ -> SeriesBuilder
+ -> UiCandidateAssembler
+ -> RulePipeline
+ -> LayoutCompiler
+ -> ViewModelAdapter
+```
+
+## Import projection
+
+The import projection also uses the snapshot, but it has its own policy:
+
+- `continuity` imports continuity-component entries that pass format/runtime/summary filters.
+- `satellites` imports selected direct spin-off, alternative-version, and side-story entries from canonical seeds.
+- `complete` is the union of continuity and satellites.
+
+Import profiles must not follow UI sections blindly. UI placement is about detail-page readability; import selection is about creating useful library entries without over-importing noise.
+
+## Cache projection
+
+The cache projection stores a complete, user-agnostic payload for detail pages:
+
+- payload is JSON-safe and schema-versioned;
+- no user status/progress, `Item`, `BasicMedia`, user IDs, or rendered HTML;
+- stale payloads can still render while a refresh is queued;
+- canonical aliases let aliasable media IDs resolve to one canonical payload;
+- import-created entries schedule cache warmup after transaction commit.
+
+## Delivery layer
+
+- Celery task `Build MAL anime franchise payload` builds cache payloads.
+- Celery task `Import anime franchise` runs import automation.
+- Beat schedule entry `auto_import_anime_franchise` exists only when import automation is enabled.
+- `views.py` enriches cached payloads with current-user data at render time.
+- `media_details.html` renders prepared context and should not classify entries.
+
+## Settings
+
+Documented settings currently present in `src/config/settings.py`. For setting behavior details, see the dedicated grouping/import/cache docs.
+
+- `ANIME_FRANCHISE_GROUPING_ENABLED`
+- `ANIME_FRANCHISE_CACHE_TTL_DAYS`
+- `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED`
+- `ANIME_FRANCHISE_CACHE_FRESH_DAYS`
+- `ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS`
+- `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS`
+- `ANIME_FRANCHISE_QUEUE_LOCK_MINUTES`
+- `ANIME_FRANCHISE_TASK_LOCK_MINUTES`
+- `ANIME_FRANCHISE_MAX_NODES`
+- `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN`
+- `ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT`
+- `MAL_RATE_LIMIT_PER_MINUTE`
+
+## Related docs
+
+- [Anime franchise snapshot](anime-franchise-snapshot.md)
+- [Anime franchise grouping](anime-franchise-grouping.md)
+- [Anime franchise import](anime-franchise-import.md)
+- [Anime franchise cache](anime-franchise-cache.md)
+
+## Design rules
+
+- Snapshot is the canonical franchise source.
+- UI, import, and cache are separate projections.
+- Rule packs own placement policy.
+- Layout code owns structure and ordering.
+- Adapter/context code owns compatibility and request enrichment.
+- Views should orchestrate cache/context only, not patch placement.
+- Templates render only.
+- Complete franchise cache never stores user-specific data.

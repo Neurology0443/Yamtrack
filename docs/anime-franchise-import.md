@@ -1,143 +1,198 @@
-# Anime Franchise Import
+# Anime franchise import
 
-This document covers profile-based franchise import, incremental scan state, hot-priority behavior, and automation.
+## Product behavior
+
+When a user tracks a MAL anime, this fork can discover missing MAL anime entries from the same franchise and create library entries for them. Imports are profile-based so Yamtrack can expand useful continuity without blindly importing every related MAL entry. Profile decisions are built from the normalized snapshot; see `docs/anime-franchise-snapshot.md` for the shared snapshot model.
+
+## Simple user flow
+
+```text
+User tracks a MAL anime
+      ↓
+Import scan runs
+      ↓
+Missing franchise entries are discovered
+      ↓
+Entries are created as Planning
+      ↓
+Notification is sent when enabled
+      ↓
+Future scans keep monitoring the franchise
+```
+
+The import system is designed to reduce manual searching while keeping automatically added entries easy to review.
+
+## Important: UI grouping is not import selection
+
+UI grouping and import selection are intentionally independent.
+
+An entry can appear in a visible franchise section without being imported automatically. Likewise, import profiles are not required to mirror UI sections.
+
+UI grouping optimizes detail-page readability. Import profiles optimize which missing entries are useful enough to create in a user's library.
 
 ## Import flow
 
 ```text
-mal.py
- -> anime_franchise_graph.py
- -> anime_franchise_snapshot.py
- -> anime_franchise_import_profiles.py
- -> anime_franchise_import.py
- -> anime_import_state.py
- -> Celery task / management command / schedule
+Existing user MAL anime
+ -> due seed selection
+ -> snapshot build (see `docs/anime-franchise-snapshot.md`)
+ -> profile selection
+ -> missing entry creation
+ -> scan-state update
+ -> notifications
+ -> optional cache warmup
 ```
 
-## Core services
+Execution surfaces:
 
-- `anime_franchise_import_profiles.py`: chooses IDs from snapshot per profile.
-- `anime_franchise_import.py`: orchestrates due seed selection, creation, and state updates.
-- `anime_import_state.py`: persists incremental scan schedule and backoff.
+- management command `python manage.py import_anime_franchise`;
+- Celery task `Import anime franchise`;
+- optional Beat schedule entry `auto_import_anime_franchise`.
 
-## Import profiles
+## When to use each profile
 
 ### `continuity`
 
-- Selects continuity component (`prequel/sequel` transitive set).
-- Excludes media types `cm` and `pv`.
-- Excludes targets referenced by `summary` relations.
-- Applies runtime heuristic (`runtime > 15` when runtime exists).
-
-Default profile values:
-
-- `seed_mode`: `all_library`
-- `continuity_mode`: `transitive`
-- `satellites_mode`: `none`
-- `component_root_mode`: `canonical_component_root`
-- `ignored_media_types`: `{"cm", "pv"}`
-- `min_runtime_minutes`: `15`
+- Recommended default profile.
+- Imports main continuity entries.
+- Best balance between usefulness and avoiding noise.
 
 ### `satellites`
 
-- Direct-only satellites from `direct_candidates`.
-- Does **not** consume `promoted_continuity_candidates` (UI-only projection).
-- No additional transitive expansion is applied for satellites selection.
-- Eligible relations: `spin_off`, `alternative_version`, `side_story`.
-- Explicitly excludes `parent_story`.
-- Excludes `cm` and `pv`.
-- Applies runtime/episode heuristics:
-  - `tv_special` requires runtime and must be `> 15`.
-  - non-`tv_special` entries require known runtime.
-  - non-`tv_special` entries reject runtime `< 15`.
-  - non-`tv_special` one-shot entries reject `episode_count == 1` and runtime `<= 30`.
-- Seed mode is `canonical_only` (seed must be known canonical root).
-
-Default profile values:
-
-- `seed_mode`: `canonical_only`
-- `continuity_mode`: `none`
-- `satellites_mode`: `direct_only`
-- `component_root_mode`: `canonical_component_root`
-- `ignored_media_types`: `{"cm", "pv"}`
-- `include_relation_types`: `{"spin_off", "alternative_version", "side_story"}`
-- `min_runtime_minutes`: `15`
+- Adds selected side content around the main continuity.
+- More aggressive than `continuity`.
+- Useful when users want side stories, alternatives, or selected spin-offs.
 
 ### `complete`
 
-- Union of `continuity` and `satellites` selections.
-- Continues to inherit `satellites` direct-only behavior from `direct_candidates` only.
+- Maximum franchise coverage.
+- Combines `continuity` and `satellites`.
+- Useful for users who want the broadest automatic coverage.
 
-Default profile values:
+All automatically imported entries are created with the `Planning` status.
 
-- `seed_mode`: `all_library`
-- `continuity_mode`: `transitive`
-- `satellites_mode`: `direct_only`
-- `component_root_mode`: `canonical_component_root`
+Users remain responsible for moving imported entries to another status when they decide to start watching them.
 
-## Scan state model
+## Profiles
 
-`AnimeImportScanState` persists per `(user, seed_mal_id, profile_key)`:
+### `continuity`
 
-- `next_scan_at`
-- `last_result_fingerprint`
-- `consecutive_stable_scans`
-- `consecutive_error_count`
-- `component_root_mal_id`
-- plus timestamps (`last_scanned_at`, `last_success_at`, `last_error_at`, `last_change_at`).
+- Seed mode: all eligible library MAL anime entries.
+- Continuity mode: transitive continuity component.
+- Selects IDs from `snapshot.continuity_component`.
+- Excludes MAL media types `cm` and `pv`.
+- Excludes entries with runtime `<= 15` minutes when runtime is known.
+- Excludes targets of normalized `summary` relations.
 
-`AnimeImportStateService` handles:
+### `satellites`
 
-- due seed selection (`select_due_seeds`),
-- deterministic fingerprinting,
-- success/error recording with backoff and jitter,
-- `mark_due_now()` for immediate scheduling.
+- Seed mode: canonical roots only, based on known scan-state component root.
+- Satellites mode: direct-only.
+- Included relation types: `spin_off`, `alternative_version`, `side_story`.
+- Excludes MAL media types `cm` and `pv`.
+- `tv_special` requires known runtime greater than 15 minutes.
+- Other targets require known runtime at least 15 minutes.
+- Single-episode entries with runtime `<= 30` minutes are excluded.
 
-### Incremental behavior
+### `complete`
 
-- Changed result fingerprint => short delay (base 6h).
-- Stable fingerprint => increasing delay (base 12h, exponential up to 14 days).
-- Errors => exponential backoff up to 24h base (plus jitter).
+- Union of `continuity` and `satellites`.
+- Fingerprint payload includes both profile selections and the union IDs.
 
-## Hot-priority behavior on save
+## Seed selection
 
-`Anime.save()` marks MAL anime seeds due immediately when:
+`AnimeImportStateService.select_due_seeds()` considers existing `Anime` rows where:
 
-- a MAL anime entry is newly created, **or**
-- status changes to `In progress` or `Completed`.
+- source is MAL;
+- media type is anime;
+- status is `Planning`, `In progress`, or `Completed`.
 
-It calls `AnimeImportStateService.mark_due_now()` for all import profiles.
+Optional filters:
 
-## Entry creation and notifications
+- `--user-id` limits users;
+- `--limit` caps selected due seeds;
+- `--full-rescan` bypasses next-scan due checks.
 
-Import creation path (`anime_franchise_import.py`):
+Canonical-only profiles use known `component_root_mal_id` from previous scan state to avoid scanning satellite profiles from every library entry.
 
-- creates missing MAL anime entries (`Anime` + `Item`),
-- marks `_skip_hot_priority=True` during import-created save to avoid recursive reprioritization,
-- queues `notify_entry_added_after_commit(...)`.
+## Scan state
 
-This keeps import and manual creation aligned with the same notification flow.
+`AnimeImportScanState` is keyed logically by user, seed MAL ID, and profile. It stores:
 
-## Execution surfaces
+- last result fingerprint;
+- last scanned/success/error timestamps;
+- consecutive stable scan count;
+- consecutive error count;
+- next scan timestamp;
+- canonical component root;
+- last component size.
 
-### Celery task
+Success behavior:
 
-- `app/tasks.py` task `import_anime_franchise`.
-- Uses cache lock key `anime-franchise-import:{profile}`.
-- Skips run when another run for same profile is active.
+- changed fingerprint: reset stable scans and scan again sooner;
+- unchanged fingerprint: increment stable scans and increase delay;
+- stable delays include deterministic jitter and cap at a long interval.
 
-### Django command
+Error behavior:
 
-- `python manage.py import_anime_franchise --profile ...`
-- Supports `--dry-run`, `--full-rescan`, `--limit`, `--refresh-cache`, `--user-id`.
+- increment error count;
+- exponential backoff up to 24 hours;
+- deterministic jitter to avoid synchronized retries.
 
-### Scheduler and settings
+## Entry creation
 
-- `app/schedules.py` builds optional beat entry.
-- `config/settings.py` controls:
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED`
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES`
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE`
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE`
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN`
-  - `ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT`
+For each selected missing MAL ID:
+
+- fetch minimal MAL anime metadata;
+- create or reuse the shared `Item` row;
+- create an `Anime` row for the user;
+- default status is `Planning`;
+- `_skip_hot_priority` is set to avoid recursive hot-priority import triggers from the importer-created row.
+
+Creation happens in a transaction. A dry run counts planned creations without writing entries or scan-state successes.
+
+## Notifications
+
+Created entries call the existing entry-added notification hook after transaction commit. Notification delivery still follows the existing events/notification subsystem behavior and user configuration.
+
+## Cache warmup after import
+
+```text
+Import creates entries
+ -> transaction commit
+ -> cache warm task scheduled
+ -> detail page can later use prebuilt franchise payload
+```
+
+The importer schedules one forced cache warm build per component root per run. Warmup bypasses freshness checks because the user's library changed, but still uses queue locks to avoid duplicate enqueues.
+
+## Commands
+
+The checked-in Compose services are `yamtrack` and `redis`.
+
+```bash
+docker compose exec yamtrack python manage.py import_anime_franchise --profile continuity --dry-run
+docker compose exec yamtrack python manage.py import_anime_franchise --profile continuity
+docker compose exec yamtrack python manage.py import_anime_franchise --profile satellites --limit 10
+docker compose exec yamtrack python manage.py import_anime_franchise --profile complete --full-rescan --refresh-cache
+docker compose exec yamtrack python manage.py import_anime_franchise --profile continuity --user-id 1
+```
+
+## Settings
+
+| Setting | Purpose |
+| --- | --- |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED` | Enables or disables scheduled franchise import automation. |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES` | Beat interval between automatic import runs. |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE` | Profile used by the scheduled import task, such as `continuity`, `satellites`, or `complete`. |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE` | Tells scheduled imports whether MAL/provider cache should be refreshed during import. |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN` | Forces scheduled imports to ignore due times and rescan eligible seeds. |
+| `ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT` | Maximum number of due seeds processed per scheduled run when configured. |
+| `MAL_RATE_LIMIT_PER_MINUTE` | Controls MAL provider request rate to avoid hitting API limits. |
+
+## Failure behavior
+
+- The Celery import task uses lock key `anime-franchise-import:<profile>` and skips if the same profile is already running.
+- Per-seed errors are counted and recorded in scan state when not dry-running.
+- A failed seed does not abort the whole import run.
+- Cache warmup scheduling errors are counted separately from entry creation errors.
