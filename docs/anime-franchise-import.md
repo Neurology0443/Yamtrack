@@ -62,6 +62,7 @@ Execution surfaces:
 - Adds selected side content around the main continuity.
 - More aggressive than `continuity`.
 - Useful when users want side stories, alternatives, or selected spin-offs.
+- Short single-episode satellites are allowed only when their local prequel/sequel branch has known runtimes of at least 15 minutes.
 
 ### `complete`
 
