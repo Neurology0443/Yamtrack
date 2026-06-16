@@ -34,13 +34,12 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
 ### ⚡ Faster franchise pages
 
 - Franchise pages stay responsive, even for large franchises.
+- Moving between main-story entries remains fast and seamless.
 - Franchise data is cached and refreshed in the background when needed.
-  - Previously prepared franchise data can be reused instead of rebuilt every time.
-  - Related entries from the same franchise can reuse prepared franchise data when appropriate.
 
 ### 📥 Automatic franchise imports
 
-- Regularly keeps an eye on the franchises in your library.
+- Automatically monitors the franchises in your library.
   - Detects newly available franchise entries.
   - Missing franchise entries can be imported automatically.
   - New entries are added with the `Planning` status for easy review.
@@ -52,7 +51,7 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   - Continuity
   - Satellites
   - Complete
-- Configure scan frequency.
+- Configure how often franchise imports should run.
 
 ### 🔔 Import notifications
 
