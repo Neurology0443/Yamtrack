@@ -106,8 +106,13 @@ class SatellitesImportProfile(BaseImportProfile):
     )
     min_runtime_minutes = 15
     single_episode_max_runtime_minutes = 30
+    local_continuity_relation_types = frozenset({"prequel", "sequel"})
 
-    def is_runtime_episode_eligible(self, target_node: AnimeNode) -> bool:
+    def is_runtime_episode_eligible(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        target_node: AnimeNode,
+    ) -> bool:
         runtime_minutes = target_node.runtime_minutes
 
         if target_node.media_type == "tv_special":
@@ -117,14 +122,79 @@ class SatellitesImportProfile(BaseImportProfile):
 
         if runtime_minutes is None:
             return False
+
         if runtime_minutes < self.min_runtime_minutes:
             return False
-        if (
-            target_node.episode_count == 1
-            and runtime_minutes <= self.single_episode_max_runtime_minutes
-        ):
-            return False
+
+        if self.is_short_single_episode(target_node):
+            return self.is_clean_local_continuity_branch(snapshot, target_node)
+
         return True
+
+    def is_short_single_episode(self, target_node: AnimeNode) -> bool:
+        return (
+            target_node.episode_count == 1
+            and target_node.runtime_minutes is not None
+            and target_node.runtime_minutes <= self.single_episode_max_runtime_minutes
+        )
+
+    def is_clean_local_continuity_branch(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        target_node: AnimeNode,
+    ) -> bool:
+        component, is_complete = self.local_continuity_component(
+            snapshot,
+            target_node.media_id,
+        )
+
+        if not is_complete:
+            return False
+
+        for node in component:
+            if node.runtime_minutes is None:
+                return False
+            if node.runtime_minutes < self.min_runtime_minutes:
+                return False
+        return True
+
+    def local_continuity_component(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        root_media_id: str,
+    ) -> tuple[list[AnimeNode], bool]:
+        queue = [str(root_media_id)]
+        seen = set()
+        component = []
+        is_complete = True
+
+        while queue:
+            media_id = queue.pop(0)
+            if media_id in seen:
+                continue
+
+            seen.add(media_id)
+
+            node = snapshot.nodes_by_media_id.get(media_id)
+            if node is None:
+                is_complete = False
+                continue
+
+            component.append(node)
+
+            for relation in snapshot.all_normalized_relations:
+                if relation.relation_type not in self.local_continuity_relation_types:
+                    continue
+
+                if relation.source_media_id == media_id:
+                    if relation.target_media_id not in seen:
+                        queue.append(relation.target_media_id)
+
+                elif relation.target_media_id == media_id:
+                    if relation.source_media_id not in seen:
+                        queue.append(relation.source_media_id)
+
+        return component, is_complete
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
@@ -143,7 +213,7 @@ class SatellitesImportProfile(BaseImportProfile):
                 continue
             if relation.target_media_id in continuity_ids:
                 continue
-            if not self.is_runtime_episode_eligible(target_node):
+            if not self.is_runtime_episode_eligible(snapshot, target_node):
                 continue
             selected.append(relation)
 
