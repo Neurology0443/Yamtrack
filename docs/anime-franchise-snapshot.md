@@ -144,6 +144,8 @@ Used by candidate assembly and UI rules to switch no-series behavior on or off. 
 - Import profiles read the snapshot directly.
 - `continuity` uses the continuity component with import-specific exclusions.
 - `satellites` uses direct candidates and profile-specific relation/runtime rules.
+- `satellites` may inspect local `prequel`/`sequel` relations already present in the snapshot when validating short single-episode candidates.
+- This inspection is import selection policy only; the snapshot still owns franchise facts, not import decisions.
 - `complete` combines continuity and satellites.
 
 Import selection must not blindly follow UI sections. UI grouping and import selection are separate projections.

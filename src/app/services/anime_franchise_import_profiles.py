@@ -143,7 +143,15 @@ class SatellitesImportProfile(BaseImportProfile):
         snapshot: AnimeFranchiseSnapshot,
         target_node: AnimeNode,
     ) -> bool:
-        for node in self.local_continuity_component(snapshot, target_node.media_id):
+        component, is_complete = self.local_continuity_component(
+            snapshot,
+            target_node.media_id,
+        )
+
+        if not is_complete:
+            return False
+
+        for node in component:
             if node.runtime_minutes is None:
                 return False
             if node.runtime_minutes < self.min_runtime_minutes:
@@ -154,10 +162,11 @@ class SatellitesImportProfile(BaseImportProfile):
         self,
         snapshot: AnimeFranchiseSnapshot,
         root_media_id: str,
-    ) -> list[AnimeNode]:
+    ) -> tuple[list[AnimeNode], bool]:
         queue = [str(root_media_id)]
         seen = set()
         component = []
+        is_complete = True
 
         while queue:
             media_id = queue.pop(0)
@@ -168,6 +177,7 @@ class SatellitesImportProfile(BaseImportProfile):
 
             node = snapshot.nodes_by_media_id.get(media_id)
             if node is None:
+                is_complete = False
                 continue
 
             component.append(node)
@@ -184,7 +194,7 @@ class SatellitesImportProfile(BaseImportProfile):
                     if relation.source_media_id not in seen:
                         queue.append(relation.source_media_id)
 
-        return component
+        return component, is_complete
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity_ids = {
