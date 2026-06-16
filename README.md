@@ -33,9 +33,10 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
 
 ### ⚡ Faster franchise pages
 
+- Franchise data is cached and refreshed in the background when needed.
 - Franchise pages stay responsive, even for large franchises.
 - Moving between main-story entries remains fast and seamless.
-- Franchise data is cached and refreshed in the background when needed.
+
 
 ### 📥 Automatic franchise imports
 
