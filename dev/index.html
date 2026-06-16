@@ -436,13 +436,74 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#this-fork" class="md-nav__link">
+  <a href="#fork-additions" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        🔀 This fork
+        ✨ Fork additions
       </span>
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="✨ Fork additions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#better-franchise-pages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        📚 Better franchise pages
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#faster-franchise-pages" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚡ Faster franchise pages
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-franchise-imports" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        📥 Automatic franchise imports
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flexible-import-automation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚙️ Flexible import automation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#import-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🔔 Import notifications
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -570,6 +631,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fork-docs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Fork docs
+      </span>
+    </span>
+  </a>
   
 </li>
       
@@ -775,23 +847,125 @@
 <img alt="Codecov" src="https://codecov.io/github/FuzzyGrim/Yamtrack/branch/dev/graph/badge.svg?token=PWUG660120" />
 <img alt="GitHub" src="https://img.shields.io/badge/license-AGPL--3.0-blue" /></p>
 <p>Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.</p>
-<h2 id="this-fork">🔀 This fork<a class="headerlink" href="#this-fork" title="Permanent link">&para;</a></h2>
-<p>Compared to upstream Yamtrack, this fork adds MAL anime franchise grouping/import automation, incremental scan-state scheduling, and entry-added notifications.</p>
-<p>For MAL anime details pages, the current grouping product behavior is:</p>
+<h2 id="fork-additions">✨ Fork additions<a class="headerlink" href="#fork-additions" title="Permanent link">&para;</a></h2>
+<p>This fork extends Yamtrack with additional features focused on MyAnimeList (MAL) anime franchises.</p>
+<h3 id="better-franchise-pages">📚 Better franchise pages<a class="headerlink" href="#better-franchise-pages" title="Permanent link">&para;</a></h3>
 <ul>
-<li>a fixed <strong>Series</strong> block built from franchise continuity TV line data,</li>
-<li>plus dynamic secondary sections (<code>Main Story Extras</code>, <code>Specials</code>, <code>Related Series</code>) assigned by ordered rule packs.</li>
+<li>Organizes anime franchises into dedicated sections when relevant:</li>
+<li>Series</li>
+<li>Main Story Extras</li>
+<li>Specials</li>
+<li>Related Series</li>
+<li>Alternatives</li>
+<li>Spin-offs</li>
+<li>Makes large franchises easier to understand and navigate.</li>
+<li>Reduces clutter from flat related-anime lists.</li>
+<li>Highlights important franchise entries with badges and contextual information:</li>
+<li>relation type</li>
+<li>anime format</li>
+<li>current entry indicator</li>
+<li>Helps explain why an anime appears in a section.</li>
 </ul>
-<p>This keeps the page behavior stable for continuity while allowing section placement policy to evolve without changing templates.</p>
-<p>Detailed docs are in <code>docs/</code>:</p>
+<h3 id="faster-franchise-pages">⚡ Faster franchise pages<a class="headerlink" href="#faster-franchise-pages" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Franchise data is cached and refreshed in the background when needed.</li>
+<li>Franchise pages stay responsive, even for large franchises.</li>
+<li>Moving between main-story entries remains fast and seamless.</li>
+</ul>
+<h3 id="automatic-franchise-imports">📥 Automatic franchise imports<a class="headerlink" href="#automatic-franchise-imports" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Automatically monitors the franchises in your library.</li>
+<li>Detects newly available franchise entries.</li>
+<li>Missing franchise entries can be imported automatically.</li>
+<li>New entries are added with the <code>Planning</code> status for easy review.</li>
+<li>Helps keep franchise collections complete without manually checking MAL.</li>
+</ul>
+<h3 id="flexible-import-automation">⚙️ Flexible import automation<a class="headerlink" href="#flexible-import-automation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Choose how franchise imports should behave:</li>
+<li>Continuity</li>
+<li>Satellites</li>
+<li>Complete</li>
+<li>Configure how often franchise imports should run.</li>
+</ul>
+<h3 id="import-notifications">🔔 Import notifications<a class="headerlink" href="#import-notifications" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Receive notifications when franchise imports add new entries.</li>
+<li>Makes automatic additions easy to spot and review.</li>
+<li>Helps you keep track of changes made to your library.</li>
+</ul>
+<p>Detailed fork docs are available in <code>docs/</code>:</p>
 <ul>
 <li><a href="docs/architecture-overview/">Architecture overview</a></li>
+<li><a href="docs/anime-franchise-snapshot/">Anime franchise snapshot</a></li>
 <li><a href="docs/anime-franchise-grouping/">Anime franchise grouping</a></li>
 <li><a href="docs/anime-franchise-import/">Anime franchise import</a></li>
+<li><a href="docs/anime-franchise-cache/">Anime franchise cache</a></li>
 <li><a href="docs/anime-franchise-customization/">Anime franchise customization</a></li>
-<li><a href="docs/anime-franchise-debugging/">Anime franchise debugging runbook</a></li>
-<li><a href="docs/testing-runbook/">Testing runbook</a></li>
+<li><a href="docs/anime-franchise-debugging-runbook/">Anime franchise debugging runbook</a></li>
+<li><a href="docs/docker-testing-runbook/">Docker testing runbook</a></li>
+<li><a href="docs/operational-commands/">Operational commands</a></li>
 </ul>
+<table>
+<tr>
+<td align="center" width="33%">
+<a href="docs/assets/konosuba-franchise-grouping-full.png">
+<img src="docs/assets/konosuba-franchise-grouping-thumb.png" width="260">
+</a>
+<br>
+<b> Konosuba Franchise Grouping</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/overlord-franchise-grouping-full.png">
+<img src="docs/assets/overlord-franchise-grouping-thumb.png" width="260">
+</a>
+<br>
+<b> Overlord Franchise Grouping</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/sao-franchise-grouping-full.png">
+<img src="docs/assets/sao-franchise-grouping-thumb.png" width="260">
+</a>
+<br>
+<b>SAO Franchise Grouping</b>
+<br>
+</td>
+</tr>
+
+<tr>
+<td align="center" width="33%">
+<a href="docs/assets/kimetsu-no-yaiba-grouping-full.png">
+<img src="docs/assets/kimetsu-no-yaiba-grouping-thumb.png" width="260">
+</a>
+<br>
+<b>Demon Slayer Franchise Grouping</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/overlord-related-series-grouping-full.png">
+<img src="docs/assets/overlord-related-series-grouping-thumb.png" width="260">
+</a>
+<br>
+<b>Overlord Related Serie Grouping</b>
+<br>
+</td>
+
+<td align="center" width="33%">
+<a href="docs/assets/sao-alternative-grouping-full.png">
+<img src="docs/assets/sao-alternative-grouping-thumb.png" width="260">
+</a>
+<br>
+<b>SAO Alternative Serie Grouping</b>
+<br>
+</td>
+</tr>
+</table>
+
 <h2 id="demo">🚀 Demo<a class="headerlink" href="#demo" title="Permanent link">&para;</a></h2>
 <p>You can try the app at <a href="https://yamtrack.fuzzygrim.com">yamtrack.fuzzygrim.com</a> using the username <code>demo</code> and password <code>demo</code>.</p>
 <h2 id="features">✨ Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
@@ -916,6 +1090,18 @@
 <h3 id="donate">☕ Donate<a class="headerlink" href="#donate" title="Permanent link">&para;</a></h3>
 <p>If you'd like to support the project financially:</p>
 <p><a href="https://ko-fi.com/fuzzygrim"><img alt="ko-fi" src="https://ko-fi.com/img/githubbutton_sm.svg" /></a></p>
+<h2 id="fork-docs">Fork docs<a class="headerlink" href="#fork-docs" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="architecture-overview/">Architecture overview</a></li>
+<li><a href="anime-franchise-grouping/">Anime franchise grouping</a></li>
+<li><a href="anime-franchise-snapshot/">Anime franchise snapshot</a></li>
+<li><a href="anime-franchise-import/">Anime franchise import</a></li>
+<li><a href="anime-franchise-cache/">Anime franchise cache</a></li>
+<li><a href="anime-franchise-customization/">Anime franchise customization</a></li>
+<li><a href="anime-franchise-debugging-runbook/">Anime franchise debugging runbook</a></li>
+<li><a href="docker-testing-runbook/">Docker testing runbook</a></li>
+<li><a href="operational-commands/">Operational commands</a></li>
+</ul>
 
 
 

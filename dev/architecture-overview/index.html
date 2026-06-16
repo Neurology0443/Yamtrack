@@ -25,7 +25,7 @@
     
     
       
-        <title>Architecture Overview - Yamtrack Documentation</title>
+        <title>Architecture overview - Yamtrack Documentation</title>
       
     
     
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Architecture Overview
+              Architecture overview
             
           </span>
         </div>
@@ -579,147 +579,175 @@
   
 
 
-<h1 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
-<p>This fork uses a <strong>snapshot-first architecture</strong> for MAL anime franchise behavior.</p>
-<p>The snapshot is canonical. UI grouping and import are separate projections on top of that same snapshot.</p>
+<h1 id="architecture-overview">Architecture overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
 <h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
+<p>This fork is scoped to MAL anime franchise handling:</p>
 <ul>
-<li>Applies only to MAL anime franchise behavior (<code>source=mal</code>, <code>media_type=anime</code>).</li>
-<li>UI grouping and import each have their own projection path.</li>
-<li>This document describes the <strong>currently active path</strong> in app runtime.</li>
+<li>MAL anime only.</li>
+<li>Anime detail pages for grouping and display.</li>
+<li>Import automation only for existing user library entries whose source is MAL anime.</li>
+<li>Non-MAL anime providers and other media types keep upstream Yamtrack behavior.</li>
 </ul>
-<h2 id="stable-vocabulary-used-in-docs">Stable vocabulary used in docs<a class="headerlink" href="#stable-vocabulary-used-in-docs" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Principal / active path</strong>: code executed by current UI grouping flow.</li>
-<li><strong>Structural-only</strong>: assembly/ordering utilities that do not make business placement decisions.</li>
-<li><strong>Compatibility layer</strong>: shape translation for integration with existing view/template contracts.</li>
-<li><strong>Integration + presentation enrichment</strong>: view-level assembly and display metadata work.</li>
-<li><strong>Transitional / legacy</strong>: historical behavior still present in repository but not the main grouping engine.</li>
-</ul>
-<h2 id="layer-map">Layer map<a class="headerlink" href="#layer-map" title="Permanent link">&para;</a></h2>
-<h2 id="1-provider-graph-discovery-principal">1) Provider + graph discovery (principal)<a class="headerlink" href="#1-provider-graph-discovery-principal" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>src/app/providers/mal.py</code></li>
-<li><code>src/app/services/anime_franchise_graph.py</code></li>
-</ul>
-<p>Responsibilities:</p>
-<ul>
-<li>fetch MAL data,</li>
-<li>normalize relation signals,</li>
-<li>build franchise graph inputs for snapshot construction.</li>
-</ul>
-<h2 id="2-canonical-franchise-snapshot-principal">2) Canonical franchise snapshot (principal)<a class="headerlink" href="#2-canonical-franchise-snapshot-principal" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>src/app/services/anime_franchise_snapshot.py</code></li>
-</ul>
-<p><code>AnimeFranchiseSnapshot</code> is the canonical domain object used by both projections. Current fields used by UI/import logic include:</p>
-<ul>
-<li><code>continuity_component</code></li>
-<li><code>series_line</code></li>
-<li><code>direct_anchors</code></li>
-<li><code>direct_candidates</code></li>
-<li><code>promoted_continuity_candidates</code> (UI-only promoted transitive non-TV continuity projection)</li>
-<li><code>canonical_root_media_id</code></li>
-<li><code>fallback_anchor_media_id</code></li>
-<li><code>has_series_line</code></li>
-</ul>
-<h2 id="3-ui-projection-principal">3) UI projection (principal)<a class="headerlink" href="#3-ui-projection-principal" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Facade: <code>src/app/services/anime_franchise.py</code> (<code>AnimeFranchiseService</code>)</li>
-<li>Pipeline: <code>src/app/services/anime_franchise_ui/__init__.py</code> (<code>AnimeFranchiseUiPipeline</code>)</li>
-<li>Fixed series builder: <code>src/app/services/anime_franchise_ui/series.py</code> (<code>SeriesBuilder</code>)</li>
-<li>Candidate assembly: <code>src/app/services/anime_franchise_ui/assembler.py</code> (<code>UiCandidateAssembler</code>)</li>
-<li>Rule engine: <code>src/app/services/anime_franchise_ui/engine.py</code> (<code>RulePipeline</code>)</li>
-<li>Rule packs: <code>src/app/services/anime_franchise_ui/rules/*.py</code></li>
-<li>Section compilation: <code>src/app/services/anime_franchise_ui/layout.py</code> (<code>LayoutCompiler</code>, structural-only)</li>
-<li>Payload adaptation: <code>src/app/services/anime_franchise_ui/adapter.py</code> (<code>ViewModelAdapter</code>, compatibility layer)</li>
-</ul>
-<p>Current active preset order (from <code>anime_franchise_ui/presets/default.py</code>):</p>
-<ol>
-<li><code>base_facts</code></li>
-<li><code>base_placement</code></li>
-<li><code>relation_rules</code></li>
-<li><code>secondary_refinement_rules</code></li>
-<li><code>anchor_rules</code></li>
-<li><code>format_rules</code></li>
-<li><code>section_rules</code></li>
-</ol>
-<p>Notes on the added refinement phase:</p>
-<ul>
-<li><code>relation_rules</code> performs coarse section classification first.</li>
-<li><code>secondary_refinement_rules</code> then refines coarse secondary placement:</li>
-<li>TV <code>side_story</code> entries are reclassified from <code>specials</code> to <code>related_series</code>,</li>
-<li>very short <code>side_story</code> entries (known runtime &lt; 15) are reclassified from <code>specials</code> to <code>related_series</code>,</li>
-<li><code>alternative_version</code> / <code>alternative_setting</code> move to <code>alternatives</code>,</li>
-<li>TV spin-offs move from <code>related_series</code> to <code>spin_offs</code>.</li>
-<li>Section order is intentionally <code>spin_offs</code>, then <code>alternatives</code>, then residual <code>related_series</code>.</li>
-<li><code>alternatives</code> ordering is rule-driven with candidate metadata (<code>section_sort_rank</code>), and layout applies only a generic structural sort when that metadata exists.</li>
-<li><code>related_series</code> remains the residual fallback for related entries that do not match refinement rules.</li>
-</ul>
-<h2 id="4-import-projection-principal-separate-from-ui-projection">4) Import projection (principal, separate from UI projection)<a class="headerlink" href="#4-import-projection-principal-separate-from-ui-projection" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>src/app/services/anime_franchise_import_profiles.py</code></li>
-<li><code>src/app/services/anime_franchise_import.py</code></li>
-<li><code>src/app/services/anime_import_state.py</code></li>
-</ul>
-<p>Responsibilities:</p>
-<ul>
-<li>import profile behavior,</li>
-<li>profile-driven selection logic,</li>
-<li>incremental scan-state/backoff.</li>
-</ul>
-<p>This reuses the snapshot model but is not part of the UI rendering path.</p>
-<h2 id="5-app-delivery-integration">5) App delivery / integration<a class="headerlink" href="#5-app-delivery-integration" title="Permanent link">&para;</a></h2>
-<h3 id="ui-integration-presentation-enrichment">UI integration + presentation enrichment<a class="headerlink" href="#ui-integration-presentation-enrichment" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/views.py</code> (<code>media_details</code>)</li>
-<li><code>src/app/anime_franchise_footer.py</code></li>
-<li><code>src/templates/app/media_details.html</code></li>
-</ul>
-<p>Current integration behavior:</p>
-<ul>
-<li>calls <code>AnimeFranchiseService</code> to get pipeline payload,</li>
-<li>rebuilds page context into the <code>anime_franchise</code> block expected by template,</li>
-<li>adds <code>series_label</code> to series entries,</li>
-<li>enriches section entries for footer labels/badges,</li>
-<li>passes prepared context to template rendering.</li>
-</ul>
-<p>Template role is presentation (looping/display), not placement business logic.</p>
-<h3 id="import-automation-scheduling-notifications">Import automation / scheduling / notifications<a class="headerlink" href="#import-automation-scheduling-notifications" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/tasks.py</code></li>
-<li><code>src/app/schedules.py</code></li>
-<li><code>src/config/settings.py</code></li>
-<li><code>src/events/notifications.py</code></li>
-<li><code>src/events/tasks.py</code></li>
-</ul>
-<h2 id="ui-flow-active-path">UI flow (active path)<a class="headerlink" href="#ui-flow-active-path" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>app/providers/mal.py
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>   -&gt; app/services/anime_franchise_graph.py
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>   -&gt; app/services/anime_franchise_snapshot.py
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   -&gt; app/services/anime_franchise.py (AnimeFranchiseService)
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   -&gt; app/services/anime_franchise_ui/__init__.py (AnimeFranchiseUiPipeline)
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>      -&gt; SeriesBuilder (fixed Series from snapshot.series_line)
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>      -&gt; UiCandidateAssembler
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>      -&gt; RulePipeline (ordered packs with overrides)
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>      -&gt; LayoutCompiler (structural-only)
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      -&gt; ViewModelAdapter (compatibility shape)
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>   -&gt; app/views.py (integration + presentation enrichment)
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>   -&gt; app/anime_franchise_footer.py
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>   -&gt; templates/app/media_details.html
+<p>The goal is to keep the user-facing page stable while letting provider fetching, graph normalization, UI placement, import selection, and cache delivery evolve independently.</p>
+<h2 id="high-level-model">High-level model<a class="headerlink" href="#high-level-model" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>MAL Provider
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ↓
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Franchise Graph
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ↓
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Franchise Snapshot
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── UI Projection
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── Import Projection
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└── Cache Projection
 </span></code></pre></div>
-<h2 id="import-flow-separate-projection">Import flow (separate projection)<a class="headerlink" href="#import-flow-separate-projection" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>app/providers/mal.py
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>   -&gt; app/services/anime_franchise_graph.py
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>   -&gt; app/services/anime_franchise_snapshot.py
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>   -&gt; app/services/anime_franchise_import_profiles.py
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>   -&gt; app/services/anime_franchise_import.py
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>   -&gt; app/services/anime_import_state.py
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>   -&gt; app/tasks.py / management command / schedules+settings
+<p>The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.</p>
+<h2 id="mental-model">Mental model<a class="headerlink" href="#mental-model" title="Permanent link">&para;</a></h2>
+<p>Think of the franchise snapshot as the single source of franchise truth.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Snapshot
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    ↓
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>├── UI grouping
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── Import selection
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>└── Cache payload
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    ↓
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Rendering
 </span></code></pre></div>
-<h2 id="legacy-note">Legacy note<a class="headerlink" href="#legacy-note" title="Permanent link">&para;</a></h2>
-<p>Some older UI grouping concepts may still exist historically in the repository or tests, but they are not the principal runtime path for MAL anime franchise UI grouping.</p>
-<p>When updating behavior, treat the <code>AnimeFranchiseService -&gt; AnimeFranchiseUiPipeline</code> path as the source of truth.</p>
+<p>The snapshot describes what a franchise is. UI grouping, import selection, and cache delivery are independent consumers of that same snapshot.</p>
+<p>This separation allows page layout, import automation, and cache delivery to evolve without changing franchise semantics.</p>
+<h2 id="what-this-fork-changes-compared-to-upstream">What this fork changes compared to upstream<a class="headerlink" href="#what-this-fork-changes-compared-to-upstream" title="Permanent link">&para;</a></h2>
+<p>Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on top of the existing tracker:</p>
+<ul>
+<li>clearer MAL anime franchise pages;</li>
+<li>automatic grouping of related MAL anime entries;</li>
+<li>optional automatic import of useful missing franchise entries;</li>
+<li>persistent scan scheduling for franchise imports;</li>
+<li>complete franchise cache payloads for responsive detail pages;</li>
+<li>cache warmup after import-created entries;</li>
+<li>entry-added notifications for automatically imported anime;</li>
+<li>configurable MAL provider rate limiting.</li>
+</ul>
+<p>These additions are scoped to MAL anime franchise behavior. Existing Yamtrack features for other media types and providers remain upstream-compatible.</p>
+<h2 id="core-concepts">Core concepts<a class="headerlink" href="#core-concepts" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Franchise graph</strong>: hydrated MAL anime nodes plus normalized relation edges. Built by <code>AnimeFranchiseGraphBuilder</code> from MAL metadata and direct neighbors.</li>
+<li><strong>Franchise snapshot</strong>: normalized, deterministic representation around one seed. Built by <code>AnimeFranchiseSnapshotService</code>.</li>
+<li><code>continuity_component</code>: nodes reached by the graph builder for the franchise continuity component.</li>
+<li><code>series_line</code>: ordered TV-only continuity line derived from prequel/sequel direction and dates. This feeds the fixed UI <code>Series</code> block.</li>
+<li><code>direct_anchors</code>: nodes used for direct secondary candidate discovery. Usually the full TV series line; for a non-TV root it can include the root too.</li>
+<li><code>direct_candidates</code>: direct relations from anchors after excluding entries already in the TV series line.</li>
+<li><code>promoted_continuity_candidates</code>: non-TV prequel/sequel chains promoted from the series line so transitive OVAs/movies can still be considered as main-story extras.</li>
+<li><code>no_series_line_secondary_candidates</code>: secondary candidates used when the snapshot has no TV series line.</li>
+<li><code>root_story_parent_candidates</code>: direct <code>full_story</code> links from a non-TV root to a TV parent.</li>
+<li><code>canonical_root_media_id</code>: stable root used for scan state and canonical cache payloads. It is the first series-line item when available, otherwise the earliest continuity node.</li>
+<li><code>fallback_anchor_media_id</code>: root media ID used for anchoring no-series-line layouts.</li>
+<li><code>has_series_line</code>: boolean guard for UI and candidate assembly when no TV line exists.</li>
+</ul>
+<h2 id="main-runtime-flows">Main runtime flows<a class="headerlink" href="#main-runtime-flows" title="Permanent link">&para;</a></h2>
+<h3 id="detail-page">Detail page<a class="headerlink" href="#detail-page" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>media_details view
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> -&gt; load complete franchise cache / alias
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> -&gt; prepare request-specific context if payload is valid
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a> -&gt; render media_details.html
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a> -&gt; schedule background build on miss/stale/invalid when allowed
+</span></code></pre></div>
+<p>The view does not synchronously build a large franchise on a cache miss. It keeps the standard related-anime fallback for that request and asks Celery to build the full payload.</p>
+<h3 id="background-cache-build">Background cache build<a class="headerlink" href="#background-cache-build" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build MAL anime franchise payload task
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a> -&gt; graph build
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a> -&gt; snapshot build
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; UI projection
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a> -&gt; serialize user-agnostic payload
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a> -&gt; save canonical payload, metadata, and safe aliases
+</span></code></pre></div>
+<h3 id="import-automation">Import automation<a class="headerlink" href="#import-automation" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Existing user MAL anime
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a> -&gt; due seed selection
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a> -&gt; snapshot build
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a> -&gt; profile selection
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a> -&gt; missing Item/Anime creation
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a> -&gt; scan-state update
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a> -&gt; entry-added notification
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a> -&gt; cache warmup scheduling
+</span></code></pre></div>
+<h2 id="ui-projection">UI projection<a class="headerlink" href="#ui-projection" title="Permanent link">&para;</a></h2>
+<p>The UI projection builds the anime detail-page franchise layout:</p>
+<ul>
+<li><code>Series</code> is fixed and comes only from <code>snapshot.series_line</code>.</li>
+<li>Secondary sections are rule-driven.</li>
+<li>Classification belongs in rule packs, not in templates.</li>
+<li>The adapter is a compatibility layer; it should not decide placement.</li>
+</ul>
+<p>Current UI pipeline:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>AnimeFranchiseSnapshot
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a> -&gt; SeriesBuilder
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a> -&gt; UiCandidateAssembler
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a> -&gt; RulePipeline
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a> -&gt; LayoutCompiler
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a> -&gt; ViewModelAdapter
+</span></code></pre></div>
+<h2 id="import-projection">Import projection<a class="headerlink" href="#import-projection" title="Permanent link">&para;</a></h2>
+<p>The import projection also uses the snapshot, but it has its own policy:</p>
+<ul>
+<li><code>continuity</code> imports continuity-component entries that pass format/runtime/summary filters.</li>
+<li><code>satellites</code> imports selected direct spin-off, alternative-version, and side-story entries from canonical seeds.</li>
+<li><code>complete</code> is the union of continuity and satellites.</li>
+</ul>
+<p>Import profiles must not follow UI sections blindly. UI placement is about detail-page readability; import selection is about creating useful library entries without over-importing noise.</p>
+<h2 id="cache-projection">Cache projection<a class="headerlink" href="#cache-projection" title="Permanent link">&para;</a></h2>
+<p>The cache projection stores a complete, user-agnostic payload for detail pages:</p>
+<ul>
+<li>payload is JSON-safe and schema-versioned;</li>
+<li>no user status/progress, <code>Item</code>, <code>BasicMedia</code>, user IDs, or rendered HTML;</li>
+<li>stale payloads can still render while a refresh is queued;</li>
+<li>canonical aliases let aliasable media IDs resolve to one canonical payload;</li>
+<li>import-created entries schedule cache warmup after transaction commit.</li>
+</ul>
+<h2 id="delivery-layer">Delivery layer<a class="headerlink" href="#delivery-layer" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Celery task <code>Build MAL anime franchise payload</code> builds cache payloads.</li>
+<li>Celery task <code>Import anime franchise</code> runs import automation.</li>
+<li>Beat schedule entry <code>auto_import_anime_franchise</code> exists only when import automation is enabled.</li>
+<li><code>views.py</code> enriches cached payloads with current-user data at render time.</li>
+<li><code>media_details.html</code> renders prepared context and should not classify entries.</li>
+</ul>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<p>Documented settings currently present in <code>src/config/settings.py</code>. For setting behavior details, see the dedicated grouping/import/cache docs.</p>
+<ul>
+<li><code>ANIME_FRANCHISE_GROUPING_ENABLED</code></li>
+<li><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code></li>
+<li><code>ANIME_FRANCHISE_CACHE_ALIASES_ENABLED</code></li>
+<li><code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code></li>
+<li><code>ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS</code></li>
+<li><code>ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS</code></li>
+<li><code>ANIME_FRANCHISE_QUEUE_LOCK_MINUTES</code></li>
+<li><code>ANIME_FRANCHISE_TASK_LOCK_MINUTES</code></li>
+<li><code>ANIME_FRANCHISE_MAX_NODES</code></li>
+<li><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></li>
+<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></li>
+<li><code>MAL_RATE_LIMIT_PER_MINUTE</code></li>
+</ul>
+<h2 id="related-docs">Related docs<a class="headerlink" href="#related-docs" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../anime-franchise-snapshot/">Anime franchise snapshot</a></li>
+<li><a href="../anime-franchise-grouping/">Anime franchise grouping</a></li>
+<li><a href="../anime-franchise-import/">Anime franchise import</a></li>
+<li><a href="../anime-franchise-cache/">Anime franchise cache</a></li>
+</ul>
+<h2 id="design-rules">Design rules<a class="headerlink" href="#design-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Snapshot is the canonical franchise source.</li>
+<li>UI, import, and cache are separate projections.</li>
+<li>Rule packs own placement policy.</li>
+<li>Layout code owns structure and ordering.</li>
+<li>Adapter/context code owns compatibility and request enrichment.</li>
+<li>Views should orchestrate cache/context only, not patch placement.</li>
+<li>Templates render only.</li>
+<li>Complete franchise cache never stores user-specific data.</li>
+</ul>
 
 
 

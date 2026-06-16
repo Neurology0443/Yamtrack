@@ -25,7 +25,7 @@
     
     
       
-        <title>Anime Franchise Customization Guide - Yamtrack Documentation</title>
+        <title>Anime franchise customization - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#anime-franchise-customization-guide" class="md-skip">
+        <a href="#anime-franchise-customization" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Anime Franchise Customization Guide
+              Anime franchise customization
             
           </span>
         </div>
@@ -579,124 +579,281 @@
   
 
 
-<h1 id="anime-franchise-customization-guide">Anime Franchise Customization Guide<a class="headerlink" href="#anime-franchise-customization-guide" title="Permanent link">&para;</a></h1>
-<p>Use this guide to change behavior safely while staying aligned with the current architecture.</p>
-<h2 id="architecture-reminder-before-editing">Architecture reminder before editing<a class="headerlink" href="#architecture-reminder-before-editing" title="Permanent link">&para;</a></h2>
+<h1 id="anime-franchise-customization">Anime franchise customization<a class="headerlink" href="#anime-franchise-customization" title="Permanent link">&para;</a></h1>
+<h2 id="understanding-ownership">Understanding ownership<a class="headerlink" href="#understanding-ownership" title="Permanent link">&para;</a></h2>
+<p>A franchise change should start by identifying which layer owns the behavior.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Snapshot
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ↓
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>UI Projection
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Import Projection
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Cache Projection
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Rendering
+</span></code></pre></div>
+<p>The snapshot describes the franchise facts. UI grouping decides how those facts are shown on a detail page. Import profiles decide which missing entries should be created. Cache code decides how prepared payloads are stored and refreshed. Rendering turns prepared context into HTML.</p>
+<p>A change should normally affect one main layer. If it appears to require several layers, verify that the behavior truly belongs in each of them.</p>
+<h2 id="before-changing-behavior">Before changing behavior<a class="headerlink" href="#before-changing-behavior" title="Permanent link">&para;</a></h2>
+<p>When changing franchise behavior:</p>
+<ol>
+<li>Identify the owning layer.</li>
+<li>Change that layer only when possible.</li>
+<li>Update the targeted tests for that layer.</li>
+<li>Update documentation when product behavior or operational behavior changes.</li>
+</ol>
+<p>Most fragile changes happen when a fix is applied in a downstream layer instead of the layer that owns the behavior.</p>
+<h2 id="changing-franchise-facts">Changing franchise facts<a class="headerlink" href="#changing-franchise-facts" title="Permanent link">&para;</a></h2>
+<p>Change franchise facts when the base model of the franchise is wrong before UI, import, or cache policy runs. This includes canonical root selection, continuity discovery, relation normalization, series-line calculation, direct candidate discovery, and promoted continuity candidates.</p>
+<p>The main files are:</p>
 <ul>
-<li>Main UI grouping path: <code>AnimeFranchiseService -&gt; AnimeFranchiseUiPipeline</code>.</li>
-<li><code>Series</code> is fixed from <code>snapshot.series_line</code>.</li>
-<li>Secondary sections are rule-driven.</li>
-<li><code>layout.py</code> is structural-only.</li>
-<li><code>adapter.py</code> is compatibility-only.</li>
-<li><code>views.py</code> + <code>anime_franchise_footer.py</code> are integration/presentation enrichment.</li>
+<li><code>src/app/services/anime_franchise_graph.py</code> for graph hydration and relation walking;</li>
+<li><code>src/app/services/anime_franchise_snapshot.py</code> for canonical franchise facts and derived snapshot fields;</li>
+<li><code>src/app/providers/mal.py</code> when normalized MAL relation semantics are wrong.</li>
 </ul>
-<h2 id="where-to-change-what">Where to change what<a class="headerlink" href="#where-to-change-what" title="Permanent link">&para;</a></h2>
-<h3 id="1-ui-grouping-rule-packs-main-path">1) UI grouping rule packs (main path)<a class="headerlink" href="#1-ui-grouping-rule-packs-main-path" title="Permanent link">&para;</a></h3>
-<p>Directory: <code>src/app/services/anime_franchise_ui/rules/</code></p>
-<p>Use for:</p>
+<p>For field definitions and invariants, see <code>docs/anime-franchise-snapshot.md</code>.</p>
+<h2 id="changing-page-grouping">Changing page grouping<a class="headerlink" href="#changing-page-grouping" title="Permanent link">&para;</a></h2>
+<p>Page grouping controls where franchise entries appear on the anime detail page. It consumes snapshot facts but does not change them.</p>
+<p>Visible grouping can include:</p>
 <ul>
-<li><code>base_facts.py</code></li>
-<li>add/update normalized candidate facts used by later packs,</li>
-<li>tune relation/provenance-derived helper signals.</li>
-<li><code>base_placement.py</code></li>
-<li>declare section definitions,</li>
-<li>set initial fallback placement for unclassified candidates.</li>
-<li><code>relation_rules.py</code></li>
-<li>relation-based section assignment/refinement.</li>
-<li><code>anchor_rules.py</code></li>
-<li>directness/fallback-anchor gating behavior.</li>
-<li><code>format_rules.py</code></li>
-<li>conservative format/runtime gating and exclusions.</li>
-<li><code>section_rules.py</code></li>
-<li>metadata policy only (titles/order/hidden); no candidate moves.</li>
+<li>Series</li>
+<li>Main Story Extras</li>
+<li>Specials</li>
+<li>Related Series</li>
+<li>Alternatives</li>
+<li>Spin-offs</li>
 </ul>
-<p>Also relevant:</p>
+<p>Typical changes include adding a visible section, moving entries between sections, adjusting relation rules, changing anchor gating, changing format/runtime filtering, or changing rule-pack order.</p>
+<p>The main files are:</p>
 <ul>
-<li><code>src/app/services/anime_franchise_ui/presets/default.py</code> for pack order.</li>
-<li><code>src/app/services/anime_franchise_ui/engine.py</code> for override trace behavior.</li>
+<li><code>src/app/services/anime_franchise_ui/rules/</code> for placement, refinement, filtering, and metadata policy;</li>
+<li><code>src/app/services/anime_franchise_ui/presets/default.py</code> for rule-pack order;</li>
+<li><code>src/app/services/anime_franchise_ui/assembler.py</code> when candidate facts/provenance are missing;</li>
+<li><code>src/app/services/anime_franchise_ui/layout.py</code> for structural section grouping;</li>
+<li><code>src/app/services/anime_franchise_ui/adapter.py</code> for compatibility-shaped output.</li>
 </ul>
-<h3 id="2-import-heuristics-and-profile-behavior">2) Import heuristics and profile behavior<a class="headerlink" href="#2-import-heuristics-and-profile-behavior" title="Permanent link">&para;</a></h3>
-<p>File: <code>src/app/services/anime_franchise_import_profiles.py</code></p>
-<p>Use for:</p>
+<p>For the decision model, see <code>docs/anime-franchise-grouping.md</code>.</p>
+<h2 id="changing-import-behavior">Changing import behavior<a class="headerlink" href="#changing-import-behavior" title="Permanent link">&para;</a></h2>
+<p>Import behavior controls which missing franchise entries are automatically created in a user's library. New imported entries are created with the <code>Planning</code> status.</p>
+<p>Import profiles are independent from UI grouping sections. A section being visible on the detail page does not automatically mean it should be imported.</p>
+<p>Typical changes include profile selection, runtime thresholds, relation inclusion/exclusion, seed selection, full-rescan behavior, scan-state fingerprinting, and backoff/jitter.</p>
+<p>The main files are:</p>
 <ul>
-<li>tuning <code>continuity</code> / <code>satellites</code> / <code>complete</code> profile semantics,</li>
-<li>changing profile eligibility/selection logic,</li>
-<li>adjusting how snapshot facts map to import decisions.</li>
+<li><code>src/app/services/anime_franchise_import_profiles.py</code> for profile selection policy;</li>
+<li><code>src/app/services/anime_franchise_import.py</code> for import orchestration and entry creation;</li>
+<li><code>src/app/services/anime_import_state.py</code> for due scans, fingerprints, backoff, and jitter;</li>
+<li><code>src/app/tasks.py</code> for Celery import execution;</li>
+<li><code>src/app/schedules.py</code> for Beat schedule construction.</li>
 </ul>
-<h3 id="3-scan-schedulingbackoff">3) Scan scheduling/backoff<a class="headerlink" href="#3-scan-schedulingbackoff" title="Permanent link">&para;</a></h3>
-<p>File: <code>src/app/services/anime_import_state.py</code></p>
-<p>Use for:</p>
+<p>For profile behavior and commands, see <code>docs/anime-franchise-import.md</code>.</p>
+<h2 id="changing-cache-behavior">Changing cache behavior<a class="headerlink" href="#changing-cache-behavior" title="Permanent link">&para;</a></h2>
+<p>Cache behavior controls how complete franchise payloads are stored, refreshed, reused, and delivered to detail pages.</p>
+<p>The cache does not decide grouping behavior. The cache does not decide import behavior. It stores and delivers the result of those layers.</p>
+<p>Typical changes include cache TTL, freshness, payload validation, canonical aliases, warmup, cooldowns, queue/task locks, and the serialization contract.</p>
+<p>The main files are:</p>
 <ul>
-<li>retry/backoff windows,</li>
-<li>error-state progression,</li>
-<li>incremental rescan cadence and state transitions.</li>
+<li><code>src/app/services/anime_franchise_cache.py</code> for payload keys, metadata, validation, freshness, aliases, and scheduling gates;</li>
+<li><code>src/app/services/anime_franchise_cache_warmer.py</code> for after-import warmup scheduling;</li>
+<li><code>src/app/services/anime_franchise_scoped_payload.py</code> for scoped/truncated payload handling;</li>
+<li><code>src/app/services/anime_franchise_context.py</code> for request-time enrichment of cached payloads;</li>
+<li><code>src/app/tasks.py</code> for background cache builds.</li>
 </ul>
-<h3 id="4-taskscheduler-automation">4) Task/scheduler automation<a class="headerlink" href="#4-taskscheduler-automation" title="Permanent link">&para;</a></h3>
-<p>Files:</p>
+<p>For cache lifecycle and settings, see <code>docs/anime-franchise-cache.md</code>.</p>
+<h2 id="changing-rendering">Changing rendering<a class="headerlink" href="#changing-rendering" title="Permanent link">&para;</a></h2>
+<p>Rendering turns prepared franchise data into page content. This layer is appropriate for labels, badges, tooltips, current-entry markers, and display-only template structure.</p>
+<p>Franchise badges and relation tooltips are rendering helpers. They should explain already-classified entries, not classify them.</p>
+<p>Rendering-time enrichment can also improve display data such as franchise entry images when fresher media information is already available locally.</p>
+<p>Typical rendering changes include:</p>
 <ul>
-<li><code>src/app/tasks.py</code></li>
-<li><code>src/app/schedules.py</code></li>
-<li><code>src/config/settings.py</code></li>
+<li>labels;</li>
+<li>badges;</li>
+<li>tooltips;</li>
+<li>current-entry markers;</li>
+<li>display-only image enrichment;</li>
+<li>template display structure.</li>
 </ul>
-<p>Use for:</p>
+<p>Rendering should not classify franchise entries. If placement is wrong, fix the snapshot facts or UI rule packs first.</p>
+<p>The main files are:</p>
 <ul>
-<li>Celery task trigger cadence,</li>
-<li>automation on/off and periodic schedule wiring,</li>
-<li>operational defaults for franchise import jobs.</li>
+<li><code>src/app/services/anime_franchise_context.py</code> for request/user enrichment;</li>
+<li><code>src/app/anime_franchise_footer.py</code> for footer labels, badges, and tooltips;</li>
+<li><code>src/app/views.py</code> for orchestration of cache lookup and context preparation;</li>
+<li><code>src/templates/app/media_details.html</code> for HTML rendering.</li>
 </ul>
-<h3 id="5-notification-behavior">5) Notification behavior<a class="headerlink" href="#5-notification-behavior" title="Permanent link">&para;</a></h3>
-<p>Files:</p>
+<h2 id="notifications">Notifications<a class="headerlink" href="#notifications" title="Permanent link">&para;</a></h2>
+<p>Entry-added notifications belong to the import flow. They are triggered after import-created entries commit, use the existing notification/event subsystem, and should not fire before transaction commit.</p>
+<p>The main files are:</p>
 <ul>
-<li><code>src/events/notifications.py</code></li>
-<li><code>src/events/tasks.py</code></li>
-<li><code>src/users/models.py</code></li>
-<li><code>src/users/forms.py</code></li>
-<li><code>src/templates/users/notifications.html</code></li>
+<li><code>src/app/services/anime_franchise_import.py</code> for the import creation path;</li>
+<li><code>src/events/notifications.py</code> for notification helpers;</li>
+<li><code>src/events/tasks.py</code> for event task delivery;</li>
+<li>notification preference code/tests when delivery preferences change.</li>
 </ul>
-<p>Use for:</p>
+<h2 id="choosing-the-correct-layer">Choosing the correct layer<a class="headerlink" href="#choosing-the-correct-layer" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Goal</th>
+<th>Layer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Change canonical franchise facts</td>
+<td>Snapshot</td>
+</tr>
+<tr>
+<td>Change continuity or series-line logic</td>
+<td>Snapshot</td>
+</tr>
+<tr>
+<td>Change section placement</td>
+<td>UI grouping</td>
+</tr>
+<tr>
+<td>Change section order or visibility</td>
+<td>UI grouping / layout metadata</td>
+</tr>
+<tr>
+<td>Change imported entries</td>
+<td>Import profiles</td>
+</tr>
+<tr>
+<td>Change imported entry status</td>
+<td>Import creation path</td>
+</tr>
+<tr>
+<td>Change scan cadence/backoff</td>
+<td>Import state</td>
+</tr>
+<tr>
+<td>Change cache TTL or freshness</td>
+<td>Cache</td>
+</tr>
+<tr>
+<td>Change canonical aliases</td>
+<td>Cache</td>
+</tr>
+<tr>
+<td>Change badges/tooltips/current markers</td>
+<td>Rendering</td>
+</tr>
+<tr>
+<td>Change entry-added notifications</td>
+<td>Import / Events</td>
+</tr>
+</tbody>
+</table>
+<h2 id="common-change-scenarios">Common change scenarios<a class="headerlink" href="#common-change-scenarios" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>I want to...</th>
+<th>Start with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Change canonical root behavior</td>
+<td>Snapshot</td>
+</tr>
+<tr>
+<td>Change continuity or <code>Series</code> entries</td>
+<td>Snapshot + <code>SeriesBuilder</code></td>
+</tr>
+<tr>
+<td>Add a new visible section</td>
+<td>UI grouping rules + section metadata</td>
+</tr>
+<tr>
+<td>Move entries between sections</td>
+<td>UI grouping rules</td>
+</tr>
+<tr>
+<td>Change spin-off or alternative refinement</td>
+<td><code>secondary_refinement_rules.py</code></td>
+</tr>
+<tr>
+<td>Change which entries are imported</td>
+<td>Import profiles</td>
+</tr>
+<tr>
+<td>Change import scan timing</td>
+<td>Import scan state / scheduler settings</td>
+</tr>
+<tr>
+<td>Change cache TTL or freshness</td>
+<td>Cache settings and cache service</td>
+</tr>
+<tr>
+<td>Change cache alias policy</td>
+<td>Cache alias helpers</td>
+</tr>
+<tr>
+<td>Change badges, tooltips, or displayed images</td>
+<td>Rendering/context enrichment</td>
+</tr>
+<tr>
+<td>Change notifications for imported entries</td>
+<td>Import flow / events</td>
+</tr>
+</tbody>
+</table>
+<p>Use this table as the first routing step. Once the owning layer is clear, use the sections below for the main files and tests.</p>
+<h2 id="common-mistakes">Common mistakes<a class="headerlink" href="#common-mistakes" title="Permanent link">&para;</a></h2>
+<h3 id="fixing-grouping-in-templates">Fixing grouping in templates<a class="headerlink" href="#fixing-grouping-in-templates" title="Permanent link">&para;</a></h3>
+<p>Templates render prepared context. If placement is wrong, the fix usually belongs in rule packs or snapshot facts, not in <code>media_details.html</code>.</p>
+<h3 id="using-ui-sections-for-import-decisions">Using UI sections for import decisions<a class="headerlink" href="#using-ui-sections-for-import-decisions" title="Permanent link">&para;</a></h3>
+<p>UI sections are optimized for detail-page readability. Import profiles decide what should be created in a user library and should not blindly mirror visible sections.</p>
+<h3 id="fixing-import-behavior-through-ui-rules">Fixing import behavior through UI rules<a class="headerlink" href="#fixing-import-behavior-through-ui-rules" title="Permanent link">&para;</a></h3>
+<p>Import profiles and UI grouping are independent projections.</p>
+<p>If imported entries are wrong, fix the import profile logic instead of changing section placement.</p>
+<h3 id="putting-user-data-into-cached-payloads">Putting user data into cached payloads<a class="headerlink" href="#putting-user-data-into-cached-payloads" title="Permanent link">&para;</a></h3>
+<p>Complete franchise cache payloads must stay user-agnostic. Status, progress, and current-user item data belong in request-time enrichment.</p>
+<h3 id="duplicating-snapshot-logic">Duplicating snapshot logic<a class="headerlink" href="#duplicating-snapshot-logic" title="Permanent link">&para;</a></h3>
+<p>If multiple layers need the same franchise fact, add it to the snapshot instead of recalculating it in UI, import, or cache code.</p>
+<h3 id="changing-cache-lookup-to-fix-placement">Changing cache lookup to fix placement<a class="headerlink" href="#changing-cache-lookup-to-fix-placement" title="Permanent link">&para;</a></h3>
+<p>Cache lookup decides which prepared payload is loaded. It should not be used to move entries between sections.</p>
+<h3 id="adding-one-off-view-patches">Adding one-off view patches<a class="headerlink" href="#adding-one-off-view-patches" title="Permanent link">&para;</a></h3>
+<p>Views orchestrate cache and context preparation. Placement policy belongs in the UI rule pipeline.</p>
+<h2 id="where-to-add-tests">Where to add tests<a class="headerlink" href="#where-to-add-tests" title="Permanent link">&para;</a></h2>
+<p>Snapshot changes should normally update:</p>
 <ul>
-<li>opt-in settings,</li>
-<li>async dispatch behavior,</li>
-<li>payload formatting and endpoint delivery policy.</li>
+<li><code>src/app/tests/services/test_anime_franchise_snapshot.py</code></li>
+<li><code>src/app/tests/services/test_anime_franchise.py</code></li>
 </ul>
-<h3 id="6-rendering-and-footer-badges">6) Rendering and footer badges<a class="headerlink" href="#6-rendering-and-footer-badges" title="Permanent link">&para;</a></h3>
-<p>Files:</p>
+<p>UI grouping changes should normally update:</p>
 <ul>
-<li><code>src/app/views.py</code></li>
-<li><code>src/app/anime_franchise_footer.py</code></li>
-<li><code>src/templates/app/media_details.html</code></li>
+<li><code>src/app/tests/services/test_anime_franchise_ui_pipeline.py</code></li>
 </ul>
-<p>Use for:</p>
+<p>Import changes should normally update:</p>
 <ul>
-<li>integration shape between service payload and page context,</li>
-<li><code>series_label</code> and footer relation/format badge presentation,</li>
-<li>template-level display structure.</li>
+<li><code>src/app/tests/services/test_anime_franchise_import_profiles.py</code></li>
+<li><code>src/app/tests/test_anime_franchise_import.py</code></li>
+<li><code>src/app/tests/test_import_anime_franchise_command.py</code></li>
 </ul>
-<p>Do not use this area to implement new grouping placement policy.</p>
-<h2 id="practical-guardrails-do-dont">Practical guardrails (Do / Don’t)<a class="headerlink" href="#practical-guardrails-do-dont" title="Permanent link">&para;</a></h2>
-<h3 id="do">Do<a class="headerlink" href="#do" title="Permanent link">&para;</a></h3>
+<p>Cache changes should normally update:</p>
 <ul>
-<li>Keep grouping business logic in rule packs.</li>
-<li>Keep snapshot semantics canonical for both UI and import projections.</li>
-<li>Keep <code>Series</code> exclusively sourced from <code>snapshot.series_line</code>.</li>
-<li>Keep override behavior explicit and debuggable (<code>placement_trace</code>).</li>
-<li>Update tests + docs in the same change when behavior shifts.</li>
+<li><code>src/app/tests/services/test_anime_franchise_cache.py</code></li>
+<li><code>src/app/tests/services/test_anime_franchise_scoped_payload.py</code></li>
+<li><code>src/app/tests/services/test_anime_franchise_context.py</code></li>
+<li><code>src/app/tests/test_anime_franchise_cache_warmer.py</code></li>
 </ul>
-<h3 id="dont">Don’t<a class="headerlink" href="#dont" title="Permanent link">&para;</a></h3>
+<p>Rendering, task, and view changes should normally update:</p>
 <ul>
-<li>Don’t move placement rules into <code>layout.py</code>, adapter, or templates.</li>
-<li>Don’t document legacy UI logic as active runtime path.</li>
-<li>Don’t mix import projection decisions into UI placement documentation.</li>
-<li>Don’t overstate provenance fields (<code>metadata["origins"]</code>) as fully mature policy drivers unless code truly does that.</li>
+<li><code>src/app/tests/views/test_media_details.py</code></li>
+<li><code>src/app/tests/test_anime_franchise_footer.py</code></li>
+<li><code>src/app/tests/test_tasks.py</code></li>
 </ul>
 <h2 id="safe-change-checklist">Safe change checklist<a class="headerlink" href="#safe-change-checklist" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Identify the concern: facts, placement, relation, anchor, format, metadata, or integration display.</li>
-<li>Patch the minimal layer that owns that concern.</li>
-<li>Run targeted tests from <code>docs/testing-runbook.md</code> and franchise debug checks.</li>
-<li>Validate no regressions in fallback no-series behavior.</li>
-<li>Update architecture/grouping/debug docs to match actual runtime behavior.</li>
-</ol>
+<ul>
+<li>The owning layer is identified.</li>
+<li>Snapshot fields remain deterministic.</li>
+<li>UI/import/cache projections stay separate.</li>
+<li>Rule placement changes are covered by placement tests.</li>
+<li>Cache payload compatibility is considered.</li>
+<li>User-specific data is not written to complete franchise cache.</li>
+<li>Settings docs are updated if defaults/settings change.</li>
+<li>Runbook commands remain valid.</li>
+</ul>
 
 
 

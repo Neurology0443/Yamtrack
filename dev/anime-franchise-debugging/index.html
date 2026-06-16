@@ -25,7 +25,7 @@
     
     
       
-        <title>Anime Franchise Grouping Debugging Runbook - Yamtrack Documentation</title>
+        <title>Anime franchise debugging - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#anime-franchise-grouping-debugging-runbook" class="md-skip">
+        <a href="#anime-franchise-debugging" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Anime Franchise Grouping Debugging Runbook
+              Anime franchise debugging
             
           </span>
         </div>
@@ -579,207 +579,9 @@
   
 
 
-<h1 id="anime-franchise-grouping-debugging-runbook">Anime Franchise Grouping Debugging Runbook<a class="headerlink" href="#anime-franchise-grouping-debugging-runbook" title="Permanent link">&para;</a></h1>
-<p>This runbook targets the <strong>current</strong> MAL anime franchise UI grouping system.</p>
-<p>It is organized by practical debug steps and keeps host/Docker workflows aligned.</p>
-<h2 id="1-preconditions-and-scope">1) Preconditions and scope<a class="headerlink" href="#1-preconditions-and-scope" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Scope: MAL anime detail pages only (<code>source=mal</code>, <code>media_type=anime</code>).</li>
-<li>Feature flag: <code>ANIME_FRANCHISE_GROUPING_ENABLED=True</code>.</li>
-<li>Repo layout: <code>manage.py</code> is under <code>src/</code>.</li>
-<li>Active grouping path:
-  <code>AnimeFranchiseService -&gt; AnimeFranchiseUiPipeline -&gt; SeriesBuilder -&gt; UiCandidateAssembler -&gt; RulePipeline -&gt; LayoutCompiler -&gt; ViewModelAdapter -&gt; views.py</code>.</li>
-</ul>
-<h2 id="2-targeted-tests-fast-confidence-pass">2) Targeted tests (fast confidence pass)<a class="headerlink" href="#2-targeted-tests-fast-confidence-pass" title="Permanent link">&para;</a></h2>
-<h3 id="host">Host<a class="headerlink" href="#host" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">cd</span><span class="w"> </span>src
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_ui_pipeline
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_snapshot
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.views.test_media_details
-</span></code></pre></div>
-<h3 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.services.test_anime_franchise_ui_pipeline&quot;</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.services.test_anime_franchise&quot;</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>sh<span class="w"> </span>-lc<span class="w"> </span><span class="s2">&quot;cd /yamtrack &amp;&amp; python manage.py test app.tests.views.test_media_details&quot;</span>
-</span></code></pre></div>
-<h2 id="3-inspect-principal-service-payload-adapter-output">3) Inspect principal service payload (adapter output)<a class="headerlink" href="#3-inspect-principal-service-payload-adapter-output" title="Permanent link">&para;</a></h2>
-<p>Use this to inspect what the modern pipeline returns before view enrichment:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>src
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell
-</span></code></pre></div>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pprint</span><span class="w"> </span><span class="kn">import</span> <span class="n">pprint</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseService</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">AnimeFranchiseService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;root:&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="o">.</span><span class="n">root_media_id</span><span class="p">,</span> <span class="n">payload</span><span class="o">.</span><span class="n">display_title</span><span class="p">)</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;series entries:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;media_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">series</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]])</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="n">payload</span><span class="o">.</span><span class="n">sections</span><span class="p">:</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">section</span><span class="p">[</span><span class="s2">&quot;key&quot;</span><span class="p">],</span> <span class="n">section</span><span class="p">[</span><span class="s2">&quot;title&quot;</span><span class="p">],</span> <span class="nb">len</span><span class="p">(</span><span class="n">section</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]))</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="n">pprint</span><span class="p">([</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="p">{</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>            <span class="s2">&quot;media_id&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;media_id&quot;</span><span class="p">],</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>            <span class="s2">&quot;anime_media_type&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;anime_media_type&quot;</span><span class="p">),</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>            <span class="s2">&quot;relation_type&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;relation_type&quot;</span><span class="p">),</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>            <span class="s2">&quot;linked_index&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;linked_series_line_index&quot;</span><span class="p">),</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>            <span class="s2">&quot;badges&quot;</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;badges&quot;</span><span class="p">,</span> <span class="p">[]),</span>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="p">}</span>
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">section</span><span class="p">[</span><span class="s2">&quot;entries&quot;</span><span class="p">]</span>
-</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="p">])</span>
-</span></code></pre></div>
-<h2 id="4-inspect-view-level-context-shaping-post-adapter">4) Inspect view-level context shaping (post-adapter)<a class="headerlink" href="#4-inspect-view-level-context-shaping-post-adapter" title="Permanent link">&para;</a></h2>
-<p>The view currently rebuilds <code>anime_franchise</code> context and enriches entries.</p>
-<p>Quick checks in <code>media_details</code> response context:</p>
-<ul>
-<li><code>series_label</code> exists on series entries,</li>
-<li>section entries include footer presentation fields,</li>
-<li><code>related_anime</code> removed from legacy related block when grouping is enabled.</li>
-</ul>
-<p>Tip: use <code>app.tests.views.test_media_details</code> as baseline assertions for this layer.</p>
-<h2 id="5-inspect-internal-placement-trace-pipeline-level">5) Inspect internal placement trace (pipeline-level)<a class="headerlink" href="#5-inspect-internal-placement-trace-pipeline-level" title="Permanent link">&para;</a></h2>
-<p><code>placement_trace</code> is internal candidate metadata. It is not part of the final template payload.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_ui</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseUiPipeline</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_snapshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseSnapshotService</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_ui.rule_types</span><span class="w"> </span><span class="kn">import</span> <span class="n">RuleContext</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">snapshot</span> <span class="o">=</span> <span class="n">AnimeFranchiseSnapshotService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">pipeline</span> <span class="o">=</span> <span class="n">AnimeFranchiseUiPipeline</span><span class="p">()</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">candidates</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">candidate_assembler</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">snapshot</span><span class="p">)</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">context</span> <span class="o">=</span> <span class="n">RuleContext</span><span class="p">(</span><span class="n">snapshot</span><span class="o">=</span><span class="n">snapshot</span><span class="p">)</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">pipeline</span><span class="o">.</span><span class="n">rule_pipeline</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">candidates</span><span class="o">=</span><span class="n">candidates</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">trace</span> <span class="o">=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;placement_trace&quot;</span><span class="p">)</span>
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="k">if</span> <span class="n">trace</span><span class="p">:</span>
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>        <span class="nb">print</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">media_id</span><span class="p">,</span> <span class="n">trace</span><span class="p">)</span>
-</span></code></pre></div>
-<p>Interpretation:</p>
-<ul>
-<li><code>kind="initial"</code>: first section assignment.</li>
-<li><code>kind="override"</code>: later pack changed section.</li>
-</ul>
-<h2 id="6-rule-order-troubleshooting-and-overrides">6) Rule-order troubleshooting and overrides<a class="headerlink" href="#6-rule-order-troubleshooting-and-overrides" title="Permanent link">&para;</a></h2>
-<p>Current ordered packs:</p>
-<ol>
-<li><code>base_facts</code></li>
-<li><code>base_placement</code></li>
-<li><code>relation_rules</code></li>
-<li><code>anchor_rules</code></li>
-<li><code>format_rules</code></li>
-<li><code>section_rules</code></li>
-</ol>
-<p>Current behavior:</p>
-<ul>
-<li>not global first-match-wins,</li>
-<li>later packs can override <code>section_key</code>,</li>
-<li><code>section_rules</code> is metadata-only.</li>
-</ul>
-<p>If a candidate lands in an unexpected section:</p>
-<ol>
-<li>inspect <code>relation_types</code> and <code>metadata["relation_facts"]</code>,</li>
-<li>inspect <code>placement_trace</code> transitions,</li>
-<li>verify anchor flags (<code>has_series_line_origin</code>, <code>has_root_origin</code>),</li>
-<li>verify format gates (<code>cm</code>, <code>pv</code>, and section-specific exclusions).</li>
-</ol>
-<h2 id="7-fallback-no-series-line-verification">7) Fallback no-series-line verification<a class="headerlink" href="#7-fallback-no-series-line-verification" title="Permanent link">&para;</a></h2>
-<p>Expected current behavior:</p>
-<ul>
-<li><code>snapshot.has_series_line == False</code>,</li>
-<li><code>Series</code> block empty,</li>
-<li>fallback/root anchor still drives candidate gathering,</li>
-<li>fallback placement (<code>related_series</code>) used only when no earlier rule assigned section.</li>
-</ul>
-<p>Use <code>app.tests.services.test_anime_franchise_snapshot</code> + <code>test_anime_franchise_ui_pipeline</code> when adjusting this behavior.</p>
-<h2 id="8-relation-normalization-check">8) Relation normalization check<a class="headerlink" href="#8-relation-normalization-check" title="Permanent link">&para;</a></h2>
-<p>When relation labels look wrong, verify normalization quickly:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.providers</span><span class="w"> </span><span class="kn">import</span> <span class="n">mal</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">mal</span><span class="o">.</span><span class="n">normalize_relation_type</span><span class="p">(</span><span class="s2">&quot;Side Story&quot;</span><span class="p">))</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">mal</span><span class="o">.</span><span class="n">normalize_relation_type</span><span class="p">(</span><span class="s2">&quot;full-story&quot;</span><span class="p">))</span>
-</span></code></pre></div>
-<p>Also run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">cd</span><span class="w"> </span>src
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise<span class="w"> </span>-k<span class="w"> </span>normalize_relation
-</span></code></pre></div>
-<h2 id="9-graph-extraction-snapshot-check">9) Graph extraction / snapshot check<a class="headerlink" href="#9-graph-extraction-snapshot-check" title="Permanent link">&para;</a></h2>
-<p>If anchors or continuity are suspicious, inspect snapshot fields directly:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.anime_franchise_snapshot</span><span class="w"> </span><span class="kn">import</span> <span class="n">AnimeFranchiseSnapshotService</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">snapshot</span> <span class="o">=</span> <span class="n">AnimeFranchiseSnapshotService</span><span class="p">()</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">&quot;5114&quot;</span><span class="p">)</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;has_series_line:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">has_series_line</span><span class="p">)</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;canonical_root_media_id:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">canonical_root_media_id</span><span class="p">)</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;fallback_anchor_media_id:&quot;</span><span class="p">,</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">fallback_anchor_media_id</span><span class="p">)</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;series_line:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">media_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">series_line</span><span class="p">])</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;direct_anchors:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">media_id</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">snapshot</span><span class="o">.</span><span class="n">direct_anchors</span><span class="p">])</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;direct_candidates:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">snapshot</span><span class="o">.</span><span class="n">direct_candidates</span><span class="p">))</span>
-</span></code></pre></div>
-<h2 id="10-legacy-related-de-duplication-check">10) Legacy related de-duplication check<a class="headerlink" href="#10-legacy-related-de-duplication-check" title="Permanent link">&para;</a></h2>
-<p>When grouping is enabled, page related items should not duplicate franchise items via <code>related_anime</code>.</p>
-<p>Run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="nb">cd</span><span class="w"> </span>src
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.views.test_media_details<span class="w"> </span>-k<span class="w"> </span>related_anime
-</span></code></pre></div>
-<h2 id="11-cache-and-refresh-checks">11) Cache and refresh checks<a class="headerlink" href="#11-cache-and-refresh-checks" title="Permanent link">&para;</a></h2>
-<p>For stale grouping output:</p>
-<ul>
-<li>compare normal build vs <code>refresh_cache=True</code> path at service/snapshot level,</li>
-<li>run snapshot cache tests:</li>
-</ul>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nb">cd</span><span class="w"> </span>src
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_snapshot<span class="w"> </span>-k<span class="w"> </span>cache
-</span></code></pre></div>
-<h2 id="12-suggested-troubleshooting-order">12) Suggested troubleshooting order<a class="headerlink" href="#12-suggested-troubleshooting-order" title="Permanent link">&para;</a></h2>
-<ol>
-<li>Reproduce with targeted test(s).</li>
-<li>Inspect snapshot semantics.</li>
-<li>Inspect pipeline payload (adapter output).</li>
-<li>Inspect <code>placement_trace</code> for overrides.</li>
-<li>Inspect view-level enrichment/output shaping.</li>
-<li>Confirm template is only displaying provided context.</li>
-<li>Validate cache freshness if behavior appears inconsistent.</li>
-</ol>
-<h2 id="complete-mal-anime-franchise-payload-cache">Complete MAL anime franchise payload cache<a class="headerlink" href="#complete-mal-anime-franchise-payload-cache" title="Permanent link">&para;</a></h2>
-<p>Yamtrack keeps the existing MAL anime metadata cache for individual anime records and adds a separate long-lived cache for the assembled franchise payload. The payload cache uses <code>mal_anime_franchise_&lt;id&gt;</code> plus <code>:meta</code>, <code>:queue_lock</code>, and <code>:task_lock</code> side keys. It stores a schema-versioned, user-agnostic dict that can be enriched during page rendering.</p>
-<p>Detail pages no longer synchronously build a missing franchise payload. On a cache miss, the page keeps <code>media.related.related_anime</code> visible and queues <code>build_mal_anime_franchise_payload</code> in Celery. On a cache hit, the cached payload is enriched with the current user's data and <code>related_anime</code> is hidden to avoid duplicate sections. Stale payloads remain displayable while a background refresh is queued when cooldowns allow.</p>
-<h3 id="canonical-franchise-aliases">Canonical franchise aliases<a class="headerlink" href="#canonical-franchise-aliases" title="Permanent link">&para;</a></h3>
-<p>After a complete, non-truncated Celery build, Yamtrack may store lightweight alias keys so entries from the same franchise can reuse the canonical complete payload. Alias keys use <code>mal_anime_franchise_alias_&lt;id&gt;</code> and point to a canonical <code>mal_anime_franchise_&lt;canonical_id&gt;</code> payload. Aliases are ignored if the canonical payload is missing, invalid, or does not explicitly cover the requested media ID.</p>
-<p>Aliases are only created for complete, non-truncated payloads when <code>ANIME_FRANCHISE_CACHE_ALIASES_ENABLED</code> is enabled. Aliasable IDs include the main series line and continuity-extra entries (<code>continuity_extras</code> / Main Story Extras). The build seed is aliasable only when it belongs to one of those aliasable sets, or when it is the canonical media ID itself. Other secondary sections remain covered for diagnostics but are not alias targets by default.</p>
-<p>If a build log shows <code>media_id=&lt;seed&gt; canonical_media_id=&lt;canonical&gt; truncated=False</code> but reopening <code>&lt;seed&gt;</code> still logs a cache miss, inspect <code>mal_anime_franchise_alias_&lt;seed&gt;</code> and <code>aliasable_media_ids</code> in the canonical payload. If the seed is present only in a non-aliasable section such as <code>specials</code>, <code>spin_offs</code>, <code>alternatives</code>, or <code>related_series</code>, the cache miss may be intentional unless that section is later promoted into the alias allowlist.</p>
-<p>If an alias is created for an ID, any older direct payload for that aliased ID is removed so the canonical payload can be used. Broken or stale aliases are ignored and cleaned up safely.</p>
-<p>Alias key: <code>mal_anime_franchise_alias_&lt;id&gt;</code>
-Alias index: <code>mal_anime_franchise_&lt;canonical_id&gt;:aliases</code></p>
-<p>Useful settings:</p>
-<ul>
-<li><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code> controls the Redis TTL for payload and meta entries.</li>
-<li><code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code> controls logical freshness before stale-while-refresh.</li>
-<li><code>ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS</code> and <code>ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS</code> throttle rebuild attempts.</li>
-<li><code>ANIME_FRANCHISE_QUEUE_LOCK_MINUTES</code> prevents duplicate task enqueueing.</li>
-<li><code>ANIME_FRANCHISE_TASK_LOCK_MINUTES</code> prevents concurrent worker builds.</li>
-<li><code>ANIME_FRANCHISE_MAX_NODES</code> limits graph discovery during build and produces a partial payload when reached.</li>
-<li><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code> invalidates incompatible cached payload shapes.</li>
-</ul>
-<h3 id="debug-keys-and-logs">Debug keys and logs<a class="headerlink" href="#debug-keys-and-logs" title="Permanent link">&para;</a></h3>
-<p>For MAL anime ID <code>223</code>, inspect the complete franchise cache with these keys:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Payload key: mal_anime_franchise_223
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>Meta key: mal_anime_franchise_223:meta
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>Queue lock: mal_anime_franchise_223:queue_lock
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>Task lock: mal_anime_franchise_223:task_lock
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>Alias key: mal_anime_franchise_alias_&lt;id&gt;
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>Alias index: mal_anime_franchise_223:aliases
-</span></code></pre></div>
-<p>Expected log messages include:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>MAL anime franchise cache miss for media_id=&lt;id&gt;
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>MAL anime franchise cache hit for media_id=&lt;id&gt;
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>MAL anime franchise build already queued for media_id=&lt;id&gt;
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>MAL anime franchise build already running for media_id=&lt;id&gt;
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>MAL anime franchise build completed for media_id=&lt;id&gt;
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>MAL anime franchise build failed for media_id=&lt;id&gt;
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>MAL anime franchise build truncated for media_id=&lt;id&gt;
-</span></code></pre></div>
-<p>If the payload is absent or schema-incompatible, the detail page should keep <code>related_anime</code> visible and enqueue a background rebuild when cooldowns allow. If a valid payload is stale, the page should still render it and only refresh in the background.</p>
-<p>The complete payload is validated before rendering. If validation fails, Yamtrack ignores the cached payload, keeps the lightweight <code>related_anime</code> fallback visible, and queues a rebuild when cooldowns and locks allow. A structurally valid but empty payload also keeps <code>related_anime</code> visible because there is no displayable franchise section to de-duplicate.</p>
-<p><code>save_payload(...)</code> rejects non JSON-safe values and user-specific keys such as <code>item</code>, <code>media</code>, <code>progress</code>, <code>status</code>, <code>user_id</code>, or rendered HTML. If a Celery build produces an invalid payload, the task records the error in meta and preserves the previous successful payload. Build metadata uses the public <code>AnimeFranchiseGraphBuilder.node_count</code> API rather than reading graph internals.</p>
-<p>Cached franchise payloads are validated on both write and read. Payloads that are structurally valid but contain user-specific keys or non JSON-safe values are ignored at read time, preserving the direct MAL <code>related_anime</code> fallback and allowing a background rebuild when cooldowns permit.</p>
+<h1 id="anime-franchise-debugging">Anime franchise debugging<a class="headerlink" href="#anime-franchise-debugging" title="Permanent link">&para;</a></h1>
+<p>The current debugging guide lives in <code>docs/anime-franchise-debugging-runbook.md</code>.</p>
+<p>This file is kept as a stable alias for older links. The runbook contains the service, snapshot, rule-placement, cache, alias, import-state, Docker, and test commands that used to live here.</p>
 
 
 

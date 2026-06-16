@@ -25,7 +25,7 @@
     
     
       
-        <title>Anime Franchise Import - Yamtrack Documentation</title>
+        <title>Anime franchise import - Yamtrack Documentation</title>
       
     
     
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Anime Franchise Import
+              Anime franchise import
             
           </span>
         </div>
@@ -579,137 +579,198 @@
   
 
 
-<h1 id="anime-franchise-import">Anime Franchise Import<a class="headerlink" href="#anime-franchise-import" title="Permanent link">&para;</a></h1>
-<p>This document covers profile-based franchise import, incremental scan state, hot-priority behavior, and automation.</p>
-<h2 id="import-flow">Import flow<a class="headerlink" href="#import-flow" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mal.py
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a> -&gt; anime_franchise_graph.py
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a> -&gt; anime_franchise_snapshot.py
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a> -&gt; anime_franchise_import_profiles.py
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a> -&gt; anime_franchise_import.py
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a> -&gt; anime_import_state.py
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a> -&gt; Celery task / management command / schedule
+<h1 id="anime-franchise-import">Anime franchise import<a class="headerlink" href="#anime-franchise-import" title="Permanent link">&para;</a></h1>
+<h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
+<p>When a user tracks a MAL anime, this fork can discover missing MAL anime entries from the same franchise and create library entries for them. Imports are profile-based so Yamtrack can expand useful continuity without blindly importing every related MAL entry. Profile decisions are built from the normalized snapshot; see <code>docs/anime-franchise-snapshot.md</code> for the shared snapshot model.</p>
+<h2 id="simple-user-flow">Simple user flow<a class="headerlink" href="#simple-user-flow" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>User tracks a MAL anime
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>      ↓
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Import scan runs
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>      ↓
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Missing franchise entries are discovered
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>      ↓
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Entries are created as Planning
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>      ↓
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>Notification is sent when enabled
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      ↓
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>Future scans keep monitoring the franchise
 </span></code></pre></div>
-<h2 id="core-services">Core services<a class="headerlink" href="#core-services" title="Permanent link">&para;</a></h2>
+<p>The import system is designed to reduce manual searching while keeping automatically added entries easy to review.</p>
+<h2 id="important-ui-grouping-is-not-import-selection">Important: UI grouping is not import selection<a class="headerlink" href="#important-ui-grouping-is-not-import-selection" title="Permanent link">&para;</a></h2>
+<p>UI grouping and import selection are intentionally independent.</p>
+<p>An entry can appear in a visible franchise section without being imported automatically. Likewise, import profiles are not required to mirror UI sections.</p>
+<p>UI grouping optimizes detail-page readability. Import profiles optimize which missing entries are useful enough to create in a user's library.</p>
+<h2 id="import-flow">Import flow<a class="headerlink" href="#import-flow" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Existing user MAL anime
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a> -&gt; due seed selection
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a> -&gt; snapshot build (see `docs/anime-franchise-snapshot.md`)
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a> -&gt; profile selection
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a> -&gt; missing entry creation
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a> -&gt; scan-state update
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a> -&gt; notifications
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a> -&gt; optional cache warmup
+</span></code></pre></div>
+<p>Execution surfaces:</p>
 <ul>
-<li><code>anime_franchise_import_profiles.py</code>: chooses IDs from snapshot per profile.</li>
-<li><code>anime_franchise_import.py</code>: orchestrates due seed selection, creation, and state updates.</li>
-<li><code>anime_import_state.py</code>: persists incremental scan schedule and backoff.</li>
+<li>management command <code>python manage.py import_anime_franchise</code>;</li>
+<li>Celery task <code>Import anime franchise</code>;</li>
+<li>optional Beat schedule entry <code>auto_import_anime_franchise</code>.</li>
 </ul>
-<h2 id="import-profiles">Import profiles<a class="headerlink" href="#import-profiles" title="Permanent link">&para;</a></h2>
+<h2 id="when-to-use-each-profile">When to use each profile<a class="headerlink" href="#when-to-use-each-profile" title="Permanent link">&para;</a></h2>
 <h3 id="continuity"><code>continuity</code><a class="headerlink" href="#continuity" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Selects continuity component (<code>prequel/sequel</code> transitive set).</li>
-<li>Excludes media types <code>cm</code> and <code>pv</code>.</li>
-<li>Excludes targets referenced by <code>summary</code> relations.</li>
-<li>Applies runtime heuristic (<code>runtime &gt; 15</code> when runtime exists).</li>
-</ul>
-<p>Default profile values:</p>
-<ul>
-<li><code>seed_mode</code>: <code>all_library</code></li>
-<li><code>continuity_mode</code>: <code>transitive</code></li>
-<li><code>satellites_mode</code>: <code>none</code></li>
-<li><code>component_root_mode</code>: <code>canonical_component_root</code></li>
-<li><code>ignored_media_types</code>: <code>{"cm", "pv"}</code></li>
-<li><code>min_runtime_minutes</code>: <code>15</code></li>
+<li>Recommended default profile.</li>
+<li>Imports main continuity entries.</li>
+<li>Best balance between usefulness and avoiding noise.</li>
 </ul>
 <h3 id="satellites"><code>satellites</code><a class="headerlink" href="#satellites" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Direct-only satellites from <code>direct_candidates</code>.</li>
-<li>Does <strong>not</strong> consume <code>promoted_continuity_candidates</code> (UI-only projection).</li>
-<li>No additional transitive expansion is applied for satellites selection.</li>
-<li>Eligible relations: <code>spin_off</code>, <code>alternative_version</code>, <code>side_story</code>.</li>
-<li>Explicitly excludes <code>parent_story</code>.</li>
-<li>Excludes <code>cm</code> and <code>pv</code>.</li>
-<li>Applies runtime/episode heuristics:</li>
-<li><code>tv_special</code> requires runtime and must be <code>&gt; 15</code>.</li>
-<li>non-<code>tv_special</code> entries require known runtime.</li>
-<li>non-<code>tv_special</code> entries reject runtime <code>&lt; 15</code>.</li>
-<li>non-<code>tv_special</code> one-shot entries reject <code>episode_count == 1</code> and runtime <code>&lt;= 30</code>.</li>
-<li>Seed mode is <code>canonical_only</code> (seed must be known canonical root).</li>
-</ul>
-<p>Default profile values:</p>
-<ul>
-<li><code>seed_mode</code>: <code>canonical_only</code></li>
-<li><code>continuity_mode</code>: <code>none</code></li>
-<li><code>satellites_mode</code>: <code>direct_only</code></li>
-<li><code>component_root_mode</code>: <code>canonical_component_root</code></li>
-<li><code>ignored_media_types</code>: <code>{"cm", "pv"}</code></li>
-<li><code>include_relation_types</code>: <code>{"spin_off", "alternative_version", "side_story"}</code></li>
-<li><code>min_runtime_minutes</code>: <code>15</code></li>
+<li>Adds selected side content around the main continuity.</li>
+<li>More aggressive than <code>continuity</code>.</li>
+<li>Useful when users want side stories, alternatives, or selected spin-offs.</li>
 </ul>
 <h3 id="complete"><code>complete</code><a class="headerlink" href="#complete" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Union of <code>continuity</code> and <code>satellites</code> selections.</li>
-<li>Continues to inherit <code>satellites</code> direct-only behavior from <code>direct_candidates</code> only.</li>
+<li>Maximum franchise coverage.</li>
+<li>Combines <code>continuity</code> and <code>satellites</code>.</li>
+<li>Useful for users who want the broadest automatic coverage.</li>
 </ul>
-<p>Default profile values:</p>
+<p>All automatically imported entries are created with the <code>Planning</code> status.</p>
+<p>Users remain responsible for moving imported entries to another status when they decide to start watching them.</p>
+<h2 id="profiles">Profiles<a class="headerlink" href="#profiles" title="Permanent link">&para;</a></h2>
+<h3 id="continuity_1"><code>continuity</code><a class="headerlink" href="#continuity_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>seed_mode</code>: <code>all_library</code></li>
-<li><code>continuity_mode</code>: <code>transitive</code></li>
-<li><code>satellites_mode</code>: <code>direct_only</code></li>
-<li><code>component_root_mode</code>: <code>canonical_component_root</code></li>
+<li>Seed mode: all eligible library MAL anime entries.</li>
+<li>Continuity mode: transitive continuity component.</li>
+<li>Selects IDs from <code>snapshot.continuity_component</code>.</li>
+<li>Excludes MAL media types <code>cm</code> and <code>pv</code>.</li>
+<li>Excludes entries with runtime <code>&lt;= 15</code> minutes when runtime is known.</li>
+<li>Excludes targets of normalized <code>summary</code> relations.</li>
 </ul>
-<h2 id="scan-state-model">Scan state model<a class="headerlink" href="#scan-state-model" title="Permanent link">&para;</a></h2>
-<p><code>AnimeImportScanState</code> persists per <code>(user, seed_mal_id, profile_key)</code>:</p>
+<h3 id="satellites_1"><code>satellites</code><a class="headerlink" href="#satellites_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li><code>next_scan_at</code></li>
-<li><code>last_result_fingerprint</code></li>
-<li><code>consecutive_stable_scans</code></li>
-<li><code>consecutive_error_count</code></li>
-<li><code>component_root_mal_id</code></li>
-<li>plus timestamps (<code>last_scanned_at</code>, <code>last_success_at</code>, <code>last_error_at</code>, <code>last_change_at</code>).</li>
+<li>Seed mode: canonical roots only, based on known scan-state component root.</li>
+<li>Satellites mode: direct-only.</li>
+<li>Included relation types: <code>spin_off</code>, <code>alternative_version</code>, <code>side_story</code>.</li>
+<li>Excludes MAL media types <code>cm</code> and <code>pv</code>.</li>
+<li><code>tv_special</code> requires known runtime greater than 15 minutes.</li>
+<li>Other targets require known runtime at least 15 minutes.</li>
+<li>Single-episode entries with runtime <code>&lt;= 30</code> minutes are excluded.</li>
 </ul>
-<p><code>AnimeImportStateService</code> handles:</p>
+<h3 id="complete_1"><code>complete</code><a class="headerlink" href="#complete_1" title="Permanent link">&para;</a></h3>
 <ul>
-<li>due seed selection (<code>select_due_seeds</code>),</li>
-<li>deterministic fingerprinting,</li>
-<li>success/error recording with backoff and jitter,</li>
-<li><code>mark_due_now()</code> for immediate scheduling.</li>
+<li>Union of <code>continuity</code> and <code>satellites</code>.</li>
+<li>Fingerprint payload includes both profile selections and the union IDs.</li>
 </ul>
-<h3 id="incremental-behavior">Incremental behavior<a class="headerlink" href="#incremental-behavior" title="Permanent link">&para;</a></h3>
+<h2 id="seed-selection">Seed selection<a class="headerlink" href="#seed-selection" title="Permanent link">&para;</a></h2>
+<p><code>AnimeImportStateService.select_due_seeds()</code> considers existing <code>Anime</code> rows where:</p>
 <ul>
-<li>Changed result fingerprint =&gt; short delay (base 6h).</li>
-<li>Stable fingerprint =&gt; increasing delay (base 12h, exponential up to 14 days).</li>
-<li>Errors =&gt; exponential backoff up to 24h base (plus jitter).</li>
+<li>source is MAL;</li>
+<li>media type is anime;</li>
+<li>status is <code>Planning</code>, <code>In progress</code>, or <code>Completed</code>.</li>
 </ul>
-<h2 id="hot-priority-behavior-on-save">Hot-priority behavior on save<a class="headerlink" href="#hot-priority-behavior-on-save" title="Permanent link">&para;</a></h2>
-<p><code>Anime.save()</code> marks MAL anime seeds due immediately when:</p>
+<p>Optional filters:</p>
 <ul>
-<li>a MAL anime entry is newly created, <strong>or</strong></li>
-<li>status changes to <code>In progress</code> or <code>Completed</code>.</li>
+<li><code>--user-id</code> limits users;</li>
+<li><code>--limit</code> caps selected due seeds;</li>
+<li><code>--full-rescan</code> bypasses next-scan due checks.</li>
 </ul>
-<p>It calls <code>AnimeImportStateService.mark_due_now()</code> for all import profiles.</p>
-<h2 id="entry-creation-and-notifications">Entry creation and notifications<a class="headerlink" href="#entry-creation-and-notifications" title="Permanent link">&para;</a></h2>
-<p>Import creation path (<code>anime_franchise_import.py</code>):</p>
+<p>Canonical-only profiles use known <code>component_root_mal_id</code> from previous scan state to avoid scanning satellite profiles from every library entry.</p>
+<h2 id="scan-state">Scan state<a class="headerlink" href="#scan-state" title="Permanent link">&para;</a></h2>
+<p><code>AnimeImportScanState</code> is keyed logically by user, seed MAL ID, and profile. It stores:</p>
 <ul>
-<li>creates missing MAL anime entries (<code>Anime</code> + <code>Item</code>),</li>
-<li>marks <code>_skip_hot_priority=True</code> during import-created save to avoid recursive reprioritization,</li>
-<li>queues <code>notify_entry_added_after_commit(...)</code>.</li>
+<li>last result fingerprint;</li>
+<li>last scanned/success/error timestamps;</li>
+<li>consecutive stable scan count;</li>
+<li>consecutive error count;</li>
+<li>next scan timestamp;</li>
+<li>canonical component root;</li>
+<li>last component size.</li>
 </ul>
-<p>This keeps import and manual creation aligned with the same notification flow.</p>
-<h2 id="execution-surfaces">Execution surfaces<a class="headerlink" href="#execution-surfaces" title="Permanent link">&para;</a></h2>
-<h3 id="celery-task">Celery task<a class="headerlink" href="#celery-task" title="Permanent link">&para;</a></h3>
+<p>Success behavior:</p>
 <ul>
-<li><code>app/tasks.py</code> task <code>import_anime_franchise</code>.</li>
-<li>Uses cache lock key <code>anime-franchise-import:{profile}</code>.</li>
-<li>Skips run when another run for same profile is active.</li>
+<li>changed fingerprint: reset stable scans and scan again sooner;</li>
+<li>unchanged fingerprint: increment stable scans and increase delay;</li>
+<li>stable delays include deterministic jitter and cap at a long interval.</li>
 </ul>
-<h3 id="django-command">Django command<a class="headerlink" href="#django-command" title="Permanent link">&para;</a></h3>
+<p>Error behavior:</p>
 <ul>
-<li><code>python manage.py import_anime_franchise --profile ...</code></li>
-<li>Supports <code>--dry-run</code>, <code>--full-rescan</code>, <code>--limit</code>, <code>--refresh-cache</code>, <code>--user-id</code>.</li>
+<li>increment error count;</li>
+<li>exponential backoff up to 24 hours;</li>
+<li>deterministic jitter to avoid synchronized retries.</li>
 </ul>
-<h3 id="scheduler-and-settings">Scheduler and settings<a class="headerlink" href="#scheduler-and-settings" title="Permanent link">&para;</a></h3>
+<h2 id="entry-creation">Entry creation<a class="headerlink" href="#entry-creation" title="Permanent link">&para;</a></h2>
+<p>For each selected missing MAL ID:</p>
 <ul>
-<li><code>app/schedules.py</code> builds optional beat entry.</li>
-<li><code>config/settings.py</code> controls:</li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></li>
+<li>fetch minimal MAL anime metadata;</li>
+<li>create or reuse the shared <code>Item</code> row;</li>
+<li>create an <code>Anime</code> row for the user;</li>
+<li>default status is <code>Planning</code>;</li>
+<li><code>_skip_hot_priority</code> is set to avoid recursive hot-priority import triggers from the importer-created row.</li>
+</ul>
+<p>Creation happens in a transaction. A dry run counts planned creations without writing entries or scan-state successes.</p>
+<h2 id="notifications">Notifications<a class="headerlink" href="#notifications" title="Permanent link">&para;</a></h2>
+<p>Created entries call the existing entry-added notification hook after transaction commit. Notification delivery still follows the existing events/notification subsystem behavior and user configuration.</p>
+<h2 id="cache-warmup-after-import">Cache warmup after import<a class="headerlink" href="#cache-warmup-after-import" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Import creates entries
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> -&gt; transaction commit
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> -&gt; cache warm task scheduled
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a> -&gt; detail page can later use prebuilt franchise payload
+</span></code></pre></div>
+<p>The importer schedules one forced cache warm build per component root per run. Warmup bypasses freshness checks because the user's library changed, but still uses queue locks to avoid duplicate enqueues.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<p>The checked-in Compose services are <code>yamtrack</code> and <code>redis</code>.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>satellites<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span><span class="nb">complete</span><span class="w"> </span>--full-rescan<span class="w"> </span>--refresh-cache
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span>
+</span></code></pre></div>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></td>
+<td>Enables or disables scheduled franchise import automation.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></td>
+<td>Beat interval between automatic import runs.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></td>
+<td>Profile used by the scheduled import task, such as <code>continuity</code>, <code>satellites</code>, or <code>complete</code>.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></td>
+<td>Tells scheduled imports whether MAL/provider cache should be refreshed during import.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></td>
+<td>Forces scheduled imports to ignore due times and rescan eligible seeds.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></td>
+<td>Maximum number of due seeds processed per scheduled run when configured.</td>
+</tr>
+<tr>
+<td><code>MAL_RATE_LIMIT_PER_MINUTE</code></td>
+<td>Controls MAL provider request rate to avoid hitting API limits.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="failure-behavior">Failure behavior<a class="headerlink" href="#failure-behavior" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The Celery import task uses lock key <code>anime-franchise-import:&lt;profile&gt;</code> and skips if the same profile is already running.</li>
+<li>Per-seed errors are counted and recorded in scan state when not dry-running.</li>
+<li>A failed seed does not abort the whole import run.</li>
+<li>Cache warmup scheduling errors are counted separately from entry creation errors.</li>
 </ul>
 
 

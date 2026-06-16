@@ -25,7 +25,7 @@
     
     
       
-        <title>Anime Franchise Grouping (MAL anime) — Reference - Yamtrack Documentation</title>
+        <title>Anime franchise grouping - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#anime-franchise-grouping-mal-anime-reference" class="md-skip">
+        <a href="#anime-franchise-grouping" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Anime Franchise Grouping (MAL anime) — Reference
+              Anime franchise grouping
             
           </span>
         </div>
@@ -579,66 +579,121 @@
   
 
 
-<h1 id="anime-franchise-grouping-mal-anime-reference">Anime Franchise Grouping (MAL anime) — Reference<a class="headerlink" href="#anime-franchise-grouping-mal-anime-reference" title="Permanent link">&para;</a></h1>
-<p>This is the reference document for the <strong>current</strong> MAL anime franchise UI grouping path.</p>
-<p>It describes what is executed today, how placement is decided, and where compatibility layers still exist.</p>
-<h2 id="1-functional-scope">1) Functional scope<a class="headerlink" href="#1-functional-scope" title="Permanent link">&para;</a></h2>
+<h1 id="anime-franchise-grouping">Anime franchise grouping<a class="headerlink" href="#anime-franchise-grouping" title="Permanent link">&para;</a></h1>
+<h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
+<p>For MAL anime detail pages, the grouping behavior is:</p>
 <ul>
-<li>Feature-gated by <code>ANIME_FRANCHISE_GROUPING_ENABLED</code>.</li>
-<li>Applied in <code>media_details</code> only for <code>source=mal</code> and <code>media_type=anime</code>.</li>
-<li>Produces <code>anime_franchise</code> context consumed by <code>templates/app/media_details.html</code>.</li>
-<li>Import projection is intentionally out of scope for this document.</li>
+<li>a fixed <code>Series</code> block built from franchise continuity TV-line data;</li>
+<li>dynamic secondary sections assigned by ordered rule packs:</li>
+<li><code>Main Story Extras</code></li>
+<li><code>Specials</code></li>
+<li><code>Related Series</code></li>
 </ul>
-<h2 id="2-principal-runtime-path-today">2) Principal runtime path (today)<a class="headerlink" href="#2-principal-runtime-path-today" title="Permanent link">&para;</a></h2>
-<ol>
-<li><code>AnimeFranchiseService</code> (<code>src/app/services/anime_franchise.py</code>)</li>
-<li><code>AnimeFranchiseUiPipeline</code> (<code>src/app/services/anime_franchise_ui/__init__.py</code>)</li>
-<li><code>SeriesBuilder</code></li>
-<li><code>UiCandidateAssembler</code></li>
-<li><code>RulePipeline</code></li>
-<li><code>LayoutCompiler</code></li>
-<li><code>ViewModelAdapter</code></li>
-<li><code>views.py</code> integration + enrichment (<code>anime_franchise</code> reconstruction)</li>
-<li><code>anime_franchise_footer.py</code> footer labels/badges</li>
-<li><code>templates/app/media_details.html</code> presentation</li>
-</ol>
-<h2 id="3-snapshot-semantics-canonical-input">3) Snapshot semantics (canonical input)<a class="headerlink" href="#3-snapshot-semantics-canonical-input" title="Permanent link">&para;</a></h2>
-<p><code>AnimeFranchiseSnapshot</code> (from <code>anime_franchise_snapshot.py</code>) is the canonical franchise state used by UI and import projections.</p>
-<p>Current fields and meaning:</p>
+<p>The feature is guarded by <code>ANIME_FRANCHISE_GROUPING_ENABLED</code> and only applies to MAL anime detail pages.</p>
+<h2 id="example-layout">Example layout<a class="headerlink" href="#example-layout" title="Permanent link">&para;</a></h2>
+<p>A large franchise can be split into clearer groups instead of one flat related-anime list.</p>
+<p>Example:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Series
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  Main TV entry
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  Sequel TV entry
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Main Story Extras
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  Main-story movie
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>  Main-story OVA
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>Specials
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>  Recap episode
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>  Short special
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>Spin Offs
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>  Substantial spin-off series
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>Alternatives
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>  Alternative version
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>Related Series
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>  Residual related entry
+</span></code></pre></div>
+<p>The exact section depends on MAL relation data, anime format, runtime, anchors, and the ordered rule packs. Sections appear only when they have entries.</p>
+<h2 id="runtime-path">Runtime path<a class="headerlink" href="#runtime-path" title="Permanent link">&para;</a></h2>
+<p>The active UI grouping path is:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>AnimeFranchiseService
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a> -&gt; AnimeFranchiseSnapshotService
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a> -&gt; AnimeFranchiseUiPipeline
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a> -&gt; SeriesBuilder
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a> -&gt; UiCandidateAssembler
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a> -&gt; RulePipeline
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a> -&gt; LayoutCompiler
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a> -&gt; ViewModelAdapter
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a> -&gt; cache/context preparation
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a> -&gt; media_details.html
+</span></code></pre></div>
+<p>For the broader app architecture, see <code>docs/architecture-overview.md</code>.</p>
+<h2 id="snapshot-input">Snapshot input<a class="headerlink" href="#snapshot-input" title="Permanent link">&para;</a></h2>
+<p>Grouping consumes snapshot facts such as:</p>
 <ul>
-<li><code>continuity_component</code>: transitive node set connected by continuity relations (prequel/sequel).</li>
-<li><code>series_line</code>: TV-only continuity line (ordered).</li>
-<li><code>direct_anchors</code>: anchors used for direct-neighbor harvesting.</li>
-<li><code>direct_candidates</code>: direct normalized relations collected from anchors.</li>
-<li><code>promoted_continuity_candidates</code>: UI-only continuity projection that extends direct non-TV continuity seeds transitively for <code>Main Story Extras</code>.</li>
-<li><code>promoted_continuity_candidates</code> is not an import input; import profiles continue to read only their own selection inputs.</li>
-<li><code>canonical_root_media_id</code>: stable root ID for the continuity component.</li>
-<li><code>fallback_anchor_media_id</code>: fallback direct anchor when there is no <code>series_line</code>.</li>
-<li><code>has_series_line</code>: convenience flag for TV continuity availability.</li>
+<li><code>series_line</code></li>
+<li><code>direct_candidates</code></li>
+<li><code>promoted_continuity_candidates</code></li>
+<li><code>no_series_line_secondary_candidates</code></li>
+<li><code>root_story_parent_candidates</code></li>
+<li><code>canonical_root_media_id</code></li>
+<li><code>fallback_anchor_media_id</code></li>
+<li><code>has_series_line</code></li>
 </ul>
-<h3 id="current-fallback-behavior-when-has_series_line-is-false">Current fallback behavior when <code>has_series_line</code> is false<a class="headerlink" href="#current-fallback-behavior-when-has_series_line-is-false" title="Permanent link">&para;</a></h3>
+<p>For the full snapshot field reference and invariants, see <code>docs/anime-franchise-snapshot.md</code>.</p>
+<h2 id="series-block">Series block<a class="headerlink" href="#series-block" title="Permanent link">&para;</a></h2>
+<p><code>SeriesBuilder</code> is intentionally narrow:</p>
 <ul>
-<li><code>Series</code> remains empty.</li>
-<li>Direct-candidate collection still runs from fallback/root anchor.</li>
-<li>No synthetic/fake series row is injected.</li>
+<li>reads only <code>snapshot.series_line</code>;</li>
+<li>keeps <code>Series</code> separate from dynamic sections;</li>
+<li>stores real MAL titles and media metadata;</li>
+<li>does not invent display labels.</li>
 </ul>
-<h2 id="4-fixed-series-vs-dynamic-secondary-sections">4) Fixed <code>Series</code> vs dynamic secondary sections<a class="headerlink" href="#4-fixed-series-vs-dynamic-secondary-sections" title="Permanent link">&para;</a></h2>
-<h3 id="fixed-series-block-principal-contract">Fixed <code>Series</code> block (principal contract)<a class="headerlink" href="#fixed-series-block-principal-contract" title="Permanent link">&para;</a></h3>
+<p>If there is no <code>series_line</code>, the fixed <code>Series</code> block has no entries. Secondary candidates may still render if rules classify them into visible sections.</p>
+<h2 id="secondary-sections">Secondary sections<a class="headerlink" href="#secondary-sections" title="Permanent link">&para;</a></h2>
+<p>Candidate assembly excludes fixed series entries and keeps provenance metadata for rules:</p>
 <ul>
-<li>Built only by <code>SeriesBuilder</code> from <code>snapshot.series_line</code>.</li>
-<li>Not produced by section rule packs.</li>
-<li>Not treated as a dynamic section.</li>
+<li>relation types;</li>
+<li>source media IDs;</li>
+<li>whether a relation came from the series line or root;</li>
+<li>promoted continuity metadata;</li>
+<li>no-series ordering metadata;</li>
+<li>root-story-parent metadata.</li>
 </ul>
-<h3 id="dynamic-secondary-sections">Dynamic secondary sections<a class="headerlink" href="#dynamic-secondary-sections" title="Permanent link">&para;</a></h3>
+<p>Current visible section titles defined by section metadata include:</p>
 <ul>
-<li>Candidates come from <code>UiCandidateAssembler</code>.</li>
-<li><code>continuity_extras</code> can use both direct candidates and promoted transitive non-TV continuity candidates.</li>
-<li>Promoted continuity anchoring exception is intentionally scoped to candidates already classified as <code>continuity_extras</code>.</li>
-<li>Placement/refinement occurs in ordered rule packs.</li>
-<li>Final grouping/ordering is compiled by <code>LayoutCompiler</code>.</li>
+<li><code>Main Story Extras</code> (<code>continuity_extras</code>)</li>
+<li><code>Specials</code> (<code>specials</code>)</li>
+<li><code>Spin Offs</code> (<code>spin_offs</code>)</li>
+<li><code>Alternatives</code> (<code>alternatives</code>)</li>
+<li><code>Related Series</code> (<code>related_series</code>)</li>
 </ul>
-<h2 id="5-rule-pack-order-and-actual-engine-behavior">5) Rule pack order and actual engine behavior<a class="headerlink" href="#5-rule-pack-order-and-actual-engine-behavior" title="Permanent link">&para;</a></h2>
-<p>Preset order (<code>anime_franchise_ui/presets/default.py</code>):</p>
+<p><code>Spin Offs</code> and <code>Alternatives</code> are visible refinement sections when candidates meet the current rules. They are still dynamic sections, not part of the fixed <code>Series</code> contract. <code>ignored</code> is internal and marked not visible.</p>
+<h2 id="ui-grouping-is-not-import-selection">UI grouping is not import selection<a class="headerlink" href="#ui-grouping-is-not-import-selection" title="Permanent link">&para;</a></h2>
+<p>UI grouping and import selection are separate projections built from the same snapshot.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Snapshot fact
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    ↓
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>UI grouping decision
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    ↓
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Visible section
+</span></code></pre></div>
+<p>A visible section is the result of UI policy, not a canonical franchise fact.</p>
+<p>A franchise entry can appear in a visible UI section without being imported automatically. Import profiles decide what is useful enough to create in a user's library; UI grouping decides how already-known franchise entries should be displayed on a detail page.</p>
+<p>Do not use UI sections as direct import-profile input unless the import policy explicitly evolves to do so.</p>
+<h2 id="badges-and-tooltips">Badges and tooltips<a class="headerlink" href="#badges-and-tooltips" title="Permanent link">&para;</a></h2>
+<p>Franchise entries can display small badges that summarize useful relation and format information directly on the detail page.</p>
+<p>These badges are presentation helpers. They make entries easier to scan, but they do not decide section placement.</p>
+<p>Typical badge information includes:</p>
+<ul>
+<li>normalized relation label;</li>
+<li>anime format/media type;</li>
+<li>relation source tooltip when available;</li>
+<li>current-entry marker when the entry is the page being viewed.</li>
+</ul>
+<p>Placement still belongs to the UI rule pipeline. Badge and tooltip preparation belongs to request/context rendering helpers.</p>
+<h2 id="rule-engine">Rule engine<a class="headerlink" href="#rule-engine" title="Permanent link">&para;</a></h2>
+<p>Current rule-pack order from <code>presets/default.py</code>:</p>
 <ol>
 <li><code>base_facts</code></li>
 <li><code>base_placement</code></li>
@@ -648,125 +703,338 @@
 <li><code>format_rules</code></li>
 <li><code>section_rules</code></li>
 </ol>
-<h3 id="behavior-model-current-accurate">Behavior model (current, accurate)<a class="headerlink" href="#behavior-model-current-accurate" title="Permanent link">&para;</a></h3>
+<p>This is not a global first-match-wins pipeline. A later pack can refine or override <code>candidate.section_key</code>. When a section changes, the engine appends a <code>placement_trace</code> entry with pack, rule, previous section, next section, and whether it was initial placement or an override.</p>
+<p><code>section_rules</code> should remain metadata-focused: titles, order, and hidden-if-empty behavior. It should not become a placement policy layer.</p>
+<h2 id="rule-engine-design">Rule engine design<a class="headerlink" href="#rule-engine-design" title="Permanent link">&para;</a></h2>
+<p>The grouping pipeline is implemented as ordered rule packs. Each pack owns a specific responsibility and should not perform work that belongs to another pack.</p>
+<p>The pipeline is not a global first-match-wins classifier. Earlier packs can assign initial facts or placement, and later packs can refine or override <code>candidate.section_key</code>. Any section change should remain traceable through <code>metadata["placement_trace"]</code>.</p>
+<p>The intended flow is:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>facts
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a> -&gt; initial placement
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a> -&gt; relation classification
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; secondary refinement
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a> -&gt; anchor gating
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a> -&gt; format/runtime gating
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a> -&gt; section metadata
+</span></code></pre></div>
+<h2 id="placement-lifecycle">Placement lifecycle<a class="headerlink" href="#placement-lifecycle" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Candidate discovered
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>        ↓
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>base_facts
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        ↓
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>normalized facts available
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>base_placement
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        ↓
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>fallback section assigned
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>relation_rules
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        ↓
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>relation-based placement
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>secondary_refinement_rules
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>        ↓
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>optional refinement
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>anchor_rules
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>        ↓
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>candidate may be accepted or rejected
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>format_rules
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>        ↓
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>candidate may be accepted or excluded
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>section_rules
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>        ↓
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>section metadata applied
+</span></code></pre></div>
+<p>Not every candidate changes at every step. Some packs only enrich candidate metadata, some assign an initial section, some refine an existing section, some filter by moving a candidate to <code>ignored</code>, and the final section pack only applies section metadata.</p>
+<h2 id="override-model">Override model<a class="headerlink" href="#override-model" title="Permanent link">&para;</a></h2>
+<p>Rule packs do not all have the same authority. Some packs create information, some classify candidates, some refine existing classification, some can only filter visibility, and some can only add metadata.</p>
+<table>
+<thead>
+<tr>
+<th>Pack</th>
+<th>Can place</th>
+<th>Can refine</th>
+<th>Can exclude</th>
+<th>Can add metadata</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>base_facts</code></td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>base_placement</code></td>
+<td>Yes</td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>relation_rules</code></td>
+<td>Yes</td>
+<td>Yes</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>secondary_refinement_rules</code></td>
+<td>No</td>
+<td>Yes</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>anchor_rules</code></td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>format_rules</code></td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><code>section_rules</code></td>
+<td>No</td>
+<td>No</td>
+<td>No</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p>A section can therefore be overwritten by later classification or refinement packs, but final metadata should not move candidates. Filtering packs should answer whether an already-classified candidate is allowed to appear.</p>
+<h2 id="why-the-pack-order-exists">Why the pack order exists<a class="headerlink" href="#why-the-pack-order-exists" title="Permanent link">&para;</a></h2>
+<p>The order is intentional, not arbitrary.</p>
+<h3 id="facts-before-placement">Facts before placement<a class="headerlink" href="#facts-before-placement" title="Permanent link">&para;</a></h3>
+<p>Relation and provenance facts must exist before any reliable placement decision can be made. This keeps later packs from reimplementing low-level relation checks.</p>
+<h3 id="placement-before-refinement">Placement before refinement<a class="headerlink" href="#placement-before-refinement" title="Permanent link">&para;</a></h3>
+<p>A candidate needs an initial section before refinement can make it more precise. <code>base_placement</code> guarantees a predictable fallback, then relation rules provide the first meaningful business placement.</p>
+<h3 id="refinement-before-filtering">Refinement before filtering<a class="headerlink" href="#refinement-before-filtering" title="Permanent link">&para;</a></h3>
+<p>The pipeline classifies first, then decides whether the classified candidate is allowed to appear. This keeps visibility constraints separate from relation semantics.</p>
+<h3 id="filtering-before-metadata">Filtering before metadata<a class="headerlink" href="#filtering-before-metadata" title="Permanent link">&para;</a></h3>
+<p>Visible sections are determined before titles, ordering, and hidden-if-empty behavior are stabilized. <code>section_rules</code> should describe sections, not reclassify entries.</p>
+<h2 id="placement-vs-refinement">Placement vs refinement<a class="headerlink" href="#placement-vs-refinement" title="Permanent link">&para;</a></h2>
+<p>Placement answers:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Where would this candidate belong?
+</span></code></pre></div>
+<p>Refinement answers:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Can we place it more precisely?
+</span></code></pre></div>
+<p><code>relation_rules</code> and <code>secondary_refinement_rules</code> are separated on purpose. Relation rules perform broad business classification; secondary refinement can promote broad related-series candidates into specialized buckets such as substantial spin-offs or alternatives. Keeping refinement separate prevents relation classification from becoming a monolithic ruleset and makes specialized secondary categories easier to evolve independently.</p>
+<h2 id="why-refinement-exists">Why refinement exists<a class="headerlink" href="#why-refinement-exists" title="Permanent link">&para;</a></h2>
+<p><code>relation_rules</code> answers the broad question:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Which family does this entry belong to?
+</span></code></pre></div>
+<p><code>secondary_refinement_rules</code> answers the narrower question:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Can this broad placement be made more precise?
+</span></code></pre></div>
+<p>Examples:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>related_series -&gt; spin_offs
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>related_series -&gt; alternatives
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>specials -&gt; related_series
+</span></code></pre></div>
+<p>This keeps the first relation classification readable while allowing specialized secondary sections to evolve independently.</p>
+<h2 id="placement-vs-filtering">Placement vs filtering<a class="headerlink" href="#placement-vs-filtering" title="Permanent link">&para;</a></h2>
+<p>Placement determines the intended section. Filtering determines whether the candidate is allowed to appear.</p>
+<h3 id="anchor_rules"><code>anchor_rules</code><a class="headerlink" href="#anchor_rules" title="Permanent link">&para;</a></h3>
+<p>These rules ask:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>Is this candidate allowed from this anchor?
+</span></code></pre></div>
+<p>They should not answer where the candidate belongs. They preserve directness and accepted-anchor constraints after placement/refinement has already happened.</p>
+<h3 id="format_rules"><code>format_rules</code><a class="headerlink" href="#format_rules" title="Permanent link">&para;</a></h3>
+<p>These rules ask:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Is this format allowed?
+</span></code></pre></div>
+<p>They should not answer where the candidate belongs. They keep format/runtime visibility decisions independent from relation classification.</p>
+<h2 id="reading-placement_trace">Reading placement_trace<a class="headerlink" href="#reading-placement_trace" title="Permanent link">&para;</a></h2>
+<p><code>placement_trace</code> is the decision log for section changes. A typical trace can look like:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>fallback placement
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>        ↓
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>relation placement
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>        ↓
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>secondary refinement
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>        ↓
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>anchor or format filtering
+</span></code></pre></div>
+<p>Use it first when a candidate appears in an unexpected section or disappears into <code>ignored</code>. It shows which pack and rule changed <code>candidate.section_key</code>, whether the change was initial placement or an override, and what the previous and next section values were.</p>
+<h2 id="rule-pack-responsibilities">Rule pack responsibilities<a class="headerlink" href="#rule-pack-responsibilities" title="Permanent link">&para;</a></h2>
+<h3 id="base_factspy"><code>base_facts.py</code><a class="headerlink" href="#base_factspy" title="Permanent link">&para;</a></h3>
+<p>Owns normalized candidate facts used by later packs.</p>
+<p>Responsibilities:</p>
 <ul>
-<li>Packs run in order.</li>
-<li><code>base_placement</code> provides initial section hypothesis.</li>
-<li><code>secondary_refinement_rules</code> refines coarse secondary placement after <code>relation_rules</code>: it can reclassify TV side stories and very short side stories from <code>specials</code> to <code>related_series</code>, then refine <code>related_series</code> into <code>alternatives</code> and substantial UI <code>spin_offs</code> before format filtering.</li>
-<li>Section ordering intent keeps <code>spin_offs</code> first, then <code>alternatives</code>, then residual <code>related_series</code>.</li>
-<li>Later packs may override <code>candidate.section_key</code>.</li>
-<li><code>section_rules</code> is metadata-only (title/order/hidden policy), no candidate placement actions.</li>
-<li>The engine appends <code>metadata["placement_trace"]</code> whenever <code>section_key</code> changes.</li>
+<li>populate relation/provenance-derived helper signals;</li>
+<li>normalize candidate metadata into reusable facts;</li>
+<li>keep later packs from recomputing low-level relation checks.</li>
 </ul>
-<p>This is <strong>not</strong> a global “first-match-wins” engine.</p>
-<h2 id="6-responsibilities-by-layer-clear-boundaries">6) Responsibilities by layer (clear boundaries)<a class="headerlink" href="#6-responsibilities-by-layer-clear-boundaries" title="Permanent link">&para;</a></h2>
-<h3 id="business-placement-logic-principal">Business placement logic (principal)<a class="headerlink" href="#business-placement-logic-principal" title="Permanent link">&para;</a></h3>
+<p>Must not:</p>
 <ul>
-<li><code>anime_franchise_ui/rules/*.py</code></li>
+<li>assign final product section policy;</li>
+<li>define section metadata;</li>
+<li>perform template/display work.</li>
 </ul>
-<h3 id="structural-only">Structural-only<a class="headerlink" href="#structural-only" title="Permanent link">&para;</a></h3>
+<h3 id="base_placementpy"><code>base_placement.py</code><a class="headerlink" href="#base_placementpy" title="Permanent link">&para;</a></h3>
+<p>Owns base section definitions and initial fallback placement.</p>
+<p>Responsibilities:</p>
 <ul>
-<li><code>anime_franchise_ui/layout.py</code></li>
-<li>Groups by section key, applies section definitions, ordering, hidden-if-empty.</li>
-<li>Does not replay relation/anchor/format business policy.</li>
+<li>declare available section definitions;</li>
+<li>set initial fallback placement for unclassified candidates;</li>
+<li>keep default placement predictable before relation-specific rules run.</li>
 </ul>
-<h3 id="compatibility-layer">Compatibility layer<a class="headerlink" href="#compatibility-layer" title="Permanent link">&para;</a></h3>
+<p>Must not:</p>
 <ul>
-<li><code>anime_franchise_ui/adapter.py</code></li>
-<li>Adapts compiled output to integration payload shape.</li>
-<li>No placement logic.</li>
+<li>implement detailed relation-specific business rules;</li>
+<li>apply format/runtime filtering.</li>
 </ul>
-<h3 id="integration-presentation-enrichment">Integration + presentation enrichment<a class="headerlink" href="#integration-presentation-enrichment" title="Permanent link">&para;</a></h3>
+<h3 id="relation_rulespy"><code>relation_rules.py</code><a class="headerlink" href="#relation_rulespy" title="Permanent link">&para;</a></h3>
+<p>Owns relation-driven classification.</p>
+<h4 id="why-this-pack-exists">Why this pack exists<a class="headerlink" href="#why-this-pack-exists" title="Permanent link">&para;</a></h4>
+<p>This pack performs the first meaningful business classification. It turns normalized relation signals into broad UI sections before specialized refinement or filtering happens.</p>
+<p>Responsibilities:</p>
 <ul>
-<li><code>app/views.py</code></li>
-<li><code>app/anime_franchise_footer.py</code></li>
+<li>classify candidates based on normalized relation signals;</li>
+<li>use <code>relation_types</code> and relation facts when a candidate has more than one relation signal;</li>
+<li>assign coarse business sections such as continuity extras, specials, or related-series candidates.</li>
 </ul>
-<p>Current view-side enrichment includes:</p>
+<p>Must not:</p>
 <ul>
-<li>rebuilding <code>anime_franchise</code> block for template contract,</li>
-<li>adding <code>series_label</code> (<code>Season N</code>) for series entries,</li>
-<li>applying footer-friendly relation/format labels and active-state markers.</li>
+<li>define visual titles/order;</li>
+<li>perform cache/import decisions.</li>
 </ul>
-<h3 id="template-role">Template role<a class="headerlink" href="#template-role" title="Permanent link">&para;</a></h3>
+<h3 id="secondary_refinement_rulespy"><code>secondary_refinement_rules.py</code><a class="headerlink" href="#secondary_refinement_rulespy" title="Permanent link">&para;</a></h3>
+<p>Owns refinement of broad secondary placement.</p>
+<h4 id="why-this-pack-exists_1">Why this pack exists<a class="headerlink" href="#why-this-pack-exists_1" title="Permanent link">&para;</a></h4>
+<p>This pack refines broad secondary placement without turning relation classification into a monolithic ruleset. It lets specialized secondary categories evolve independently from coarse relation semantics.</p>
+<p>Responsibilities:</p>
 <ul>
-<li><code>templates/app/media_details.html</code> consumes prepared context.</li>
-<li>Presentation/display logic only (loops/visibility checks), not classification logic.</li>
+<li>refine broad related-series candidates into more specific dynamic sections when the current policy allows it;</li>
+<li>handle substantial spin-offs, alternatives, or other refined secondary buckets;</li>
+<li>keep refinement separate from the first coarse relation classification.</li>
 </ul>
-<h2 id="7-relation-signal-fields-relation_type-relation_types-metadataorigins">7) Relation signal fields (<code>relation_type</code>, <code>relation_types</code>, <code>metadata["origins"]</code>)<a class="headerlink" href="#7-relation-signal-fields-relation_type-relation_types-metadataorigins" title="Permanent link">&para;</a></h2>
-<p>Current intent and practical use:</p>
+<p>Must not:</p>
 <ul>
-<li><code>relation_type</code>: compatibility facade (single representative relation value).</li>
-<li><code>relation_types</code>: richer multi-signal relation set (primary for ambiguous grouping cases).</li>
-<li><code>metadata["origins"]</code>: detailed provenance from assembler.</li>
+<li>bypass anchor or format rules;</li>
+<li>turn UI refinements into import-profile behavior.</li>
 </ul>
-<p>Important nuance:</p>
+<h3 id="anchor_rulespy"><code>anchor_rules.py</code><a class="headerlink" href="#anchor_rulespy" title="Permanent link">&para;</a></h3>
+<p>Owns directness and anchor gating.</p>
+<h4 id="why-this-pack-exists_2">Why this pack exists<a class="headerlink" href="#why-this-pack-exists_2" title="Permanent link">&para;</a></h4>
+<p>This pack separates relation semantics from visibility constraints. A candidate can have a valid relation-based section but still be rejected if it is not connected through an accepted UI anchor.</p>
+<p>Responsibilities:</p>
 <ul>
-<li><code>origins</code> is useful for debugging and targeted heuristics.</li>
-<li>It is not yet a broad standalone placement driver across the whole policy.</li>
+<li>enforce whether a candidate is allowed from a series-line anchor, fallback/root anchor, or promoted continuity path;</li>
+<li>reject candidates that are not connected through an accepted UI anchor;</li>
+<li>preserve the distinction between direct candidates and deliberately promoted transitive exceptions.</li>
 </ul>
-<h2 id="8-section-policy-current-maturity">8) Section policy (current maturity)<a class="headerlink" href="#8-section-policy-current-maturity" title="Permanent link">&para;</a></h2>
-<p>Visible sections currently configured:</p>
+<p>Must not:</p>
 <ul>
-<li><code>continuity_extras</code> (Main Story Extras)</li>
-<li><code>specials</code></li>
-<li><code>spin_offs</code></li>
-<li><code>alternatives</code></li>
-<li><code>related_series</code></li>
+<li>redefine relation semantics;</li>
+<li>define section titles/order.</li>
 </ul>
-<p>Internal compatibility/filtered section:</p>
+<h3 id="format_rulespy"><code>format_rules.py</code><a class="headerlink" href="#format_rulespy" title="Permanent link">&para;</a></h3>
+<p>Owns conservative format/runtime exclusions.</p>
+<h4 id="why-this-pack-exists_3">Why this pack exists<a class="headerlink" href="#why-this-pack-exists_3" title="Permanent link">&para;</a></h4>
+<p>This pack keeps visibility and content-policy decisions independent from relation classification. It prevents unsupported formats from leaking into sections that were otherwise valid by relation.</p>
+<p>Responsibilities:</p>
 <ul>
-<li><code>ignored</code> (<code>visible_in_ui=False</code>)</li>
+<li>ignore excluded MAL formats such as <code>cm</code> and <code>pv</code>;</li>
+<li>apply section-specific MAL format gates;</li>
+<li>apply runtime/episode thresholds when the UI policy requires them.</li>
 </ul>
-<p>Current policy is intentionally conservative and maintainable:</p>
+<p>Must not:</p>
 <ul>
-<li>coarse relation-driven placement,</li>
-<li>related-series refinement for substantial UI spin-offs and alternatives,</li>
-<li>anchor filtering for direct/fallback relevance,</li>
-<li>conservative format exclusions,</li>
-<li>section metadata stabilization pass.</li>
+<li>define section metadata;</li>
+<li>introduce user-specific behavior.</li>
 </ul>
-<p><code>related_series</code> remains the fallback residual bucket for related entries that are not captured by these refinements.</p>
-<p>The UI <code>spin_offs</code> section intentionally promotes only substantial MAL <code>spin_off</code> relations:</p>
+<h3 id="section_rulespy"><code>section_rules.py</code><a class="headerlink" href="#section_rulespy" title="Permanent link">&para;</a></h3>
+<p>Owns section metadata only.</p>
+<p>Responsibilities:</p>
 <ul>
-<li>TV spin-offs with enough episodes and standard per-episode runtime.</li>
-<li>Long movie spin-offs.</li>
+<li>set section titles;</li>
+<li>set section ordering;</li>
+<li>set visibility / hidden-if-empty policy;</li>
+<li>keep section metadata stable for the adapter/template.</li>
 </ul>
-<p>TV spin-offs require a known episode count &gt;= 6 and known runtime &gt;= 20 minutes per episode. Movie spin-offs require a known runtime &gt;= 60 minutes. Incomplete or smaller <code>spin_off</code> entries remain in <code>related_series</code>. This is only a UI classification rule and does not affect automatic import profiles.</p>
-<p>This is a solid base, but not presented as “fully refined for every MAL edge case”.</p>
-<h2 id="9-what-is-principal-vs-compatibility-vs-transitional">9) What is principal vs compatibility vs transitional<a class="headerlink" href="#9-what-is-principal-vs-compatibility-vs-transitional" title="Permanent link">&para;</a></h2>
+<p>Must not:</p>
 <ul>
-<li><strong>Principal / active path</strong>: service + modern UI pipeline + rules.</li>
-<li><strong>Structural-only</strong>: <code>layout.py</code>.</li>
-<li><strong>Compatibility layer</strong>: <code>adapter.py</code> payload-shape bridge.</li>
-<li><strong>Integration/presentation compatibility</strong>: view reconstruction + footer enrichment.</li>
-<li><strong>Transitional/legacy</strong>: older UI grouping mental models are not the main execution path.</li>
+<li>move candidates between sections;</li>
+<li>implement relation, anchor, or format business policy.</li>
 </ul>
-<h2 id="10-change-discipline">10) Change discipline<a class="headerlink" href="#10-change-discipline" title="Permanent link">&para;</a></h2>
+<h2 id="section-policy">Section policy<a class="headerlink" href="#section-policy" title="Permanent link">&para;</a></h2>
+<p>Current coarse policy:</p>
+<ul>
+<li><code>other</code>-only relations are ignored.</li>
+<li>Continuity (<code>prequel</code>, <code>sequel</code>) secondary entries go to <code>Main Story Extras</code> unless later format rules reject them.</li>
+<li><code>side_story</code>, <code>summary</code>, and <code>full_story</code> are treated as special-related signals, except root-story-parent handling.</li>
+<li>Spin-offs and alternatives start in related-series logic and can be refined into <code>Spin Offs</code> or <code>Alternatives</code>.</li>
+<li><code>cm</code> and <code>pv</code> are ignored.</li>
+<li>Specials are constrained to specific MAL formats.</li>
+<li>Indirect candidates without an accepted anchor are ignored.</li>
+</ul>
+<h2 id="special-cases">Special cases<a class="headerlink" href="#special-cases" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>No <code>series_line</code></strong>: candidates can anchor to <code>fallback_anchor_media_id</code>; no fixed <code>Series</code> entries are shown.</li>
+<li><strong>Non-TV root</strong>: direct anchors can include the root in addition to TV series-line nodes.</li>
+<li><strong>Specials / recaps / summaries</strong>: relation and format rules decide display; import profiles can exclude summary targets.</li>
+<li><strong>Direct <code>full_story</code> to TV parent</strong>: non-TV roots can expose a root-story-parent candidate and route it to related series.</li>
+<li><strong>No-series continuity</strong>: prequel/sequel continuity can be sorted through no-series metadata.</li>
+<li><strong>Transitive non-TV continuity</strong>: promoted continuity candidates allow non-TV prequel/sequel chains to be considered beyond direct neighbors.</li>
+<li><strong>Substantial spin-offs</strong>: TV spin-offs with enough episodes/runtime and long movies can be refined into <code>Spin Offs</code>.</li>
+<li><strong>Alternatives</strong>: <code>alternative_version</code> and <code>alternative_setting</code> can be refined into <code>Alternatives</code> with stable sort rank.</li>
+<li><strong>Direct vs transitive candidates</strong>: direct candidates come from anchors; promoted continuity candidates are deliberately scoped transitive exceptions.</li>
+</ul>
+<h2 id="cache-interaction">Cache interaction<a class="headerlink" href="#cache-interaction" title="Permanent link">&para;</a></h2>
+<p>The view uses <code>anime_franchise_cache.load_payload_for_media(media_id)</code>:</p>
+<ul>
+<li>fresh valid payload: render prepared franchise context;</li>
+<li>stale valid payload: render it and queue refresh if cooldown allows;</li>
+<li>miss: keep normal related-anime fallback visible and queue a build;</li>
+<li>invalid payload: ignore it, mark error metadata, and queue rebuild;</li>
+<li>valid but non-displayable payload: keep fallback visible.</li>
+</ul>
+<h2 id="ownership-summary">Ownership summary<a class="headerlink" href="#ownership-summary" title="Permanent link">&para;</a></h2>
+<p>Grouping policy belongs in rule packs. Candidate assembly preserves facts, layout remains structural, adapter remains compatibility-only, request context adds user-specific data, and templates render only.</p>
+<p>Legacy fields such as <code>series_label</code> may exist only for cached-payload compatibility. They are not current product behavior.</p>
+<p>For the broader layer map, see <code>docs/architecture-overview.md</code>.</p>
+<h2 id="relation-signals">Relation signals<a class="headerlink" href="#relation-signals" title="Permanent link">&para;</a></h2>
+<p>The UI pipeline may carry several relation-related fields. They are not interchangeable.</p>
+<h3 id="relation_type"><code>relation_type</code><a class="headerlink" href="#relation_type" title="Permanent link">&para;</a></h3>
+<p>Compatibility facade for a single representative normalized relation. Useful for simple display and legacy-compatible payload shapes, but it should not be treated as the only source of truth when a candidate has multiple relation signals.</p>
+<h3 id="relation_types"><code>relation_types</code><a class="headerlink" href="#relation_types" title="Permanent link">&para;</a></h3>
+<p>Richer normalized set/list of relation signals for a candidate. Used by rule packs when placement depends on ambiguous or multi-origin relations.</p>
+<h3 id="metadataorigins"><code>metadata["origins"]</code><a class="headerlink" href="#metadataorigins" title="Permanent link">&para;</a></h3>
+<p>Detailed provenance captured by candidate assembly. Useful for debugging, relation-source resolution, and targeted heuristics. It should not become a broad standalone placement system unless the rule policy explicitly evolves that way.</p>
+<h3 id="metadataplacement_trace"><code>metadata["placement_trace"]</code><a class="headerlink" href="#metadataplacement_trace" title="Permanent link">&para;</a></h3>
+<p>Debug trace appended when rule packs assign or change <code>candidate.section_key</code>. Useful to understand whether a candidate was initially placed, refined, ignored, or moved by a later pack.</p>
+<h2 id="change-discipline">Change discipline<a class="headerlink" href="#change-discipline" title="Permanent link">&para;</a></h2>
 <p>When changing grouping behavior:</p>
 <ol>
-<li>Change rule packs first (facts / placement / relation / anchor / format / section metadata).</li>
+<li>Identify the owner layer first: facts, placement, relation classification, secondary refinement, anchor gating, format gating, metadata, adapter, or rendering.</li>
+<li>Change rule packs before considering view/template changes.</li>
 <li>Keep <code>Series</code> sourced only from <code>snapshot.series_line</code>.</li>
-<li>Avoid adding business placement logic to layout/adapter/template.</li>
-<li>Update debugging/customization docs and tests with the behavior change.</li>
+<li>Keep layout structural-only.</li>
+<li>Keep adapter compatibility-only.</li>
+<li>Keep user-specific enrichment out of cached payloads.</li>
+<li>Update tests and docs with the behavior change.</li>
 </ol>
-<h2 id="async-complete-payload-cache">Async complete-payload cache<a class="headerlink" href="#async-complete-payload-cache" title="Permanent link">&para;</a></h2>
-<p>MAL anime grouping uses two complementary caches:</p>
-<ol>
-<li>The existing MAL anime cache stores individual MAL anime metadata records and remains responsible for cache/stale refresh of each anime entry.</li>
-<li>The complete franchise cache stores the assembled, template-ready franchise payload without user-specific data.</li>
-</ol>
-<p>The complete payload cache is keyed by the MAL anime ID:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Payload key: mal_anime_franchise_&lt;id&gt;
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Meta key: mal_anime_franchise_&lt;id&gt;:meta
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Queue lock: mal_anime_franchise_&lt;id&gt;:queue_lock
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Task lock: mal_anime_franchise_&lt;id&gt;:task_lock
-</span></code></pre></div>
-<p>On the first detail-page visit with no complete franchise payload, Yamtrack keeps <code>media.related.related_anime</code> visible as the lightweight fallback and queues <code>build_mal_anime_franchise_payload</code>. The HTTP view does not call <code>AnimeFranchiseService().build(...)</code> synchronously. After Celery finishes, a normal page refresh loads the complete franchise payload from cache, enriches it with the current user's status/progress during rendering, and hides <code>related_anime</code> to avoid duplicate franchise sections.</p>
-<p>Stale complete payloads are still displayed. If freshness/cooldown settings allow it, Yamtrack queues a background refresh while continuing to serve the stale payload.</p>
-<p>The complete franchise payload must remain user-agnostic: it must not contain <code>Item</code>, <code>BasicMedia</code>, progress, status, rendered HTML, or any <code>request.user</code>-dependent values. User-specific enrichment is performed only by <code>prepare_anime_franchise_context(...)</code> at render time.</p>
-<p>Cached franchise payloads are strictly validated before rendering. Invalid or malformed payloads are ignored, so the direct MAL <code>related_anime</code> fallback remains visible and a background rebuild can be queued. A valid payload with no series or section entries is also treated as non-displayable and does not hide <code>related_anime</code>.</p>
-<p>The cache writer refuses non JSON-safe values and user-specific keys; render-time user enrichment is never written back to the cached payload. If a background build produces an invalid payload, Yamtrack preserves the previous successful franchise payload and records the failure in metadata.</p>
-<p>The canonical alias layer is navigation infrastructure, not UI placement logic. It may alias continuity extras so pages for continuity movies/OVAs can reuse the canonical complete payload, but it must not change section placement. Placement remains owned by the UI rule pipeline. <code>continuity_extras</code> is aliasable because it represents the main-continuity entries outside the primary TV series line; secondary sections such as <code>specials</code>, <code>spin_offs</code>, <code>alternatives</code>, and <code>related_series</code> remain non-aliasable by default.</p>
+<h2 id="what-should-not-be-done-here">What should not be done here<a class="headerlink" href="#what-should-not-be-done-here" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Do not classify franchise entries in templates.</li>
+<li>Do not force sections in <code>views.py</code>.</li>
+<li>Do not mix import profile rules with UI placement rules.</li>
+<li>Do not duplicate MAL relation normalization in UI code.</li>
+<li>Do not write user-specific status/progress into cached payloads.</li>
+</ul>
 
 
 
