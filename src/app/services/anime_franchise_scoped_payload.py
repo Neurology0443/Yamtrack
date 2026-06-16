@@ -19,7 +19,8 @@ def _entry_from_node(target_node, *, relation, seed_media_id: str) -> dict:
     entry = {
         "media_id": str(target_node.media_id),
         "source": target_node.source,
-        "media_type": target_node.media_type,
+        "media_type": "anime",
+        "anime_media_type": target_node.media_type,
         "title": target_node.title,
         "relation_type": relation.relation_type,
         "relation_source_media_id": seed_media_id,
