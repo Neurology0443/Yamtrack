@@ -749,14 +749,97 @@
 <li>verify the requested media ID is aliasable;</li>
 <li>check that the build was not truncated.</li>
 </ul>
+<h2 id="franchise-payload-cache-alias-audit">Franchise payload cache alias audit<a class="headerlink" href="#franchise-payload-cache-alias-audit" title="Permanent link">&para;</a></h2>
+<p>A healthy franchise cache state must not contain both a direct payload and an alias for the same MAL anime media id. <code>load_payload_for_media(media_id)</code> checks the direct payload first, so a stale direct payload would shadow an alias that should resolve to the canonical payload.</p>
+<p>Run this compact audit from the repository root in Docker dev:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack-dev<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="s1">from django.core.cache import cache</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="s1">from app.models import Item, MediaTypes, Sources</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="s1">from app.services import anime_franchise_cache</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="s1">media_ids = list(</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="s1">    Item.objects.filter(</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="s1">        source=Sources.MAL.value,</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="s1">        media_type=MediaTypes.ANIME.value,</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="s1">    ).values_list(&quot;media_id&quot;, flat=True).distinct()</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="s1">)</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="s1">conflicts = []</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="s1">for media_id in media_ids:</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="s1">    direct = cache.get(anime_franchise_cache.get_payload_key(media_id))</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="s1">    alias = cache.get(anime_franchise_cache.get_alias_key(media_id))</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a><span class="s1">    if direct and alias:</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a><span class="s1">        conflicts.append(str(media_id))</span>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a><span class="s1">print(f&quot;checked_media_ids: {len(media_ids)}&quot;)</span>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="s1">print(f&quot;conflicts: {len(conflicts)}&quot;)</span>
+</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="s1">for media_id in conflicts:</span>
+</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a><span class="s1">    print(f&quot;CONFLICT_DIRECT_AND_ALIAS {media_id}&quot;)</span>
+</span><span id="__span-11-23"><a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a><span class="s1">&#39;</span>
+</span></code></pre></div>
+<p>Expected result:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>conflicts: 0
+</span></code></pre></div>
+<p>State meanings:</p>
+<ul>
+<li><code>DIRECT</code>: direct payload only.</li>
+<li><code>ALIAS</code>: alias only.</li>
+<li><code>MISS</code>: no payload and no alias.</li>
+<li><code>CONFLICT_DIRECT_AND_ALIAS</code>: invalid; the direct payload would shadow alias resolution.</li>
+</ul>
+<p>For an expanded inspection, include the canonical payload metadata behind aliases:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack-dev<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="s1">from django.core.cache import cache</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="s1">from app.models import Item, MediaTypes, Sources</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="s1">from app.services import anime_franchise_cache</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="s1">for media_id in Item.objects.filter(</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="s1">    source=Sources.MAL.value,</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="s1">    media_type=MediaTypes.ANIME.value,</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="s1">).values_list(&quot;media_id&quot;, flat=True).distinct():</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="s1">    payload = cache.get(anime_franchise_cache.get_payload_key(media_id))</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="s1">    alias = cache.get(anime_franchise_cache.get_alias_key(media_id))</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="s1">    if payload and alias:</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="s1">        print(</span>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="s1">            media_id,</span>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a><span class="s1">            &quot;CONFLICT_DIRECT_AND_ALIAS&quot;,</span>
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a><span class="s1">            &quot;direct_root=&quot;,</span>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a><span class="s1">            payload.get(&quot;root_media_id&quot;),</span>
+</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="s1">            &quot;alias=&quot;,</span>
+</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a><span class="s1">            alias,</span>
+</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="s1">        )</span>
+</span><span id="__span-13-21"><a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="s1">    elif payload:</span>
+</span><span id="__span-13-22"><a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a><span class="s1">        print(</span>
+</span><span id="__span-13-23"><a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a><span class="s1">            media_id,</span>
+</span><span id="__span-13-24"><a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a><span class="s1">            &quot;DIRECT&quot;,</span>
+</span><span id="__span-13-25"><a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a><span class="s1">            &quot;covered=&quot;,</span>
+</span><span id="__span-13-26"><a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a><span class="s1">            payload.get(&quot;covered_media_ids&quot;, []),</span>
+</span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a><span class="s1">            &quot;aliasable=&quot;,</span>
+</span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a><span class="s1">            payload.get(&quot;aliasable_media_ids&quot;, []),</span>
+</span><span id="__span-13-29"><a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a><span class="s1">        )</span>
+</span><span id="__span-13-30"><a id="__codelineno-13-30" name="__codelineno-13-30" href="#__codelineno-13-30"></a><span class="s1">    elif alias:</span>
+</span><span id="__span-13-31"><a id="__codelineno-13-31" name="__codelineno-13-31" href="#__codelineno-13-31"></a><span class="s1">        canonical_id = alias.get(&quot;canonical_media_id&quot;)</span>
+</span><span id="__span-13-32"><a id="__codelineno-13-32" name="__codelineno-13-32" href="#__codelineno-13-32"></a><span class="s1">        canonical = cache.get(anime_franchise_cache.get_payload_key(canonical_id))</span>
+</span><span id="__span-13-33"><a id="__codelineno-13-33" name="__codelineno-13-33" href="#__codelineno-13-33"></a><span class="s1">        print(</span>
+</span><span id="__span-13-34"><a id="__codelineno-13-34" name="__codelineno-13-34" href="#__codelineno-13-34"></a><span class="s1">            media_id,</span>
+</span><span id="__span-13-35"><a id="__codelineno-13-35" name="__codelineno-13-35" href="#__codelineno-13-35"></a><span class="s1">            &quot;ALIAS -&gt;&quot;,</span>
+</span><span id="__span-13-36"><a id="__codelineno-13-36" name="__codelineno-13-36" href="#__codelineno-13-36"></a><span class="s1">            canonical_id,</span>
+</span><span id="__span-13-37"><a id="__codelineno-13-37" name="__codelineno-13-37" href="#__codelineno-13-37"></a><span class="s1">            &quot;covered=&quot;,</span>
+</span><span id="__span-13-38"><a id="__codelineno-13-38" name="__codelineno-13-38" href="#__codelineno-13-38"></a><span class="s1">            (canonical or {}).get(&quot;covered_media_ids&quot;, []),</span>
+</span><span id="__span-13-39"><a id="__codelineno-13-39" name="__codelineno-13-39" href="#__codelineno-13-39"></a><span class="s1">            &quot;aliasable=&quot;,</span>
+</span><span id="__span-13-40"><a id="__codelineno-13-40" name="__codelineno-13-40" href="#__codelineno-13-40"></a><span class="s1">            (canonical or {}).get(&quot;aliasable_media_ids&quot;, []),</span>
+</span><span id="__span-13-41"><a id="__codelineno-13-41" name="__codelineno-13-41" href="#__codelineno-13-41"></a><span class="s1">        )</span>
+</span><span id="__span-13-42"><a id="__codelineno-13-42" name="__codelineno-13-42" href="#__codelineno-13-42"></a><span class="s1">    else:</span>
+</span><span id="__span-13-43"><a id="__codelineno-13-43" name="__codelineno-13-43" href="#__codelineno-13-43"></a><span class="s1">        print(media_id, &quot;MISS&quot;)</span>
+</span><span id="__span-13-44"><a id="__codelineno-13-44" name="__codelineno-13-44" href="#__codelineno-13-44"></a><span class="s1">&#39;</span>
+</span></code></pre></div>
 <h2 id="inspect-import-scan-state">Inspect import scan state<a class="headerlink" href="#inspect-import-scan-state" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.models import AnimeImportScanState; print(list(AnimeImportScanState.objects.values(&#39;user_id&#39;,&#39;seed_mal_id&#39;,&#39;profile_key&#39;,&#39;component_root_mal_id&#39;,&#39;next_scan_at&#39;,&#39;consecutive_stable_scans&#39;,&#39;consecutive_error_count&#39;)[:20]))&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.models import AnimeImportScanState; print(list(AnimeImportScanState.objects.values(&#39;user_id&#39;,&#39;seed_mal_id&#39;,&#39;profile_key&#39;,&#39;component_root_mal_id&#39;,&#39;next_scan_at&#39;,&#39;consecutive_stable_scans&#39;,&#39;consecutive_error_count&#39;)[:20]))&quot;</span>
 </span></code></pre></div>
 <p>Force a dry-run rescan for one user:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run<span class="w"> </span>--full-rescan<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run<span class="w"> </span>--full-rescan<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span>
 </span></code></pre></div>
 <h2 id="relation-normalization-quick-check">Relation normalization quick check<a class="headerlink" href="#relation-normalization-quick-check" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.providers import mal; print(mal.normalize_relation_type(&#39;Full story&#39;)); print(mal.normalize_relation_type(&#39;Side story&#39;))&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.providers import mal; print(mal.normalize_relation_type(&#39;Full story&#39;)); print(mal.normalize_relation_type(&#39;Side story&#39;))&quot;</span>
 </span></code></pre></div>
 <h2 id="frequent-cases">Frequent cases<a class="headerlink" href="#frequent-cases" title="Permanent link">&para;</a></h2>
 <ul>
@@ -778,12 +861,12 @@
 </ul>
 <p>A newer local image can be preferred without rebuilding the franchise payload.</p>
 <h2 id="docker-commands">Docker commands<a class="headerlink" href="#docker-commands" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>yamtrack
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>redis
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>keys<span class="w"> </span><span class="s1">&#39;*anime*franchise*&#39;</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay(&#39;34161&#39;)&quot;</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>celery<span class="w"> </span>-A<span class="w"> </span>config<span class="w"> </span>inspect<span class="w"> </span>active
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>yamtrack
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>redis
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>keys<span class="w"> </span><span class="s1">&#39;*anime*franchise*&#39;</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay(&#39;34161&#39;)&quot;</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>celery<span class="w"> </span>-A<span class="w"> </span>config<span class="w"> </span>inspect<span class="w"> </span>active
 </span></code></pre></div>
 
 

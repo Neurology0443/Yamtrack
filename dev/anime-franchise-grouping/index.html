@@ -615,6 +615,23 @@
 </span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>  Residual related entry
 </span></code></pre></div>
 <p>The exact section depends on MAL relation data, anime format, runtime, anchors, and the ordered rule packs. Sections appear only when they have entries.</p>
+<h2 id="franchise-payload-cache-model">Franchise payload cache model<a class="headerlink" href="#franchise-payload-cache-model" title="Permanent link">&para;</a></h2>
+<p>MAL anime franchise payloads are cached as display-ready read models.</p>
+<p>Cache keys:</p>
+<ul>
+<li><code>mal_anime_franchise_&lt;media_id&gt;</code> stores a direct payload.</li>
+<li><code>mal_anime_franchise_alias_&lt;media_id&gt;</code> stores a lightweight alias to a canonical payload.</li>
+</ul>
+<p>Expected states for a media id:</p>
+<ul>
+<li><code>DIRECT</code>: a direct payload exists and no alias exists.</li>
+<li><code>ALIAS</code>: no direct payload exists and an alias points to a canonical payload.</li>
+<li><code>MISS</code>: no direct payload and no alias exist.</li>
+<li><code>DIRECT + ALIAS</code>: invalid state; the direct payload would shadow alias resolution.</li>
+</ul>
+<p>Direct payloads are valid for canonical roots, local mini-franchises, and non-aliasable satellites that need their own detail-page context. An alias is not required for every entry that appears in a franchise payload.</p>
+<p>Aliases are only created for media ids explicitly listed in <code>aliasable_media_ids</code>.</p>
+<p><code>covered_media_ids</code> means the payload knows about the media id and may display it somewhere in the read model. <code>aliasable_media_ids</code> means the media id is allowed to resolve to that payload through an alias.</p>
 <h2 id="runtime-path">Runtime path<a class="headerlink" href="#runtime-path" title="Permanent link">&para;</a></h2>
 <p>The active UI grouping path is:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>AnimeFranchiseService
