@@ -408,6 +408,13 @@ class User(AbstractUser):
         default=False,
         help_text="Receive notifications when a new entry is added",
     )
+    franchise_discovery_notifications_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Receive notifications when a new MAL anime appears in an important "
+            "section of a franchise you already track."
+        ),
+    )
 
     # Integration settings
     token = models.CharField(

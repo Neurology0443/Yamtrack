@@ -2,7 +2,11 @@ import logging
 
 from celery import shared_task
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.utils import timezone
 
+from app.models import AnimeFranchiseDiscoveredEntry
+from app.services.anime_tracking import is_mal_anime_tracked
 from events import notifications
 from events.calendar.main import fetch_releases
 
@@ -51,3 +55,69 @@ def send_entry_added_notification_task(user_id, media_label):
         return
 
     notifications.send_entry_added_notification(user, media_label)
+
+
+@shared_task(name="Send franchise discovery notification")
+def send_franchise_discovery_notification_task(user_id, discovery_id):
+    """Send queued MAL franchise discovery notification to a user."""
+    lock_key = f"franchise-discovery-notification:{discovery_id}"
+    if not cache.add(lock_key, "1", timeout=300):
+        return
+
+    try:
+        user = get_user_model().objects.filter(id=user_id).first()
+        if not user:
+            logger.warning(
+                (
+                    "Skipping franchise discovery notification because user %s "
+                    "does not exist"
+                ),
+                user_id,
+            )
+            return
+
+        discovery = AnimeFranchiseDiscoveredEntry.objects.filter(
+            id=discovery_id,
+            user_id=user_id,
+        ).first()
+        if not discovery:
+            logger.warning(
+                (
+                    "Skipping franchise discovery notification because discovery %s "
+                    "does not exist for user %s"
+                ),
+                discovery_id,
+                user_id,
+            )
+            return
+
+        if discovery.notified_at or discovery.notification_suppressed_reason:
+            return
+
+        if (
+            not user.franchise_discovery_notifications_enabled
+            or not user.notification_urls.strip()
+        ):
+            _set_discovery_suppression_reason(discovery, "notifications_disabled")
+            return
+
+        if is_mal_anime_tracked(
+            user_id=user_id,
+            media_id=discovery.discovered_media_id,
+        ):
+            _set_discovery_suppression_reason(discovery, "already_tracked")
+            return
+
+        sent = notifications.send_franchise_discovery_notification(user, discovery)
+        if sent:
+            discovery.notified_at = timezone.now()
+            discovery.save(update_fields=["notified_at"])
+    finally:
+        cache.delete(lock_key)
+
+
+def _set_discovery_suppression_reason(discovery, reason):
+    if discovery.notification_suppressed_reason:
+        return
+    discovery.notification_suppressed_reason = reason
+    discovery.save(update_fields=["notification_suppressed_reason"])

@@ -5,6 +5,8 @@ from django.contrib import admin
 from django.contrib.admin.sites import AlreadyRegistered
 
 from app.models import (
+    AnimeFranchiseDiscoveredEntry,
+    AnimeFranchiseDiscoveryState,
     AnimeImportScanState,
     Episode,
     Item,
@@ -46,6 +48,36 @@ class UserMessageAdmin(admin.ModelAdmin):
     list_filter = ["level", "shown_at"]
 
 
+@admin.register(AnimeFranchiseDiscoveryState)
+class AnimeFranchiseDiscoveryStateAdmin(admin.ModelAdmin):
+    """Admin config for MAL anime franchise discovery state rows."""
+
+    search_fields = ["user__username", "component_root_mal_id"]
+    list_display = [
+        "user",
+        "component_root_mal_id",
+        "baseline_completed_at",
+        "last_scanned_at",
+        "last_seen_count",
+    ]
+
+
+@admin.register(AnimeFranchiseDiscoveredEntry)
+class AnimeFranchiseDiscoveredEntryAdmin(admin.ModelAdmin):
+    """Admin config for discovered MAL anime franchise entries."""
+
+    search_fields = ["user__username", "discovered_media_id", "title", "root_title"]
+    list_display = [
+        "title",
+        "user",
+        "component_root_mal_id",
+        "discovered_media_id",
+        "section_key",
+        "notified_at",
+    ]
+    list_filter = ["section_key", "notification_suppressed_reason"]
+
+
 @admin.register(AnimeImportScanState)
 class AnimeImportScanStateAdmin(admin.ModelAdmin):
     """Admin config for anime import scan state rows."""
@@ -82,6 +114,8 @@ SpecialModels = [
     "BasicMedia",
     "UserMessage",
     "AnimeImportScanState",
+    "AnimeFranchiseDiscoveryState",
+    "AnimeFranchiseDiscoveredEntry",
 ]
 for model in app_models:
     if (
