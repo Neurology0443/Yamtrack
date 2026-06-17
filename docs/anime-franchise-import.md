@@ -62,6 +62,8 @@ Execution surfaces:
 - Adds selected side content around the main continuity.
 - More aggressive than `continuity`.
 - Useful when users want side stories, alternatives, or selected spin-offs.
+- Short non-`tv_special` single-episode satellites are allowed only when their local `prequel`/`sequel` branch is fully known and has runtimes of at least 15 minutes.
+
 
 ### `complete`
 
@@ -92,7 +94,10 @@ Users remain responsible for moving imported entries to another status when they
 - Excludes MAL media types `cm` and `pv`.
 - `tv_special` requires known runtime greater than 15 minutes.
 - Other targets require known runtime at least 15 minutes.
-- Single-episode entries with runtime `<= 30` minutes are excluded.
+- For non-`tv_special` targets, single-episode entries with runtime `<= 30` minutes are treated as short satellite candidates.
+- Short satellite candidates are accepted only when their local `prequel`/`sequel` branch is fully available in the snapshot.
+- Every entry in that local branch must have a known runtime of at least 15 minutes.
+- If the local branch contains a missing node, unknown runtime, or runtime below 15 minutes, the candidate is excluded.
 
 ### `complete`
 

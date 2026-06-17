@@ -190,6 +190,7 @@ python manage.py shell -c "from app.providers import mal; print(mal.normalize_re
 - **Missing `Series`**: snapshot has no TV `series_line`.
 - **Special/recap misplaced**: inspect normalized relation type, media type, runtime, and `placement_trace`.
 - **Imported entry but cold page**: check cache warmup logs, queue lock, task lock, and worker availability.
+- **Short satellite not imported**: inspect relation type, runtime, episode count, and local `prequel`/`sequel` branch completeness.
 - **Alias miss**: inspect alias key and canonical payload validity.
 - **Stale payload**: stale payload can still render; metadata should show a background refresh attempt if cooldown allows.
 - **UI/import disagreement**: expected; UI sections and import profiles are separate projections.
