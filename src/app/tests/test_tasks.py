@@ -412,6 +412,228 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
             alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
             self.assertFalse(direct and alias, media_id)
 
+    def _save_aliasable_canonical_payload_for_ids(
+        self,
+        *,
+        canonical_id="898",
+        alias_id="900",
+        aliasable=True,
+    ):
+        canonical_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": canonical_id,
+            "canonical_root_media_id": canonical_id,
+            "display_title": "Canonical",
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": canonical_id,
+                        "source": "mal",
+                        "media_type": "anime",
+                        "title": "Canonical",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "entries": [
+                        {
+                            "media_id": alias_id,
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Aliasable",
+                        },
+                    ],
+                    "visible_in_ui": True,
+                    "hidden_if_empty": True,
+                },
+            ],
+            "aliasable_media_ids": [canonical_id, alias_id]
+            if aliasable
+            else [canonical_id],
+            "covered_media_ids": [canonical_id, alias_id],
+        }
+        anime_franchise_cache.save_payload(canonical_id, canonical_payload)
+        return canonical_payload
+
+    def _direct_payload_vm(self, media_id="900"):
+        return type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": media_id,
+                "canonical_root_media_id": media_id,
+                "display_title": "Local Direct",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": media_id,
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Local Direct",
+                        },
+                    ],
+                },
+                "sections": [],
+            },
+        )()
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
+    def test_valid_alias_prevents_direct_payload_write_for_seed(
+        self,
+        mock_build_for_cache,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 1
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        canonical_payload = self._save_aliasable_canonical_payload_for_ids()
+        anime_franchise_cache.replace_aliases("898", canonical_payload)
+        self._set_payload_for_cache(
+            mock_build_for_cache,
+            self._direct_payload_vm("900"),
+            media_id="900",
+        )
+
+        result = build_mal_anime_franchise_payload("900")
+
+        self.assertTrue(result["built"])
+        self.assertTrue(result["skipped_direct_write"])
+        self.assertEqual(result["reason"], "valid_alias_exists")
+        self.assertEqual(result["canonical_media_id"], "898")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("900")))
+        alias = cache.get(anime_franchise_cache.get_alias_key("900"))
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias["canonical_media_id"], "898")
+        lookup = anime_franchise_cache.load_payload_for_media("900")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "898")
+        self._assert_no_direct_payload_alias_conflict(["900"])
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
+    def test_valid_alias_deletes_stale_direct_payload_for_seed(
+        self,
+        mock_build_for_cache,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 1
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        canonical_payload = self._save_aliasable_canonical_payload_for_ids()
+        anime_franchise_cache.replace_aliases("898", canonical_payload)
+        stale_direct_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": "900",
+            "canonical_root_media_id": "900",
+            "display_title": "Stale Direct",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [],
+        }
+        anime_franchise_cache.save_payload("900", stale_direct_payload)
+        self._set_payload_for_cache(
+            mock_build_for_cache,
+            self._direct_payload_vm("900"),
+            media_id="900",
+        )
+
+        result = build_mal_anime_franchise_payload("900")
+
+        self.assertTrue(result["skipped_direct_write"])
+        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("900")))
+        alias = cache.get(anime_franchise_cache.get_alias_key("900"))
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias["canonical_media_id"], "898")
+        lookup = anime_franchise_cache.load_payload_for_media("900")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "898")
+        self._assert_no_direct_payload_alias_conflict(["900"])
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
+    def test_broken_alias_does_not_prevent_direct_payload_write_for_seed(
+        self,
+        mock_build_for_cache,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 1
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        cache.set(
+            anime_franchise_cache.get_alias_key("900"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="898",
+                aliased_media_id="900",
+            ),
+            timeout=60,
+        )
+        self._set_payload_for_cache(
+            mock_build_for_cache,
+            self._direct_payload_vm("900"),
+            media_id="900",
+        )
+
+        result = build_mal_anime_franchise_payload("900")
+
+        self.assertTrue(result["built"])
+        self.assertNotIn("skipped_direct_write", result)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("900")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("900")))
+        lookup = anime_franchise_cache.load_payload_for_media("900")
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "900")
+        self._assert_no_direct_payload_alias_conflict(["900"])
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
+    def test_uncovered_alias_does_not_prevent_direct_payload_write_for_seed(
+        self,
+        mock_build_for_cache,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 1
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        canonical_payload = self._save_aliasable_canonical_payload_for_ids(
+            aliasable=False,
+        )
+        anime_franchise_cache.save_payload("898", canonical_payload)
+        cache.set(
+            anime_franchise_cache.get_alias_key("900"),
+            anime_franchise_cache._build_alias_record(
+                canonical_media_id="898",
+                aliased_media_id="900",
+            ),
+            timeout=60,
+        )
+        self._set_payload_for_cache(
+            mock_build_for_cache,
+            self._direct_payload_vm("900"),
+            media_id="900",
+        )
+
+        result = build_mal_anime_franchise_payload("900")
+
+        self.assertTrue(result["built"])
+        self.assertNotIn("skipped_direct_write", result)
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("900")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("900")))
+        lookup = anime_franchise_cache.load_payload_for_media("900")
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "900")
+        self._assert_no_direct_payload_alias_conflict(["900"])
+
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_canonical_build_replaces_aliases_and_deletes_stale_direct_payloads(

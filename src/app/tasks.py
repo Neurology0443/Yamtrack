@@ -166,7 +166,7 @@ def import_anime_franchise(
 
 
 @shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
-def build_mal_anime_franchise_payload(media_id):  # noqa: PLR0915
+def build_mal_anime_franchise_payload(media_id):  # noqa: C901, PLR0912, PLR0915
     """Build and cache the complete MAL anime franchise payload in the background."""
     media_id = str(media_id)
     task_lock_key = anime_franchise_cache.get_task_lock_key(media_id)
@@ -216,6 +216,32 @@ def build_mal_anime_franchise_payload(media_id):  # noqa: PLR0915
         )
         is_canonical_build = media_id == canonical_media_id
         duration = time.monotonic() - started_at
+        existing_alias_lookup = (
+            anime_franchise_cache.load_valid_alias_payload_for_media(
+                media_id,
+            )
+        )
+        if existing_alias_lookup is not None:
+            anime_franchise_cache.delete_direct_payload(media_id)
+            logger.info(
+                "Skipping direct MAL anime franchise cache write for media_id=%s "
+                "because a valid alias to canonical_media_id=%s already exists",
+                media_id,
+                existing_alias_lookup.canonical_media_id,
+            )
+            return {
+                "media_id": media_id,
+                "canonical_media_id": existing_alias_lookup.canonical_media_id,
+                "built": True,
+                "skipped_direct_write": True,
+                "reason": "valid_alias_exists",
+                "node_count": node_count,
+                "duration": duration,
+                "truncated": truncated,
+                "truncation_reason": truncation_reason,
+                "alias_count": 0,
+            }
+
         alias_count = 0
         seed_is_aliasable_in_existing_canonical = False
         if is_canonical_build:
@@ -265,9 +291,7 @@ def build_mal_anime_franchise_payload(media_id):  # noqa: PLR0915
                     existing_canonical_meta,
                     has_payload=False,
                 )
-            seed_is_aliasable_in_existing_canonical = (
-                media_id in existing_aliasable_ids
-            )
+            seed_is_aliasable_in_existing_canonical = media_id in existing_aliasable_ids
         scoped_payload = build_scoped_seed_payload_from_snapshot(
             snapshot,
             seed_media_id=media_id,
