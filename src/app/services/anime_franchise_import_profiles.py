@@ -42,6 +42,24 @@ class BaseImportProfile:
         """
         return snapshot.canonical_root_media_id
 
+    def detail_cache_warm_media_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        created_ids: set[str],
+    ) -> set[str]:
+        """Return created media IDs that should receive a detail/scoped cache warm.
+
+        This method is intentionally pure.
+
+        It must not:
+        - schedule Celery tasks;
+        - touch Redis/cache;
+        - call transaction.on_commit;
+        - mutate database state;
+        - mutate import stats.
+        """
+        return set()
+
     def is_seed_eligible(
         self,
         *,
@@ -61,6 +79,13 @@ class ContinuityImportProfile(BaseImportProfile):
     continuity_mode = "transitive"
     ignored_media_types = {"cm", "pv"}
     min_runtime_minutes = 15
+
+    def detail_cache_warm_media_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        created_ids: set[str],
+    ) -> set[str]:
+        return set()
 
     def is_runtime_eligible(self, node: AnimeNode) -> bool:
         runtime_minutes = node.runtime_minutes
@@ -107,6 +132,13 @@ class SatellitesImportProfile(BaseImportProfile):
     min_runtime_minutes = 15
     single_episode_max_runtime_minutes = 30
     local_continuity_relation_types = frozenset({"prequel", "sequel"})
+
+    def detail_cache_warm_media_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        created_ids: set[str],
+    ) -> set[str]:
+        return {str(media_id) for media_id in created_ids}
 
     def is_runtime_episode_eligible(
         self,
@@ -244,6 +276,21 @@ class CompleteImportProfile(BaseImportProfile):
     def __init__(self):
         self.continuity = ContinuityImportProfile()
         self.satellites = SatellitesImportProfile()
+
+    def detail_cache_warm_media_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        created_ids: set[str],
+    ) -> set[str]:
+        satellite_ids = {
+            str(media_id)
+            for media_id in self.satellites.select(snapshot).media_ids
+        }
+        return {
+            str(media_id)
+            for media_id in created_ids
+            if str(media_id) in satellite_ids
+        }
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
         continuity = self.continuity.select(snapshot)

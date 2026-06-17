@@ -106,6 +106,10 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             skipped=0,
             errors=0,
             created_ids=["100", "200"],
+            cache_warm_targets=[
+                {"media_id": "100", "kind": "root", "component_root_mal_id": "100"},
+                {"media_id": "200", "kind": "root", "component_root_mal_id": "200"},
+            ],
             cache_warm_scheduled=2,
             cache_warm_roots=["100", "200"],
             cache_warm_errors=0,
@@ -144,6 +148,10 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                 "skipped": 0,
                 "errors": 0,
                 "created_ids": ["100", "200"],
+                "cache_warm_targets": [
+                    {"media_id": "100", "kind": "root", "component_root_mal_id": "100"},
+                    {"media_id": "200", "kind": "root", "component_root_mal_id": "200"},
+                ],
                 "cache_warm_scheduled": 2,
                 "cache_warm_roots": ["100", "200"],
                 "cache_warm_errors": 0,
@@ -161,6 +169,7 @@ class ImportAnimeFranchiseTaskTests(TestCase):
 
         result = import_anime_franchise(profile_key="satellites")
 
+        self.assertEqual(result["cache_warm_targets"], [])
         self.assertEqual(result["cache_warm_scheduled"], 0)
         self.assertEqual(result["cache_warm_roots"], [])
         self.assertEqual(result["cache_warm_errors"], 0)

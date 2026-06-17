@@ -740,6 +740,28 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         selection = CompleteImportProfile().select(snapshot)
         self.assertEqual(selection.media_ids, {"10", "30"})
 
+
+    def test_continuity_detail_cache_warm_media_ids_returns_empty_set(self):
+        result = ContinuityImportProfile().detail_cache_warm_media_ids(
+            self.snapshot,
+            {"1", "2"},
+        )
+        self.assertEqual(result, set())
+
+    def test_satellites_detail_cache_warm_media_ids_returns_created_ids_as_strings(self):
+        result = SatellitesImportProfile().detail_cache_warm_media_ids(
+            self.snapshot,
+            {"3", 4},
+        )
+        self.assertEqual(result, {"3", "4"})
+
+    def test_complete_detail_cache_warm_media_ids_uses_satellite_selection(self):
+        result = CompleteImportProfile().detail_cache_warm_media_ids(
+            self.snapshot,
+            {"1", "3"},
+        )
+        self.assertEqual(result, {"3"})
+
     def test_seed_mode_values_are_typed(self):
         self.assertEqual(ContinuityImportProfile.seed_mode, SeedMode.ALL_LIBRARY)
         self.assertEqual(SatellitesImportProfile.seed_mode, SeedMode.CANONICAL_ONLY)

@@ -153,6 +153,7 @@ def import_anime_franchise(
             "skipped": stats.skipped,
             "errors": stats.errors,
             "created_ids": stats.created_ids,
+            "cache_warm_targets": stats.cache_warm_targets,
             "cache_warm_scheduled": stats.cache_warm_scheduled,
             "cache_warm_roots": stats.cache_warm_roots,
             "cache_warm_errors": stats.cache_warm_errors,
