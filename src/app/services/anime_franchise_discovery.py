@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
@@ -33,6 +34,9 @@ EXCLUDED_ANIME_MEDIA_TYPES = {"cm", "pv"}
 
 
 DISCOVERY_NOTIFICATION_RETRY_AFTER = timedelta(hours=6)
+DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW = timedelta(days=180)
+DISCOVERY_PROCESS_LOCK_TTL_SECONDS = 10 * 60
+TEMPORARY_SUPPRESSION_REASONS = {"notifications_disabled"}
 
 SECTION_PRIORITY = {
     "series_line": 100,
@@ -76,6 +80,7 @@ class AnimeFranchiseDiscoveryStats:
     skipped_not_notifiable_section: int = 0
     skipped_excluded_format: int = 0
     skipped_invalid_media_id: int = 0
+    discovery_lock_skipped: int = 0
 
 
 class AnimeFranchiseDiscoveryProjection:
@@ -126,7 +131,7 @@ class AnimeFranchiseDiscoveryProjection:
             bool(candidate.media_id)
             and candidate.anime_media_type.lower() not in EXCLUDED_ANIME_MEDIA_TYPES
         )
-        section_priority = SECTION_PRIORITY.get(candidate.section_key, 0)
+        section_priority = SECTION_PRIORITY.get(candidate.section_key.lower(), 0)
         return (eligible_format, section_priority)
 
     def _candidate(self, entry, section_key, section_label, root_title):
@@ -134,7 +139,7 @@ class AnimeFranchiseDiscoveryProjection:
         return FranchiseDiscoveryCandidate(
             media_id=str(entry.get("media_id") or ""),
             title=str(entry.get("title") or ""),
-            section_key=str(section_key or ""),
+            section_key=str(section_key or "").lower(),
             section_label=str(section_label or ""),
             relation_type=str(entry.get("relation_type") or ""),
             source_media_id=str(entry.get("relation_source_media_id") or ""),
@@ -151,6 +156,45 @@ class AnimeFranchiseDiscoveryService:
         self.projection = projection or AnimeFranchiseDiscoveryProjection()
 
     def process_snapshot(
+        self,
+        *,
+        user,
+        snapshot,
+        component_root_mal_id,
+        profile_key=None,
+        imported_media_ids=None,
+        dry_run=False,
+        force_baseline_suppression=False,
+    ) -> AnimeFranchiseDiscoveryStats:
+        """Process one already-built franchise snapshot for one user/root."""
+        lock_key = f"anime-franchise-discovery:{user.id}:{component_root_mal_id}"
+        if not cache.add(lock_key, "1", timeout=DISCOVERY_PROCESS_LOCK_TTL_SECONDS):
+            logger.info(
+                "Skipped MAL anime franchise discovery because processing is locked",
+                extra={
+                    "user_id": user.id,
+                    "component_root_mal_id": str(component_root_mal_id),
+                },
+            )
+            return AnimeFranchiseDiscoveryStats(
+                processed_roots=1,
+                discovery_lock_skipped=1,
+            )
+
+        try:
+            return self._process_snapshot_unlocked(
+                user=user,
+                snapshot=snapshot,
+                component_root_mal_id=component_root_mal_id,
+                profile_key=profile_key,
+                imported_media_ids=imported_media_ids,
+                dry_run=dry_run,
+                force_baseline_suppression=force_baseline_suppression,
+            )
+        finally:
+            cache.delete(lock_key)
+
+    def _process_snapshot_unlocked(
         self,
         *,
         user,
@@ -254,13 +298,17 @@ class AnimeFranchiseDiscoveryService:
             if candidate.anime_media_type.lower() in EXCLUDED_ANIME_MEDIA_TYPES:
                 stats.skipped_excluded_format += 1
                 continue
-            if candidate.section_key in EXCLUDED_SECTION_KEYS:
+            section_key = candidate.section_key.lower()
+            if section_key in EXCLUDED_SECTION_KEYS:
                 stats.skipped_not_notifiable_section += 1
                 continue
-            if candidate.section_key not in NOTIFIABLE_SECTION_KEYS:
+            if section_key not in NOTIFIABLE_SECTION_KEYS:
                 stats.skipped_not_notifiable_section += 1
                 continue
-            visible.append(candidate)
+            visible_candidate = candidate
+            if section_key != candidate.section_key:
+                visible_candidate = replace(candidate, section_key=section_key)
+            visible.append(visible_candidate)
         return visible
 
     @staticmethod
@@ -270,7 +318,7 @@ class AnimeFranchiseDiscoveryService:
             (
                 {
                     "media_id": c.media_id,
-                    "section_key": c.section_key,
+                    "section_key": c.section_key.lower(),
                     "relation_type": c.relation_type,
                     "anime_media_type": c.anime_media_type.lower(),
                 }
@@ -359,6 +407,7 @@ class AnimeFranchiseDiscoveryService:
             user,
             force_baseline_suppression=force_baseline_suppression,
         )
+        persistent_reason = self._persistent_suppression_reason(reason)
         defaults = {
             "title": candidate.title,
             "section_key": candidate.section_key,
@@ -367,7 +416,7 @@ class AnimeFranchiseDiscoveryService:
             "source_media_id": candidate.source_media_id,
             "anime_media_type": candidate.anime_media_type,
             "root_title": candidate.root_title,
-            "notification_suppressed_reason": reason,
+            "notification_suppressed_reason": persistent_reason,
         }
         discovery, created = (
             AnimeFranchiseDiscoveredEntry.objects.select_for_update().get_or_create(
@@ -387,10 +436,17 @@ class AnimeFranchiseDiscoveryService:
                     update_fields.append(field)
             if (
                 not discovery.notified_at
-                and not discovery.notification_suppressed_reason
-                and reason
+                and discovery.notification_suppressed_reason
+                in TEMPORARY_SUPPRESSION_REASONS
             ):
-                discovery.notification_suppressed_reason = reason
+                discovery.notification_suppressed_reason = ""
+                update_fields.append("notification_suppressed_reason")
+            if (
+                not discovery.notified_at
+                and not discovery.notification_suppressed_reason
+                and persistent_reason
+            ):
+                discovery.notification_suppressed_reason = persistent_reason
                 update_fields.append("notification_suppressed_reason")
             discovery.last_seen_at = now
             update_fields.append("last_seen_at")
@@ -415,9 +471,32 @@ class AnimeFranchiseDiscoveryService:
             notify_franchise_discovery_after_commit(user.id, discovery.id)
             stats.notifications_queued += 1
 
+    def _persistent_suppression_reason(self, reason: str) -> str:
+        """Return the durable suppression reason to persist for a scan result.
+
+        Baseline, imported-in-same-run, and already-tracked are permanent
+        suppressions. When franchise discovery notifications are disabled,
+        discoveries are still persisted but no notification is queued. If the
+        user later re-enables notifications, still-visible unnotified discoveries
+        become eligible again during the next normal franchise scan, subject to
+        the reactivation window. No notification is sent immediately when the
+        user toggles the setting back on; discovery remains opportunistic.
+        """
+        if reason in TEMPORARY_SUPPRESSION_REASONS:
+            return ""
+        return reason
+
     def _should_queue_notification(self, *, discovery, reason: str, now) -> bool:
         """Return whether a discovery should queue or retry notification."""
-        if reason or discovery.notified_at or discovery.notification_suppressed_reason:
+        if reason or discovery.notified_at:
+            return False
+        if (
+            discovery.notification_suppressed_reason
+            and discovery.notification_suppressed_reason
+            not in TEMPORARY_SUPPRESSION_REASONS
+        ):
+            return False
+        if discovery.first_seen_at < now - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW:
             return False
         return (
             not discovery.notification_queued_at
