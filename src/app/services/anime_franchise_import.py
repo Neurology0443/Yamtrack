@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from django.db import transaction
 
@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+CacheWarmKind = Literal["root", "detail"]
+
+
+class CacheWarmTarget(TypedDict):
+    """Registered cache warm target for an anime franchise import run."""
+
+    media_id: str
+    kind: CacheWarmKind
+    component_root_mal_id: str
+
+
 @dataclass
 class FranchiseImportStats:
     """Counters collected during an anime franchise import run."""
@@ -41,6 +52,7 @@ class FranchiseImportStats:
     skipped: int = 0
     errors: int = 0
     created_ids: list[str] = field(default_factory=list)
+    cache_warm_targets: list[CacheWarmTarget] = field(default_factory=list)
     cache_warm_roots: list[str] = field(default_factory=list)
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
@@ -63,7 +75,7 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
 
-    def run(  # noqa: C901, PLR0915
+    def run(  # noqa: C901, PLR0912, PLR0915
         self,
         *,
         profile_key: str,
@@ -89,37 +101,72 @@ class AnimeFranchiseImportService:
         stats.users_considered = len({seed.user_id for seed in due_seeds})
         stats.distinct_seeds = len({seed.seed_mal_id for seed in due_seeds})
 
-        scheduled_warm_roots: set[str] = set()
-        created_ids_by_root: dict[str, list[str]] = {}
+        scheduled_warm_targets_by_media_id: dict[str, CacheWarmTarget] = {}
 
-        def schedule_cache_warm_once(root_media_id: str) -> None:
-            if root_media_id in scheduled_warm_roots:
+        def schedule_cache_warm_once(
+            media_id: str,
+            *,
+            kind: CacheWarmKind,
+            component_root_mal_id: str,
+        ) -> None:
+            media_id = str(media_id)
+            component_root_mal_id = str(component_root_mal_id)
+
+            if kind not in {"root", "detail"}:
+                msg = f"Unsupported cache warm kind: {kind}"
+                raise ValueError(msg)
+
+            existing_target = scheduled_warm_targets_by_media_id.get(media_id)
+            if existing_target is not None:
+                if existing_target["kind"] == "detail" and kind == "root":
+                    existing_target["kind"] = "root"
+                    existing_target["component_root_mal_id"] = component_root_mal_id
+
+                    if media_id not in stats.cache_warm_roots:
+                        stats.cache_warm_roots.append(media_id)
+
+                    logger.info(
+                        "Anime franchise import promoted cache warm target to root "
+                        "for media_id=%s component_root_mal_id=%s",
+                        media_id,
+                        component_root_mal_id,
+                    )
                 return
 
-            created_ids = sorted(
-                set(created_ids_by_root.get(root_media_id, [])),
-                key=int,
-            )
             try:
-                self.cache_warm_scheduler(root_media_id)
+                # The existing warm scheduler is intentionally reused with non-root
+                # media IDs so the build task can decide whether to create an alias,
+                # a canonical local payload, or a scoped payload.
+                self.cache_warm_scheduler(media_id)
             except Exception:
                 stats.cache_warm_errors += 1
                 logger.exception(
-                    "Anime franchise import failed to register cache warm build "
-                    "for component_root_mal_id=%s created_ids=%s",
-                    root_media_id,
-                    created_ids,
+                    "Anime franchise import failed to register %s cache warm build "
+                    "for media_id=%s component_root_mal_id=%s",
+                    kind,
+                    media_id,
+                    component_root_mal_id,
                 )
                 return
 
-            scheduled_warm_roots.add(root_media_id)
-            stats.cache_warm_roots.append(root_media_id)
+            target: CacheWarmTarget = {
+                "media_id": media_id,
+                "kind": kind,
+                "component_root_mal_id": component_root_mal_id,
+            }
+            scheduled_warm_targets_by_media_id[media_id] = target
+            stats.cache_warm_targets.append(target)
             stats.cache_warm_scheduled += 1
+
+            if kind == "root":
+                stats.cache_warm_roots.append(media_id)
+
             logger.info(
-                "Anime franchise import registered cache warm build "
-                "for component_root_mal_id=%s created_ids=%s",
-                root_media_id,
-                created_ids,
+                "Anime franchise import registered %s cache warm build "
+                "for media_id=%s component_root_mal_id=%s",
+                kind,
+                media_id,
+                component_root_mal_id,
             )
 
         for due_seed in due_seeds:
@@ -163,10 +210,25 @@ class AnimeFranchiseImportService:
                     )
                     stats.created += 1
                     stats.created_ids.append(media_id)
-                    created_ids_by_root.setdefault(component_root_mal_id, []).append(
-                        media_id
+                    schedule_cache_warm_once(
+                        component_root_mal_id,
+                        kind="root",
+                        component_root_mal_id=component_root_mal_id,
                     )
-                    schedule_cache_warm_once(component_root_mal_id)
+
+                    detail_warm_ids = profile.detail_cache_warm_media_ids(
+                        snapshot,
+                        {media_id},
+                    )
+                    for raw_detail_media_id in sorted(detail_warm_ids, key=int):
+                        detail_media_id = str(raw_detail_media_id)
+                        if detail_media_id == component_root_mal_id:
+                            continue
+                        schedule_cache_warm_once(
+                            detail_media_id,
+                            kind="detail",
+                            component_root_mal_id=component_root_mal_id,
+                        )
 
                 if dry_run:
                     continue

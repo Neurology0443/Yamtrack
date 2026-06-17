@@ -448,8 +448,7 @@ def is_valid_payload(payload) -> bool:
         return False
     sections = payload.get("sections")
     return (
-        payload.get("schema_version")
-        == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+        payload.get("schema_version") == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
         and _is_non_empty_string(payload.get("root_media_id"))
         and _is_non_empty_string(payload.get("display_title"))
         and _is_valid_series(payload.get("series"))
@@ -628,6 +627,39 @@ def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup
         payload=None,
         meta=meta,
         alias_hit=False,
+    )
+
+
+def load_valid_alias_payload_for_media(media_id) -> FranchisePayloadLookup | None:
+    """Load a valid alias target for media_id without reading direct payload first."""
+    requested_media_id = str(media_id)
+
+    if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
+        return None
+
+    alias = _load_alias_for_media(requested_media_id)
+    if alias is None:
+        return None
+
+    canonical_media_id = alias["canonical_media_id"]
+    if canonical_media_id == requested_media_id:
+        cache.delete(get_alias_key(requested_media_id))
+        return None
+
+    canonical_payload, canonical_meta = load_payload(canonical_media_id)
+    if canonical_payload is None or not payload_covers_media_id(
+        canonical_payload,
+        requested_media_id,
+    ):
+        cache.delete(get_alias_key(requested_media_id))
+        return None
+
+    return FranchisePayloadLookup(
+        requested_media_id=requested_media_id,
+        canonical_media_id=canonical_media_id,
+        payload=canonical_payload,
+        meta=canonical_meta,
+        alias_hit=True,
     )
 
 
