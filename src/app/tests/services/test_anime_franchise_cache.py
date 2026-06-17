@@ -782,6 +782,7 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+        self._assert_no_direct_payload_alias_conflict(["269"])
 
     def test_load_payload_for_media_deletes_alias_with_mismatched_aliased_media_id(
         self,
