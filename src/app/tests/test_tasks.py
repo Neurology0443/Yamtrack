@@ -406,6 +406,81 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         anime_franchise_cache.replace_aliases("34161", canonical_payload)
         return canonical_payload
 
+    def _assert_no_direct_payload_alias_conflict(self, media_ids):
+        for media_id in media_ids:
+            direct = cache.get(anime_franchise_cache.get_payload_key(media_id))
+            alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
+            self.assertFalse(direct and alias, media_id)
+
+    @patch("app.tasks.AnimeFranchiseGraphBuilder")
+    @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
+    def test_canonical_build_replaces_aliases_and_deletes_stale_direct_payloads(
+        self,
+        mock_build_for_cache,
+        mock_graph_builder_class,
+    ):
+        mock_graph_builder = mock_graph_builder_class.return_value
+        mock_graph_builder.node_count = 2
+        mock_graph_builder.truncated = False
+        mock_graph_builder.truncation_reason = ""
+        stale_direct_payload = {
+            "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+            "root_media_id": "34428",
+            "canonical_root_media_id": "34428",
+            "display_title": "Old Direct",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [],
+        }
+        anime_franchise_cache.save_payload("34428", stale_direct_payload)
+        payload = type(
+            "FranchiseVM",
+            (),
+            {
+                "root_media_id": "34161",
+                "canonical_root_media_id": "34161",
+                "display_title": "Season 1",
+                "series": {
+                    "key": "series",
+                    "title": "Series",
+                    "entries": [
+                        {
+                            "media_id": "34161",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "title": "Season 1",
+                        },
+                    ],
+                },
+                "sections": [
+                    {
+                        "key": "continuity_extras",
+                        "title": "Main Story Extras",
+                        "entries": [
+                            {
+                                "media_id": "34428",
+                                "source": "mal",
+                                "media_type": "anime",
+                                "title": "Extra",
+                            },
+                        ],
+                    },
+                ],
+            },
+        )()
+        self._set_payload_for_cache(mock_build_for_cache, payload, media_id="34161")
+
+        result = build_mal_anime_franchise_payload("34161")
+
+        self.assertTrue(result["built"])
+        self.assertEqual(result["canonical_media_id"], "34161")
+        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("34428")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("34428")))
+        lookup = anime_franchise_cache.load_payload_for_media("34428")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "34161")
+        self.assertEqual(lookup.payload["root_media_id"], "34161")
+        self._assert_no_direct_payload_alias_conflict(["34428"])
+
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")
     def test_build_mal_anime_franchise_payload_saves_payload_and_meta(
@@ -459,7 +534,6 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(result["truncation_reason"], "max_nodes")
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
-
 
     @patch("app.tasks.anime_franchise_cache.maybe_schedule_build")
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
@@ -796,6 +870,11 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(canonical_payload["sections"], [])
         self.assertIsNotNone(scoped_payload)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("40489")))
+        lookup = anime_franchise_cache.load_payload_for_media("40489")
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "40489")
+        self.assertEqual(lookup.payload["root_media_id"], "40489")
+        self._assert_no_direct_payload_alias_conflict(["40489"])
         self.assertEqual(scoped_payload["series"]["entries"], [])
         related_ids = [
             entry["media_id"]
@@ -895,6 +974,11 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         alias = cache.get(anime_franchise_cache.get_alias_key("34428"))
         self.assertIsNotNone(alias)
         self.assertEqual(alias["canonical_media_id"], "34161")
+        lookup = anime_franchise_cache.load_payload_for_media("34428")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "34161")
+        self.assertEqual(lookup.payload["root_media_id"], "34161")
+        self._assert_no_direct_payload_alias_conflict(["34428"])
 
     @patch("app.tasks.AnimeFranchiseUiPipeline")
     @patch("app.tasks.AnimeFranchiseSnapshotService")
@@ -988,6 +1072,11 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertTrue(result["built"])
         self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("34428")))
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("34428")))
+        lookup = anime_franchise_cache.load_payload_for_media("34428")
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "34161")
+        self.assertEqual(lookup.payload["root_media_id"], "34161")
+        self._assert_no_direct_payload_alias_conflict(["34428"])
         canonical_after = cache.get(anime_franchise_cache.get_payload_key("34161"))
         self.assertEqual(
             canonical_after["display_title"],
@@ -1031,7 +1120,6 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
         self.assertEqual(meta["last_error_message"], "boom")
         self.assertIsNone(cache.get(anime_franchise_cache.get_task_lock_key("100")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
-
 
     @patch("app.tasks.AnimeFranchiseGraphBuilder")
     @patch("app.tasks._build_mal_anime_franchise_payload_for_cache")

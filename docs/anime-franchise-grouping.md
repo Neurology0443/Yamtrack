@@ -43,6 +43,29 @@ Related Series
 
 The exact section depends on MAL relation data, anime format, runtime, anchors, and the ordered rule packs. Sections appear only when they have entries.
 
+
+## Franchise payload cache model
+
+MAL anime franchise payloads are cached as display-ready read models.
+
+Cache keys:
+
+- `mal_anime_franchise_<media_id>` stores a direct payload.
+- `mal_anime_franchise_alias_<media_id>` stores a lightweight alias to a canonical payload.
+
+Expected states for a media id:
+
+- `DIRECT`: a direct payload exists and no alias exists.
+- `ALIAS`: no direct payload exists and an alias points to a canonical payload.
+- `MISS`: no direct payload and no alias exist.
+- `DIRECT + ALIAS`: invalid state; the direct payload would shadow alias resolution.
+
+Direct payloads are valid for canonical roots, local mini-franchises, and non-aliasable satellites that need their own detail-page context. An alias is not required for every entry that appears in a franchise payload.
+
+Aliases are only created for media ids explicitly listed in `aliasable_media_ids`.
+
+`covered_media_ids` means the payload knows about the media id and may display it somewhere in the read model. `aliasable_media_ids` means the media id is allowed to resolve to that payload through an alias.
+
 ## Runtime path
 
 The active UI grouping path is:
