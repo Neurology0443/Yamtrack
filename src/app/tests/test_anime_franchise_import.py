@@ -12,6 +12,7 @@ from app.services import anime_franchise_cache
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
+from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
 
 
@@ -31,6 +32,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         root_ids=None,
         selections=None,
         cache_warm_scheduler=None,
+        discovery_service=None,
     ):
         due_seeds = due_seeds or [
             SimpleNamespace(user_id=self.user.id, seed_mal_id="321")
@@ -65,6 +67,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             snapshot_service=snapshot_service,
             state_service=state_service,
             cache_warm_scheduler=cache_warm_scheduler,
+            discovery_service=discovery_service,
         ), profile
 
     def _assert_cache_warm_stats_invariant(self, stats):
@@ -895,3 +898,243 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertTrue(
             Anime.objects.filter(user=self.user, item__media_id="123").exists()
         )
+
+
+class AnimeFranchiseImportDiscoveryHardeningTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="discovery-import-user"
+        )
+
+    def _build_service(self, *, discovery_service, media_ids=None):
+        if media_ids is None:
+            media_ids = {"123"}
+        due_seed = SimpleNamespace(user_id=self.user.id, seed_mal_id="321")
+        snapshot = SimpleNamespace(continuity_component=["component"])
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = ([due_seed], 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+
+        profile = Mock()
+        profile.select.return_value = SimpleNamespace(
+            media_ids=media_ids,
+            fingerprint_payload={"key": "value"},
+        )
+        profile.component_root_media_id.return_value = "321"
+        profile.detail_cache_warm_media_ids.return_value = set()
+
+        return (
+            AnimeFranchiseImportService(
+                snapshot_service=snapshot_service,
+                state_service=state_service,
+                cache_warm_scheduler=Mock(),
+                discovery_service=discovery_service,
+            ),
+            profile,
+            state_service,
+        )
+
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_dry_run_passes_planned_import_ids_to_discovery(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = AnimeFranchiseDiscoveryStats(
+            processed_roots=1,
+            visible_candidates=1,
+            discoveries_seen=1,
+            notifications_suppressed=1,
+            suppressed_imported_in_same_run=1,
+        )
+        service, profile, _state_service = self._build_service(
+            discovery_service=discovery_service
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        mock_anime_minimal.assert_not_called()
+        self.assertFalse(Anime.objects.exists())
+        self.assertEqual(stats.planned_creations, 1)
+        discovery_service.process_snapshot.assert_called_once()
+        self.assertEqual(
+            discovery_service.process_snapshot.call_args.kwargs["imported_media_ids"],
+            {"123"},
+        )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_discovery_error_records_state_without_import_error(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = RuntimeError("boom")
+        service, profile, state_service = self._build_service(
+            discovery_service=discovery_service,
+            media_ids=set(),
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.errors, 0)
+        self.assertEqual(stats.discovery_errors, 1)
+        state_service.record_success.assert_called_once()
+        discovery_service.record_error.assert_called_once()
+        self.assertEqual(
+            discovery_service.record_error.call_args.kwargs["component_root_mal_id"],
+            "321",
+        )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_discovery_record_error_failure_remains_best_effort(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = RuntimeError("process boom")
+        discovery_service.record_error.side_effect = RuntimeError("record boom")
+        service, profile, state_service = self._build_service(
+            discovery_service=discovery_service,
+            media_ids=set(),
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.discovery_errors, 1)
+        self.assertEqual(stats.errors, 0)
+        state_service.record_success.assert_called_once()
+        discovery_service.record_error.assert_called_once()
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_imported_media_ids_are_scoped_per_snapshot_root(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = AnimeFranchiseDiscoveryStats()
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="654"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            SimpleNamespace(continuity_component=["a"]),
+            SimpleNamespace(continuity_component=["b"]),
+        ]
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = (due_seeds, 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+        profile = Mock()
+        profile.component_root_media_id.side_effect = ["root-a", "root-b"]
+        profile.select.side_effect = [
+            SimpleNamespace(media_ids={"123"}, fingerprint_payload={}),
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+        ]
+        profile.detail_cache_warm_media_ids.return_value = set()
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        calls = discovery_service.process_snapshot.call_args_list
+        self.assertEqual(calls[0].kwargs["component_root_mal_id"], "root-a")
+        self.assertEqual(calls[0].kwargs["imported_media_ids"], {"123"})
+        self.assertEqual(calls[1].kwargs["component_root_mal_id"], "root-b")
+        self.assertEqual(calls[1].kwargs["imported_media_ids"], set())
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_baseline_created_in_run_forces_baseline_on_same_root_seed(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = [
+            AnimeFranchiseDiscoveryStats(baseline_created=1),
+            AnimeFranchiseDiscoveryStats(),
+        ]
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="654"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            SimpleNamespace(continuity_component=["a"]),
+            SimpleNamespace(continuity_component=["b"]),
+        ]
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = (due_seeds, 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+        profile = Mock()
+        profile.component_root_media_id.side_effect = ["root-a", "root-a"]
+        profile.select.side_effect = [
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+        ]
+        profile.detail_cache_warm_media_ids.return_value = set()
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        calls = discovery_service.process_snapshot.call_args_list
+        self.assertFalse(calls[0].kwargs["force_baseline_suppression"])
+        self.assertTrue(calls[1].kwargs["force_baseline_suppression"])

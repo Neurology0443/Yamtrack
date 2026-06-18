@@ -454,34 +454,30 @@ def format_notification(releases):
     return "\n".join(notification_body)
 
 
-def send_user_notification(user, urls, title, body):
-    """Send a notification to a specific user.
-
-    Args:
-        user: User object
-        urls: List of notification URLs
-        title: Notification title
-        body: Notification body
-    """
+def send_user_notification(user, urls, title, body) -> bool:
+    """Send a notification to a specific user and report Apprise success."""
     apobj = apprise.Apprise()
     for url in urls:
         apobj.add(url)
 
     try:
-        result = apobj.notify(title=title, body=body)
-
-        if result:
-            logger.info(
-                "Notification sent to %s",
-                user.username,
-            )
-        else:
-            logger.error(
-                "Failed to send notification to %s",
-                user.username,
-            )
+        sent = apobj.notify(title=title, body=body)
     except Exception:
         logger.exception("Error sending notification to %s", user.username)
+        return False
+
+    if sent:
+        logger.info(
+            "Notification sent to %s",
+            user.username,
+        )
+        return True
+
+    logger.error(
+        "Failed to send notification to %s",
+        user.username,
+    )
+    return False
 
 
 def send_entry_added_notification(user, media_label):
@@ -499,7 +495,7 @@ def send_entry_added_notification(user, media_label):
     send_user_notification(
         user,
         urls,
-        "➕ YamTrack: New Entry Added",
+        "➕ YamTrack: New Entry Added",  # noqa: RUF001
         f"{media_label} was added to your tracking.",
     )
 
@@ -508,11 +504,66 @@ def notify_entry_added_after_commit(user_id, media_label):
     """Queue entry-added notification asynchronously after commit."""
 
     def queue_notification():
-        from events.tasks import send_entry_added_notification_task
+        from events.tasks import send_entry_added_notification_task  # noqa: PLC0415
 
         send_entry_added_notification_task.delay(
             user_id=user_id,
             media_label=media_label,
+        )
+
+    transaction.on_commit(queue_notification)
+
+
+def send_franchise_discovery_notification(user, discovery):
+    """Send a notification for a newly discovered MAL franchise entry."""
+    if not user.franchise_discovery_notifications_enabled:
+        return False
+
+    if not user.notification_urls.strip():
+        return False
+
+    urls = [url.strip() for url in user.notification_urls.splitlines() if url.strip()]
+    if not urls:
+        return False
+
+    lines = [
+        "A new entry appeared in a franchise you track:",
+        "",
+        discovery.title or discovery.discovered_media_id,
+    ]
+    if discovery.root_title:
+        lines.append(f"Franchise: {discovery.root_title}")
+    if discovery.section_label:
+        lines.append(f"Section: {discovery.section_label}")
+    if discovery.relation_type:
+        lines.append(f"Relation: {discovery.relation_type}")
+    lines.extend([
+        "",
+        (
+            "This entry was detected from MAL franchise data and was not "
+            "automatically added to your tracking."
+        ),
+    ])
+
+    return send_user_notification(
+        user,
+        urls,
+        "🧩 YamTrack: New MAL Franchise Entry",
+        "\n".join(lines),
+    )
+
+
+def notify_franchise_discovery_after_commit(user_id, discovery_id):
+    """Queue franchise discovery notification asynchronously after commit."""
+
+    def queue_notification():
+        from events.tasks import (  # noqa: PLC0415
+            send_franchise_discovery_notification_task,
+        )
+
+        send_franchise_discovery_notification_task.delay(
+            user_id=user_id,
+            discovery_id=discovery_id,
         )
 
     transaction.on_commit(queue_notification)

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Literal, TypedDict
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
@@ -13,6 +14,7 @@ from app.providers import mal
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
+from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryService
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
@@ -56,6 +58,7 @@ class FranchiseImportStats:
     cache_warm_roots: list[str] = field(default_factory=list)
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
+    discovery_errors: int = 0
 
 
 class AnimeFranchiseImportService:
@@ -67,6 +70,7 @@ class AnimeFranchiseImportService:
         snapshot_service: AnimeFranchiseSnapshotService | None = None,
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
+        discovery_service: AnimeFranchiseDiscoveryService | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -74,6 +78,7 @@ class AnimeFranchiseImportService:
         self.cache_warm_scheduler = (
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
+        self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -101,6 +106,11 @@ class AnimeFranchiseImportService:
         stats.users_considered = len({seed.user_id for seed in due_seeds})
         stats.distinct_seeds = len({seed.seed_mal_id for seed in due_seeds})
 
+        users_by_id = get_user_model().objects.in_bulk(
+            {seed.user_id for seed in due_seeds}
+        )
+
+        baseline_roots_created_this_run: set[tuple[int, str]] = set()
         scheduled_warm_targets_by_media_id: dict[str, CacheWarmTarget] = {}
 
         def schedule_cache_warm_once(
@@ -171,6 +181,17 @@ class AnimeFranchiseImportService:
 
         for due_seed in due_seeds:
             stats.scanned += 1
+            user = users_by_id.get(due_seed.user_id)
+            if user is None:
+                stats.skipped += 1
+                logger.warning(
+                    (
+                        "Skipping MAL anime franchise import because user %s "
+                        "does not exist"
+                    ),
+                    due_seed.user_id,
+                )
+                continue
             try:
                 snapshot = self.snapshot_service.build(
                     due_seed.seed_mal_id,
@@ -182,6 +203,7 @@ class AnimeFranchiseImportService:
                     profile_key,
                     selection.fingerprint_payload,
                 )
+                imported_media_ids_for_snapshot: set[str] = set()
                 for raw_media_id in sorted(selection.media_ids, key=int):
                     media_id = str(raw_media_id)
                     exists = Anime.objects.filter(
@@ -196,6 +218,9 @@ class AnimeFranchiseImportService:
 
                     stats.planned_creations += 1
                     if dry_run:
+                        # In dry-run, treat planned imports as imported for discovery
+                        # suppression so notification stats match a real run.
+                        imported_media_ids_for_snapshot.add(media_id)
                         continue
 
                     metadata = mal.anime_minimal(
@@ -210,6 +235,7 @@ class AnimeFranchiseImportService:
                     )
                     stats.created += 1
                     stats.created_ids.append(media_id)
+                    imported_media_ids_for_snapshot.add(media_id)
                     schedule_cache_warm_once(
                         component_root_mal_id,
                         kind="root",
@@ -229,6 +255,56 @@ class AnimeFranchiseImportService:
                             kind="detail",
                             component_root_mal_id=component_root_mal_id,
                         )
+
+                root_key = (user.id, component_root_mal_id)
+                force_baseline_suppression = root_key in baseline_roots_created_this_run
+                try:
+                    discovery_stats = self.discovery_service.process_snapshot(
+                        user=user,
+                        snapshot=snapshot,
+                        component_root_mal_id=component_root_mal_id,
+                        profile_key=profile_key,
+                        imported_media_ids=imported_media_ids_for_snapshot,
+                        dry_run=dry_run,
+                        force_baseline_suppression=force_baseline_suppression,
+                    )
+                    if discovery_stats.baseline_created:
+                        baseline_roots_created_this_run.add(root_key)
+                    logger.info(
+                        "Processed MAL anime franchise discoveries",
+                        extra={
+                            "user_id": due_seed.user_id,
+                            "component_root_mal_id": component_root_mal_id,
+                            "seed_media_id": due_seed.seed_mal_id,
+                            "discovery_stats": asdict(discovery_stats),
+                        },
+                    )
+                except Exception as exc:
+                    stats.discovery_errors += 1
+                    logger.exception(
+                        "Failed to process MAL anime franchise discoveries",
+                        extra={
+                            "user_id": due_seed.user_id,
+                            "component_root_mal_id": component_root_mal_id,
+                            "seed_media_id": due_seed.seed_mal_id,
+                        },
+                    )
+                    if not dry_run:
+                        try:
+                            self.discovery_service.record_error(
+                                user=user,
+                                component_root_mal_id=component_root_mal_id,
+                                error=exc,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to record MAL anime franchise discovery error",
+                                extra={
+                                    "user_id": due_seed.user_id,
+                                    "component_root_mal_id": component_root_mal_id,
+                                    "seed_media_id": due_seed.seed_mal_id,
+                                },
+                            )
 
                 if dry_run:
                     continue

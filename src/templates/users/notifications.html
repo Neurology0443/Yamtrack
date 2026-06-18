@@ -131,6 +131,29 @@
                 </div>
               </label>
             </div>
+
+            <div class="flex items-center justify-between pt-3 border-t border-gray-600">
+              <div>
+                <label for="id_franchise_discovery_notifications_enabled"
+                       class="text-sm font-medium text-gray-200 flex items-center">
+                  {% include "app/icons/bell.svg" with classes="w-4 h-4 mr-2 text-indigo-400" %}
+                  Notify when a new MAL franchise entry is discovered
+                </label>
+                <p class="text-xs text-gray-400 mt-1 ml-6">
+                  Receive a notification when MAL exposes a new anime entry in an important section of a franchise you already track.
+                </p>
+              </div>
+
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input class="sr-only peer"
+                       type="checkbox"
+                       name="franchise_discovery_notifications_enabled"
+                       id="id_franchise_discovery_notifications_enabled"
+                       {% if form.franchise_discovery_notifications_enabled.value %}checked{% endif %}>
+                <div class="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-px after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600">
+                </div>
+              </label>
+            </div>
           </div>
         </div>
 
