@@ -16,6 +16,7 @@ from app.models import (
     Status,
 )
 from app.services.anime_franchise_discovery import (
+    DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW,
     DISCOVERY_NOTIFICATION_RETRY_AFTER,
     AnimeFranchiseDiscoveryProjection,
     AnimeFranchiseDiscoveryService,
@@ -508,8 +509,13 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
             component_root_mal_id="1",
         )
         discovery = AnimeFranchiseDiscoveredEntry.objects.get(discovered_media_id="2")
+        expired_first_seen_at = (
+            timezone.now()
+            - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+            - timezone.timedelta(days=1)
+        )
         AnimeFranchiseDiscoveredEntry.objects.filter(id=discovery.id).update(
-            first_seen_at=timezone.now() - timezone.timedelta(days=181)
+            first_seen_at=expired_first_seen_at
         )
         self.user.franchise_discovery_notifications_enabled = True
         self.user.notification_urls = "https://example.com/notify"
@@ -545,8 +551,13 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
             component_root_mal_id="1",
         )
         discovery = AnimeFranchiseDiscoveredEntry.objects.get(discovered_media_id="2")
+        expired_first_seen_at = (
+            timezone.now()
+            - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+            - timezone.timedelta(days=1)
+        )
         AnimeFranchiseDiscoveredEntry.objects.filter(id=discovery.id).update(
-            first_seen_at=timezone.now() - timezone.timedelta(days=181)
+            first_seen_at=expired_first_seen_at
         )
         self.user.franchise_discovery_notifications_enabled = True
         self.user.notification_urls = "https://example.com/notify"
