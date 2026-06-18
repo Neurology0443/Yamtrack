@@ -98,7 +98,9 @@ def send_franchise_discovery_notification_task(user_id, discovery_id):
             not user.franchise_discovery_notifications_enabled
             or not user.notification_urls.strip()
         ):
-            _set_discovery_suppression_reason(discovery, "notifications_disabled")
+            if discovery.notification_queued_at:
+                discovery.notification_queued_at = None
+                discovery.save(update_fields=["notification_queued_at"])
             return
 
         if is_mal_anime_tracked(

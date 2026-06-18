@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
+from django.utils import timezone
 
 from app.models import (
     Anime,
@@ -74,6 +75,8 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         cache.clear()
 
     def test_task_does_not_mark_notified_when_preference_disabled(self):
+        self.discovery.notification_queued_at = timezone.now()
+        self.discovery.save(update_fields=["notification_queued_at"])
         self.user.franchise_discovery_notifications_enabled = False
         self.user.save(update_fields=["franchise_discovery_notifications_enabled"])
 
@@ -85,12 +88,12 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         self.discovery.refresh_from_db()
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
-        self.assertEqual(
-            self.discovery.notification_suppressed_reason,
-            "notifications_disabled",
-        )
+        self.assertEqual(self.discovery.notification_suppressed_reason, "")
+        self.assertIsNone(self.discovery.notification_queued_at)
 
     def test_task_does_not_mark_notified_when_urls_blank(self):
+        self.discovery.notification_queued_at = timezone.now()
+        self.discovery.save(update_fields=["notification_queued_at"])
         self.user.notification_urls = ""
         self.user.save(update_fields=["notification_urls"])
 
@@ -102,10 +105,8 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         self.discovery.refresh_from_db()
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
-        self.assertEqual(
-            self.discovery.notification_suppressed_reason,
-            "notifications_disabled",
-        )
+        self.assertEqual(self.discovery.notification_suppressed_reason, "")
+        self.assertIsNone(self.discovery.notification_queued_at)
 
     def test_task_does_not_mark_notified_when_send_returns_false(self):
         with patch(

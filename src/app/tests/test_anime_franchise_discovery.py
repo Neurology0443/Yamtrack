@@ -479,6 +479,7 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
         self.user.franchise_discovery_notifications_enabled = True
         self.user.notification_urls = "https://example.com/notify"
         self.user.save()
+        mock_notify.assert_not_called()
 
         enabled_stats = self.service([self.candidate()]).process_snapshot(
             user=self.user,
@@ -490,6 +491,7 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
         self.assertEqual(enabled_stats.notifications_queued, 1)
         self.assertIsNotNone(discovery.notification_queued_at)
         self.assertEqual(discovery.notification_suppressed_reason, "")
+        self.assertIsNone(discovery.notified_at)
         mock_notify.assert_called_once_with(self.user.id, discovery.id)
 
 
