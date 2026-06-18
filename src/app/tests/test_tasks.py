@@ -542,7 +542,11 @@ class BuildMALAnimeFranchisePayloadTaskTests(TestCase):
             "series": {"key": "series", "title": "Series", "entries": []},
             "sections": [],
         }
-        anime_franchise_cache.save_payload("900", stale_direct_payload)
+        cache.set(
+            anime_franchise_cache.get_payload_key("900"),
+            stale_direct_payload,
+            timeout=anime_franchise_cache.get_ttl_seconds(),
+        )
         self._set_payload_for_cache(
             mock_build_for_cache,
             self._direct_payload_vm("900"),

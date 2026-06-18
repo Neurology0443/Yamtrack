@@ -519,6 +519,39 @@ def delete_direct_payload(media_id) -> None:
     cache.delete(get_meta_key(media_id))
 
 
+def delete_alias_for_media(media_id) -> None:
+    """Delete an alias and remove it from its canonical alias index."""
+    media_id = str(media_id)
+    alias_key = get_alias_key(media_id)
+    alias = _normalize_alias_record(cache.get(alias_key))
+
+    cache.delete(alias_key)
+
+    if alias is None:
+        return
+
+    canonical_media_id = alias.get("canonical_media_id")
+    if not canonical_media_id:
+        return
+
+    alias_index_key = get_alias_index_key(canonical_media_id)
+    alias_ids = cache.get(alias_index_key)
+    if not isinstance(alias_ids, list):
+        return
+
+    remaining_alias_ids = [
+        str(alias_id) for alias_id in alias_ids if str(alias_id) != media_id
+    ]
+    if remaining_alias_ids:
+        cache.set(
+            alias_index_key,
+            remaining_alias_ids,
+            timeout=get_ttl_seconds(),
+        )
+    else:
+        cache.delete(alias_index_key)
+
+
 def _delete_alias_if_owned_by(media_id, canonical_media_id) -> bool:
     """Delete alias only if it currently points to canonical_media_id."""
     media_id = str(media_id)
@@ -725,6 +758,7 @@ def save_payload(
     truncation_reason="",
 ) -> dict:
     """Persist a complete franchise payload and fresh metadata."""
+    media_id = str(media_id)
     payload = dict(payload)
     payload["schema_version"] = settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
     payload["truncated"] = bool(truncated)
@@ -756,6 +790,7 @@ def save_payload(
         last_success_at=now,
     )
     ttl = get_ttl_seconds()
+    delete_alias_for_media(media_id)
     cache.set(get_payload_key(media_id), payload, timeout=ttl)
     cache.set(get_meta_key(media_id), meta, timeout=ttl)
     return meta
