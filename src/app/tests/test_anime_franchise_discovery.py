@@ -16,6 +16,7 @@ from app.models import (
     Status,
 )
 from app.services.anime_franchise_discovery import (
+    DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW,
     DISCOVERY_NOTIFICATION_RETRY_AFTER,
     AnimeFranchiseDiscoveryProjection,
     AnimeFranchiseDiscoveryService,
@@ -508,8 +509,13 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
             component_root_mal_id="1",
         )
         discovery = AnimeFranchiseDiscoveredEntry.objects.get(discovered_media_id="2")
+        expired_first_seen_at = (
+            timezone.now()
+            - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+            - timezone.timedelta(days=1)
+        )
         AnimeFranchiseDiscoveredEntry.objects.filter(id=discovery.id).update(
-            first_seen_at=timezone.now() - timezone.timedelta(days=181)
+            first_seen_at=expired_first_seen_at
         )
         self.user.franchise_discovery_notifications_enabled = True
         self.user.notification_urls = "https://example.com/notify"
@@ -523,8 +529,58 @@ class AnimeFranchiseDiscoveryProjectionTests(TestCase):
 
         discovery.refresh_from_db()
         self.assertEqual(stats.notifications_queued, 0)
+        self.assertEqual(stats.reactivation_window_expired, 1)
+        self.assertEqual(stats.notifications_suppressed, 0)
+        self.assertEqual(discovery.notification_suppressed_reason, "")
         self.assertIsNone(discovery.notified_at)
         self.assertIsNone(discovery.notification_queued_at)
+        mock_notify.assert_not_called()
+
+    @patch("app.services.anime_franchise_discovery.notify_franchise_discovery_after_commit")
+    def test_dry_run_counts_expired_reactivation_window_without_writes(
+        self, mock_notify
+    ):
+        self.service([]).process_snapshot(
+            user=self.user,
+            snapshot=self.snapshot,
+            component_root_mal_id="1",
+        )
+        self.service([self.candidate()]).process_snapshot(
+            user=self.user,
+            snapshot=self.snapshot,
+            component_root_mal_id="1",
+        )
+        discovery = AnimeFranchiseDiscoveredEntry.objects.get(discovered_media_id="2")
+        expired_first_seen_at = (
+            timezone.now()
+            - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+            - timezone.timedelta(days=1)
+        )
+        AnimeFranchiseDiscoveredEntry.objects.filter(id=discovery.id).update(
+            first_seen_at=expired_first_seen_at
+        )
+        self.user.franchise_discovery_notifications_enabled = True
+        self.user.notification_urls = "https://example.com/notify"
+        self.user.save()
+        discovery.refresh_from_db()
+        last_seen_at = discovery.last_seen_at
+        notification_queued_at = discovery.notification_queued_at
+
+        stats = self.service([self.candidate()]).process_snapshot(
+            user=self.user,
+            snapshot=self.snapshot,
+            component_root_mal_id="1",
+            dry_run=True,
+        )
+
+        discovery.refresh_from_db()
+        self.assertEqual(stats.notifications_queued, 0)
+        self.assertEqual(stats.reactivation_window_expired, 1)
+        self.assertEqual(stats.notifications_suppressed, 0)
+        self.assertEqual(discovery.notification_suppressed_reason, "")
+        self.assertIsNone(discovery.notified_at)
+        self.assertEqual(discovery.notification_queued_at, notification_queued_at)
+        self.assertEqual(discovery.last_seen_at, last_seen_at)
         mock_notify.assert_not_called()
 
     @patch("app.services.anime_franchise_discovery.notify_franchise_discovery_after_commit")
@@ -621,6 +677,36 @@ class AnimeFranchiseDiscoveryLockTests(TestCase):
         self.assertEqual(stats.discovery_lock_skipped, 1)
         self.assertEqual(stats.visible_candidates, 0)
         self.assertFalse(AnimeFranchiseDiscoveryState.objects.exists())
+        mock_cache.delete.assert_not_called()
+
+    @patch("app.services.anime_franchise_discovery.cache")
+    def test_dry_run_bypasses_user_root_lock(self, mock_cache):
+        mock_cache.add.return_value = False
+        service = AnimeFranchiseDiscoveryService(
+            projection=FakeProjection(
+                [
+                    FranchiseDiscoveryCandidate(
+                        media_id="2",
+                        title="Anime 2",
+                        section_key="specials",
+                        anime_media_type="ova",
+                    )
+                ]
+            )
+        )
+
+        stats = service.process_snapshot(
+            user=self.user,
+            snapshot=SimpleNamespace(),
+            component_root_mal_id="1",
+            dry_run=True,
+        )
+
+        self.assertEqual(stats.discovery_lock_skipped, 0)
+        self.assertEqual(stats.visible_candidates, 1)
+        self.assertFalse(AnimeFranchiseDiscoveryState.objects.exists())
+        self.assertFalse(AnimeFranchiseDiscoveredEntry.objects.exists())
+        mock_cache.add.assert_not_called()
         mock_cache.delete.assert_not_called()
 
     @patch("app.services.anime_franchise_discovery.cache")
