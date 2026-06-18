@@ -77,6 +77,7 @@ class AnimeFranchiseDiscoveryStats:
     suppressed_imported_in_same_run: int = 0
     suppressed_already_tracked: int = 0
     suppressed_notifications_disabled: int = 0
+    reactivation_window_expired: int = 0
     skipped_not_notifiable_section: int = 0
     skipped_excluded_format: int = 0
     skipped_invalid_media_id: int = 0
@@ -167,6 +168,17 @@ class AnimeFranchiseDiscoveryService:
         force_baseline_suppression=False,
     ) -> AnimeFranchiseDiscoveryStats:
         """Process one already-built franchise snapshot for one user/root."""
+        if dry_run:
+            return self._process_snapshot_unlocked(
+                user=user,
+                snapshot=snapshot,
+                component_root_mal_id=component_root_mal_id,
+                profile_key=profile_key,
+                imported_media_ids=imported_media_ids,
+                dry_run=True,
+                force_baseline_suppression=force_baseline_suppression,
+            )
+
         lock_key = f"anime-franchise-discovery:{user.id}:{component_root_mal_id}"
         if not cache.add(lock_key, "1", timeout=DISCOVERY_PROCESS_LOCK_TTL_SECONDS):
             logger.info(
@@ -188,7 +200,7 @@ class AnimeFranchiseDiscoveryService:
                 component_root_mal_id=component_root_mal_id,
                 profile_key=profile_key,
                 imported_media_ids=imported_media_ids,
-                dry_run=dry_run,
+                dry_run=False,
                 force_baseline_suppression=force_baseline_suppression,
             )
         finally:
@@ -470,6 +482,15 @@ class AnimeFranchiseDiscoveryService:
             discovery.save(update_fields=["notification_queued_at", "last_seen_at"])
             notify_franchise_discovery_after_commit(user.id, discovery.id)
             stats.notifications_queued += 1
+        elif (
+            self._queue_block_reason(
+                discovery=discovery,
+                reason=reason,
+                now=now,
+            )
+            == "reactivation_window_expired"
+        ):
+            stats.reactivation_window_expired += 1
 
     def _persistent_suppression_reason(self, reason: str) -> str:
         """Return the durable suppression reason to persist for a scan result.
@@ -486,22 +507,41 @@ class AnimeFranchiseDiscoveryService:
             return ""
         return reason
 
-    def _should_queue_notification(self, *, discovery, reason: str, now) -> bool:
-        """Return whether a discovery should queue or retry notification."""
-        if reason or discovery.notified_at:
-            return False
+    def _reactivation_window_expired(self, *, discovery, now) -> bool:
+        """Return whether an unnotified discovery is too old to reactivate."""
+        return (
+            discovery.first_seen_at
+            < now - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+        )
+
+    def _queue_block_reason(self, *, discovery, reason: str, now) -> str:
+        """Return the reason a discovery cannot currently queue."""
+        if reason:
+            return reason
+        if discovery.notified_at:
+            return "notified"
         if (
             discovery.notification_suppressed_reason
             and discovery.notification_suppressed_reason
             not in TEMPORARY_SUPPRESSION_REASONS
         ):
-            return False
-        if discovery.first_seen_at < now - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW:
-            return False
-        return (
-            not discovery.notification_queued_at
-            or discovery.notification_queued_at
-            <= now - DISCOVERY_NOTIFICATION_RETRY_AFTER
+            return "persistent_suppression"
+        if self._reactivation_window_expired(discovery=discovery, now=now):
+            return "reactivation_window_expired"
+        if (
+            discovery.notification_queued_at
+            and discovery.notification_queued_at
+            > now - DISCOVERY_NOTIFICATION_RETRY_AFTER
+        ):
+            return "retry_cooldown"
+        return ""
+
+    def _should_queue_notification(self, *, discovery, reason: str, now) -> bool:
+        """Return whether a discovery should queue or retry notification."""
+        return not self._queue_block_reason(
+            discovery=discovery,
+            reason=reason,
+            now=now,
         )
 
     def _accumulate_dry_run_stats(
@@ -542,5 +582,14 @@ class AnimeFranchiseDiscoveryService:
                 now=now,
             ):
                 stats.notifications_queued += 1
+            elif (
+                self._queue_block_reason(
+                    discovery=existing_discovery,
+                    reason=reason,
+                    now=now,
+                )
+                == "reactivation_window_expired"
+            ):
+                stats.reactivation_window_expired += 1
         else:
             stats.notifications_queued += 1
