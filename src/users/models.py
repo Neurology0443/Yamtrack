@@ -415,6 +415,13 @@ class User(AbstractUser):
             "section of a franchise you already track."
         ),
     )
+    anime_release_date_notifications_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Receive notifications when a tracked MAL anime start date is "
+            "announced or changed"
+        ),
+    )
 
     # Integration settings
     token = models.CharField(

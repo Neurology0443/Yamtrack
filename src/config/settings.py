@@ -20,7 +20,10 @@ from decouple import (
 from django.core.cache import CacheKeyWarning
 from django.core.exceptions import ImproperlyConfigured
 
-from app.schedules import build_anime_franchise_import_schedule
+from app.schedules import (
+    build_anime_franchise_import_schedule,
+    build_anime_release_date_scan_schedule,
+)
 
 BASE_URL = config("BASE_URL", default=None)
 if BASE_URL:
@@ -395,6 +398,41 @@ MAL_CACHE_REFRESH_MIN_INTERVAL_HOURS = config(
     default=24,
     cast=int,
 )
+ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED = config(
+    "ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED",
+    default=True,
+    cast=bool,
+)
+ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS = config(
+    "ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS",
+    default=12,
+    cast=int,
+)
+ANIME_RELEASE_DATE_SCAN_BATCH_SIZE = config(
+    "ANIME_RELEASE_DATE_SCAN_BATCH_SIZE",
+    default=25,
+    cast=int,
+)
+ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS = config(
+    "ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS",
+    default=24,
+    cast=int,
+)
+ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS = config(
+    "ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS",
+    default=12,
+    cast=int,
+)
+ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS = config(
+    "ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS",
+    default=7,
+    cast=int,
+)
+ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES = config(
+    "ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES",
+    default=60 * 6,
+    cast=int,
+)
 MAL_NSFW = config("MAL_NSFW", default=False, cast=bool)
 ANIME_FRANCHISE_GROUPING_ENABLED = config(
     "ANIME_FRANCHISE_GROUPING_ENABLED",
@@ -689,6 +727,12 @@ CELERY_BEAT_SCHEDULE.update(
         refresh_cache=ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE,
         full_rescan=ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN,
         limit=ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT,
+    )
+)
+CELERY_BEAT_SCHEDULE.update(
+    build_anime_release_date_scan_schedule(
+        enabled=ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED,
+        interval_hours=ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS,
     )
 )
 

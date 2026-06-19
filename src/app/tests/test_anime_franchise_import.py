@@ -14,6 +14,7 @@ from app.services.anime_franchise_cache_warmer import (
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from events.models import AnimeReleaseDateScanState
 
 
 class AnimeFranchiseImportNotificationTests(TestCase):
@@ -90,6 +91,10 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal.return_value = {
             "title": "Import Anime",
             "image": "http://example.com/image.jpg",
+            "details": {
+                "start_date": "2027-05",
+                "status": "Upcoming",
+            },
         }
 
         stats = service.run(
@@ -123,6 +128,14 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         )
         self.assertEqual(stats.cache_warm_roots, ["321"])
         self.assertEqual(stats.cache_warm_errors, 0)
+        release_date_state = AnimeReleaseDateScanState.objects.get(
+            item=created_anime.item,
+        )
+        self.assertEqual(
+            release_date_state.last_seen_start_date_text,
+            "2027-05",
+        )
+        self.assertEqual(release_date_state.last_seen_mal_status, "Upcoming")
         self._assert_cache_warm_stats_invariant(stats)
         cache_warm_scheduler.assert_called_once_with("321")
         mock_notify.assert_called_once_with(

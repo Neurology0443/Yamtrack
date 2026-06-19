@@ -1,6 +1,10 @@
+# ruff: noqa: D101,D102
 from django.test import SimpleTestCase
 
-from app.schedules import build_anime_franchise_import_schedule
+from app.schedules import (
+    build_anime_franchise_import_schedule,
+    build_anime_release_date_scan_schedule,
+)
 
 
 class AnimeFranchiseImportScheduleTests(SimpleTestCase):
@@ -55,5 +59,30 @@ class AnimeFranchiseImportScheduleTests(SimpleTestCase):
                 "profile_key": "continuity",
                 "refresh_cache": False,
                 "full_rescan": False,
+            },
+        )
+
+
+class AnimeReleaseDateScanScheduleTests(SimpleTestCase):
+    def test_returns_empty_dict_when_disabled(self):
+        self.assertEqual(
+            build_anime_release_date_scan_schedule(
+                enabled=False,
+                interval_hours=12,
+            ),
+            {},
+        )
+
+    def test_returns_expected_entry_when_enabled(self):
+        self.assertEqual(
+            build_anime_release_date_scan_schedule(
+                enabled=True,
+                interval_hours=12,
+            ),
+            {
+                "scan_mal_anime_release_dates": {
+                    "task": "Scan MAL anime release dates",
+                    "schedule": 60 * 60 * 12,
+                },
             },
         )

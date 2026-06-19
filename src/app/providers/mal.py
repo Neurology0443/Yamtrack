@@ -187,6 +187,7 @@ def anime_minimal(media_id, *, refresh_cache=False):
         "details": {
             "raw_media_type": metadata["details"].get("raw_media_type"),
             "start_date": metadata["details"].get("start_date"),
+            "status": metadata["details"].get("status", ""),
         },
     }
 
