@@ -1197,7 +1197,10 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
         due_seed = SimpleNamespace(user_id=self.user.id, seed_mal_id="10")
         snapshot = SimpleNamespace(
             nodes_by_media_id={"10": object(), "20": object()},
-            continuity_component=["10", "20"],
+            continuity_component=[
+                SimpleNamespace(media_id="10"),
+                SimpleNamespace(media_id="20"),
+            ],
         )
         snapshot_service = Mock()
         snapshot_service.build.return_value = snapshot
@@ -1278,6 +1281,54 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
         self.assertEqual(stats.local_series_groups_resolved, 1)
         self.assertEqual(stats.local_series_memberships_recorded, 1)
         self.assertEqual(stats.local_series_projection_errors, 0)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_projection_scope_includes_full_snapshot_component(
+        self,
+        mock_get_profile,
+    ):
+        self._track("10")
+        self._track("30")
+        resolver = Mock()
+        resolver.resolve.return_value = LocalSeriesResolution(
+            groups=[],
+            resolver_version="v1",
+        )
+        projection_service = Mock()
+        projection_service.persist.return_value = (
+            AnimeLocalSeriesProjectionStats()
+        )
+        service, profile, _state_service, snapshot = self._build_service(
+            selection_media_ids={"30"},
+            resolver=resolver,
+            projection_service=projection_service,
+        )
+        snapshot.nodes_by_media_id = {"10": object()}
+        snapshot.continuity_component = [
+            SimpleNamespace(media_id="10"),
+            SimpleNamespace(media_id="20"),
+        ]
+        snapshot.all_normalized_relations = [
+            SimpleNamespace(
+                source_media_id="20",
+                target_media_id="40",
+            )
+        ]
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="complete",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            projection_service.persist.call_args.kwargs["scope_media_ids"],
+            {"10", "20", "30", "40"},
+        )
 
     @patch("app.services.anime_franchise_import.get_import_profile")
     def test_dry_run_resolves_planned_entries_without_persisting(

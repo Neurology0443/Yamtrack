@@ -388,12 +388,10 @@ class AnimeFranchiseImportService:
         stats,
     ) -> None:
         """Resolve and persist the best-effort Series View projection."""
-        snapshot_media_ids = {
-            str(media_id)
-            for media_id in getattr(snapshot, "nodes_by_media_id", {})
-        }
-        snapshot_media_ids.update(
-            str(media_id) for media_id in selection.media_ids
+        snapshot_media_ids = self._local_series_scope_media_ids(
+            snapshot=snapshot,
+            selection=selection,
+            imported_media_ids=imported_media_ids_for_snapshot,
         )
         tracked_media_ids = bulk_mal_anime_tracked_ids(
             user_id=user.id,
@@ -431,6 +429,47 @@ class AnimeFranchiseImportService:
                     "profile_key": profile_key,
                 },
             )
+
+    @staticmethod
+    def _local_series_scope_media_ids(
+        *,
+        snapshot,
+        selection,
+        imported_media_ids,
+    ) -> set[str]:
+        """Return every media ID represented by the current franchise snapshot."""
+        media_ids = {
+            str(media_id)
+            for media_id in getattr(snapshot, "nodes_by_media_id", {})
+        }
+        for attribute_name in (
+            "continuity_component",
+            "series_line",
+            "direct_anchors",
+        ):
+            for node in getattr(snapshot, attribute_name, ()):
+                media_id = getattr(node, "media_id", node)
+                if media_id not in (None, ""):
+                    media_ids.add(str(media_id))
+
+        for attribute_name in (
+            "all_normalized_relations",
+            "direct_candidates",
+            "promoted_continuity_candidates",
+            "no_series_line_secondary_candidates",
+            "root_story_parent_candidates",
+        ):
+            for relation in getattr(snapshot, attribute_name, ()):
+                for field_name in ("source_media_id", "target_media_id"):
+                    media_id = getattr(relation, field_name, None)
+                    if media_id not in (None, ""):
+                        media_ids.add(str(media_id))
+
+        media_ids.update(
+            str(media_id) for media_id in selection.media_ids
+        )
+        media_ids.update(str(media_id) for media_id in imported_media_ids)
+        return media_ids
 
     @transaction.atomic
     def _create_anime_entry(
