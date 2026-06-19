@@ -15,7 +15,9 @@ CONTINUITY_RELATION_TYPES = frozenset({"prequel", "sequel"})
 BRANCH_RELATION_TYPES = frozenset(
     {"alternative_version", "alternative_setting", "spin_off"}
 )
-AFFILIATE_RELATION_TYPES = frozenset({"summary", "full_story"})
+AFFILIATE_RELATION_TYPES = frozenset(
+    {"summary", "full_story", "side_story", "parent_story"}
+)
 AFFILIATE_MEDIA_TYPES = frozenset({"special", "ova", "tv_special"})
 
 BRANCH_GROUP_KINDS = {

@@ -339,6 +339,119 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
         self.assertEqual(len(resolution.groups), 1)
         self.assertEqual(set(resolution.groups[0].member_media_ids), {"10", "11"})
 
+    def test_overlord_side_story_affiliates_with_tracked_parent_story(self):
+        snapshot = self._snapshot(
+            [
+                self._node("29803", "Overlord"),
+                self._node(
+                    "33372",
+                    "Overlord: Ple Ple Pleiades",
+                    media_type="special",
+                ),
+            ],
+            [
+                AnimeRelation("29803", "33372", "side_story"),
+                AnimeRelation("33372", "29803", "parent_story"),
+            ],
+            root_media_id="33372",
+            series_line_ids=("29803",),
+        )
+
+        resolution = self.resolver.resolve(snapshot, {"29803", "33372"})
+
+        self.assertEqual(len(resolution.groups), 1)
+        self.assertEqual(
+            set(resolution.groups[0].member_media_ids),
+            {"29803", "33372"},
+        )
+
+    def test_overlord_movie_side_story_affiliates_with_tracked_parent(self):
+        snapshot = self._snapshot(
+            [
+                self._node("48895", "Overlord IV"),
+                self._node(
+                    "48896",
+                    "Overlord Movie 3",
+                    media_type="movie",
+                ),
+            ],
+            [
+                AnimeRelation("48895", "48896", "side_story"),
+                AnimeRelation("48896", "48895", "parent_story"),
+            ],
+            root_media_id="48896",
+            series_line_ids=("48895",),
+        )
+
+        resolution = self.resolver.resolve(snapshot, {"48895", "48896"})
+
+        self.assertEqual(len(resolution.groups), 1)
+        self.assertEqual(
+            set(resolution.groups[0].member_media_ids),
+            {"48895", "48896"},
+        )
+
+    def test_side_story_affiliation_does_not_cross_spin_off_boundary(self):
+        snapshot = self._snapshot(
+            [self._node("10"), self._node("20"), self._node("30")],
+            [
+                AnimeRelation("10", "20", "spin_off"),
+                AnimeRelation("10", "30", "side_story"),
+                AnimeRelation("30", "20", "side_story"),
+            ],
+            root_media_id="10",
+            series_line_ids=("10",),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"10", "20", "30"}).groups
+
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(set(groups[0].member_media_ids), {"10", "30"})
+        self.assertEqual(groups[1].member_media_ids, ["20"])
+        self.assertEqual(groups[1].group_kind, "spin_off_branch")
+
+    def test_re_zero_later_prequel_stays_in_one_continuity_group(self):
+        nodes = [
+            self._node("31240", start_date=date(2016, 4, 4)),
+            self._node("38414", start_date=date(2019, 11, 8)),
+            self._node("39587", start_date=date(2020, 7, 8)),
+            self._node("42203", start_date=date(2021, 1, 6)),
+            self._node("54857", start_date=date(2024, 10, 2)),
+            self._node("61316", start_date=date(2026, 1, 1)),
+        ]
+        snapshot = self._snapshot(
+            nodes,
+            [
+                AnimeRelation("31240", "38414", "prequel"),
+                AnimeRelation("38414", "31240", "sequel"),
+                AnimeRelation("31240", "39587", "sequel"),
+                AnimeRelation("39587", "42203", "sequel"),
+                AnimeRelation("42203", "54857", "sequel"),
+                AnimeRelation("54857", "61316", "sequel"),
+            ],
+            root_media_id="31240",
+            series_line_ids=(
+                "38414",
+                "31240",
+                "39587",
+                "42203",
+                "54857",
+                "61316",
+            ),
+        )
+
+        resolution = self.resolver.resolve(
+            snapshot,
+            {"31240", "38414", "39587", "42203", "54857", "61316"},
+        )
+
+        self.assertEqual(len(resolution.groups), 1)
+        self.assertEqual(resolution.groups[0].root_media_id, "38414")
+        self.assertEqual(
+            resolution.groups[0].member_media_ids,
+            ["38414", "31240", "39587", "42203", "54857", "61316"],
+        )
+
     def test_untracked_entry_can_connect_members_but_is_not_displayed(self):
         snapshot = self._snapshot(
             [self._node("10"), self._node("20"), self._node("30")],
