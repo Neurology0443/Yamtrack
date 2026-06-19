@@ -23,6 +23,10 @@ class UserUpdatePreferenceTests(TestCase):
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_user(**self.credentials)
 
+    def test_anime_release_date_notifications_default_to_disabled(self):
+        """The MAL anime start-date preference must be opt-in."""
+        self.assertFalse(self.user.anime_release_date_notifications_enabled)
+
     def test_update_preference_no_new_value(self):
         """Test update_preference when no new value is provided."""
         # Set initial value

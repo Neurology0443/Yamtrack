@@ -31,3 +31,20 @@ def build_anime_franchise_import_schedule(
             "kwargs": kwargs,
         },
     }
+
+
+def build_anime_release_date_scan_schedule(
+    *,
+    enabled: bool,
+    interval_hours: int,
+) -> dict:
+    """Return the optional MAL anime release-date scan schedule."""
+    if not enabled:
+        return {}
+
+    return {
+        "scan_mal_anime_release_dates": {
+            "task": "Scan MAL anime release dates",
+            "schedule": 60 * 60 * interval_hours,
+        },
+    }

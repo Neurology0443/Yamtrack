@@ -256,6 +256,47 @@ class RefreshMALAnimeMetadataTaskTests(TestCase):
         meta = cache.get(mal_cache.get_anime_cache_meta_key(self.media_id))
         self.assertIsNotNone(meta["last_refresh_attempt_at"])
 
+    @patch(
+        "events.services.anime_release_date_notifications."
+        "AnimeReleaseDateNotificationService.process_metadata_refresh",
+    )
+    @patch("app.tasks.mal.anime")
+    def test_refresh_passes_old_and_new_payloads_without_extra_mal_call(
+        self,
+        mock_anime,
+        mock_process,
+    ):
+        new_payload = {**self.payload, "title": "New Anime"}
+        mock_anime.return_value = new_payload
+
+        result = refresh_mal_anime_metadata(self.media_id)
+
+        self.assertTrue(result["refreshed"])
+        mock_anime.assert_called_once_with(self.media_id, refresh_cache=True)
+        mock_process.assert_called_once_with(
+            media_id=self.media_id,
+            old_metadata=self.payload,
+            new_metadata=new_payload,
+            source="metadata_refresh",
+        )
+
+    @patch(
+        "events.services.anime_release_date_notifications."
+        "AnimeReleaseDateNotificationService.process_metadata_refresh",
+        side_effect=RuntimeError("notification state unavailable"),
+    )
+    @patch("app.tasks.mal.anime")
+    def test_release_date_hook_failure_does_not_fail_metadata_refresh(
+        self,
+        mock_anime,
+        _mock_process,
+    ):
+        mock_anime.return_value = {**self.payload, "title": "New Anime"}
+
+        result = refresh_mal_anime_metadata(self.media_id)
+
+        self.assertTrue(result["refreshed"])
+
     @patch("app.providers.mal.services.api_request", return_value=MAL_API_RESPONSE)
     def test_refresh_mal_anime_metadata_success_replaces_cache_and_clears_error(
         self, mock_api_request

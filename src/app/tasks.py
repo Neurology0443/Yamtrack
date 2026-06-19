@@ -71,8 +71,25 @@ def refresh_mal_anime_metadata(media_id):
         }
 
     try:
+        old_metadata, _ = mal_cache.load_anime_cache(media_id)
         mal_cache.mark_refresh_attempt(media_id)
-        mal.anime(media_id, refresh_cache=True)
+        new_metadata = mal.anime(media_id, refresh_cache=True)
+        from events.services.anime_release_date_notifications import (  # noqa: PLC0415
+            AnimeReleaseDateNotificationService,
+        )
+
+        try:
+            AnimeReleaseDateNotificationService().process_metadata_refresh(
+                media_id=media_id,
+                old_metadata=old_metadata,
+                new_metadata=new_metadata,
+                source="metadata_refresh",
+            )
+        except Exception:
+            logger.exception(
+                "Failed to process anime release-date metadata refresh for %s",
+                media_id,
+            )
         return {
             "media_type": "anime",
             "media_id": str(media_id),

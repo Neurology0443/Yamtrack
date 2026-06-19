@@ -232,6 +232,7 @@ class AnimeFranchiseImportService:
                         media_id=media_id,
                         title=metadata["title"],
                         image=metadata["image"],
+                        release_date_metadata=metadata,
                     )
                     stats.created += 1
                     stats.created_ids.append(media_id)
@@ -339,7 +340,13 @@ class AnimeFranchiseImportService:
 
     @transaction.atomic
     def _create_anime_entry(
-        self, *, user_id: int, media_id: str, title: str, image: str
+        self,
+        *,
+        user_id: int,
+        media_id: str,
+        title: str,
+        image: str,
+        release_date_metadata: dict | None = None,
     ) -> None:
         item, _ = Item.objects.get_or_create(
             media_id=str(media_id),
@@ -357,6 +364,21 @@ class AnimeFranchiseImportService:
         )
         anime._skip_hot_priority = True
         anime.save()
+        from events.services.anime_release_date_notifications import (  # noqa: PLC0415
+            AnimeReleaseDateNotificationService,
+        )
+
+        try:
+            release_date_service = AnimeReleaseDateNotificationService()
+            release_date_service.initialize_or_prioritize_imported_item(
+                item=item,
+                metadata=release_date_metadata or {},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to initialize anime release-date state for media_id=%s",
+                media_id,
+            )
         notify_entry_added_after_commit(
             user_id=user_id,
             media_label=str(anime),

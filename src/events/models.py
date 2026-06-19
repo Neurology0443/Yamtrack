@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from django.conf import settings
 from django.db import models
 from django.db.models import (
     Case,
@@ -239,4 +240,137 @@ class Event(models.Model):
             and self.datetime.hour == max_hour
             and self.datetime.minute == SentinelDatetime.MINUTE
             and self.datetime.second == SentinelDatetime.SECOND
+        )
+
+
+class AnimeStartDatePrecision(models.TextChoices):
+    """Supported precision levels for MAL anime start dates."""
+
+    YEAR = "year", "Year"
+    MONTH = "month", "Month"
+    DAY = "day", "Day"
+
+
+class AnimeReleaseDateScanState(models.Model):
+    """Global MAL anime release-date scan state for one item."""
+
+    item = models.OneToOneField(
+        "app.Item",
+        on_delete=models.CASCADE,
+        related_name="anime_release_date_scan_state",
+    )
+    last_seen_start_date_text = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+    )
+    last_seen_start_date_precision = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+    )
+    last_seen_start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Only populated when MAL start_date precision is YYYY-MM-DD.",
+    )
+    last_seen_raw_start_date = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+    )
+    last_seen_mal_status = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+    )
+    initialized_at = models.DateTimeField(null=True, blank=True)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_change_at = models.DateTimeField(null=True, blank=True)
+    next_scan_at = models.DateTimeField()
+    consecutive_stable_scans = models.PositiveIntegerField(default=0)
+    consecutive_error_count = models.PositiveIntegerField(default=0)
+    disabled = models.BooleanField(default=False)
+
+    class Meta:
+        """Meta options for release-date scan state."""
+
+        indexes = [
+            models.Index(
+                fields=["disabled", "next_scan_at"],
+                name="events_ard_due_idx",
+            ),
+        ]
+
+    def __str__(self):
+        """Return a concise scan-state label."""
+        return f"{self.item}: {self.last_seen_start_date_text or 'unknown'}"
+
+
+class AnimeReleaseDateNotificationDelivery(models.Model):
+    """Per-user delivery record for one MAL start-date transition."""
+
+    class ChangeKind(models.TextChoices):
+        """Kinds of user-visible MAL start-date changes."""
+
+        ANNOUNCED = "announced", "Announced"
+        UPDATED = "updated", "Updated"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+    )
+    item = models.ForeignKey("app.Item", on_delete=models.CASCADE)
+    start_date_text = models.CharField(max_length=16)
+    start_date_precision = models.CharField(max_length=16)
+    previous_start_date_text = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+    )
+    previous_start_date_precision = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+    )
+    start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Only populated when start_date_precision is day.",
+    )
+    previous_start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Only populated when previous_start_date_precision is day.",
+    )
+    change_kind = models.CharField(
+        max_length=16,
+        choices=ChangeKind.choices,
+    )
+    detected_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True, default="")
+
+    class Meta:
+        """Meta options for release-date deliveries."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "user",
+                    "item",
+                    "previous_start_date_text",
+                    "start_date_text",
+                ],
+                name="events_ard_user_item_transition_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        """Return a concise delivery transition label."""
+        return (
+            f"{self.user}: {self.item} "
+            f"{self.previous_start_date_text or 'unknown'} → {self.start_date_text}"
         )

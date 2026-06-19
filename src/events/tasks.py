@@ -1,6 +1,7 @@
 import logging
 
 from celery import shared_task
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.utils import timezone
@@ -41,6 +42,30 @@ def send_daily_digest_notifications():
     logger.info("Starting daily digest task")
 
     return notifications.send_daily_digest()
+
+
+@shared_task(name="Scan MAL anime release dates")
+def scan_mal_anime_release_dates():
+    """Run the bounded MAL anime release-date scan."""
+    if not settings.ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED:
+        return {
+            "scanned": 0,
+            "states_created": 0,
+            "initialized": 0,
+            "announced": 0,
+            "updated": 0,
+            "notifications_sent": 0,
+            "notifications_failed": 0,
+            "errors": 0,
+            "skipped": 1,
+            "reason": "disabled",
+        }
+
+    from events.services.anime_release_date_notifications import (  # noqa: PLC0415
+        AnimeReleaseDateNotificationService,
+    )
+
+    return AnimeReleaseDateNotificationService().scan_due_items()
 
 
 @shared_task(name="Send entry added notification")

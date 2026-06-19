@@ -1,9 +1,9 @@
-# ruff: noqa: D102
+# ruff: noqa: D101,D102
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from app.models import (
@@ -19,9 +19,29 @@ from events.notifications import (
     send_user_notification,
 )
 from events.tasks import (
+    scan_mal_anime_release_dates,
     send_entry_added_notification_task,
     send_franchise_discovery_notification_task,
 )
+
+
+class AnimeReleaseDateScanTaskTests(TestCase):
+    @override_settings(ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED=False)
+    def test_disabled_task_returns_without_calling_service(self):
+        result = scan_mal_anime_release_dates()
+
+        self.assertEqual(result["reason"], "disabled")
+        self.assertEqual(result["scanned"], 0)
+
+    @override_settings(ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED=True)
+    @patch(
+        "events.services.anime_release_date_notifications."
+        "AnimeReleaseDateNotificationService.scan_due_items",
+        return_value={"scanned": 2},
+    )
+    def test_enabled_task_delegates_to_service(self, mock_scan):
+        self.assertEqual(scan_mal_anime_release_dates(), {"scanned": 2})
+        mock_scan.assert_called_once_with()
 
 
 class EntryAddedNotificationTaskTests(TestCase):
