@@ -190,31 +190,18 @@ class AnimeLocalSeriesResolver:
         }
         for relation in relations:
             if relation.relation_type in CONTINUITY_RELATION_TYPES:
-                node_pair = frozenset(
-                    {
-                        relation.source_media_id,
-                        relation.target_media_id,
-                    }
-                )
-                if node_pair in branch_boundary_node_pairs:
+                if self._would_merge_branch_boundary(
+                    relation.source_media_id,
+                    relation.target_media_id,
+                    disjoint_set=disjoint_set,
+                    branch_boundary_node_pairs=branch_boundary_node_pairs,
+                ):
                     continue
                 disjoint_set.union(
                     relation.source_media_id,
                     relation.target_media_id,
                 )
 
-        boundary_component_pairs = {
-            frozenset(
-                {
-                    disjoint_set.find(relation.source_media_id),
-                    disjoint_set.find(relation.target_media_id),
-                }
-            )
-            for relation in relations
-            if relation.relation_type in BRANCH_RELATION_TYPES
-            and disjoint_set.find(relation.source_media_id)
-            != disjoint_set.find(relation.target_media_id)
-        }
         for relation in relations:
             if not self._is_affiliation_relation(relation, nodes):
                 continue
@@ -222,7 +209,12 @@ class AnimeLocalSeriesResolver:
             target_root = disjoint_set.find(relation.target_media_id)
             if source_root == target_root:
                 continue
-            if frozenset({source_root, target_root}) in boundary_component_pairs:
+            if self._would_merge_branch_boundary(
+                relation.source_media_id,
+                relation.target_media_id,
+                disjoint_set=disjoint_set,
+                branch_boundary_node_pairs=branch_boundary_node_pairs,
+            ):
                 continue
             if (
                 disjoint_set.component_has_primary(relation.source_media_id)
@@ -242,6 +234,30 @@ class AnimeLocalSeriesResolver:
         for media_id, component_id in component_by_media_id.items():
             component_members[component_id].add(media_id)
         return component_by_media_id, component_members
+
+    @staticmethod
+    def _would_merge_branch_boundary(
+        left_media_id: str,
+        right_media_id: str,
+        *,
+        disjoint_set: _DisjointSet,
+        branch_boundary_node_pairs: set[frozenset[str]],
+    ) -> bool:
+        left_root = disjoint_set.find(left_media_id)
+        right_root = disjoint_set.find(right_media_id)
+        if left_root == right_root:
+            return False
+
+        merging_roots = {left_root, right_root}
+        for boundary_pair in branch_boundary_node_pairs:
+            boundary_left, boundary_right = tuple(boundary_pair)
+            boundary_roots = {
+                disjoint_set.find(boundary_left),
+                disjoint_set.find(boundary_right),
+            }
+            if boundary_roots == merging_roots:
+                return True
+        return False
 
     def _build_group(
         self,

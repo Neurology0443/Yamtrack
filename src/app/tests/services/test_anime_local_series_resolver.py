@@ -207,6 +207,50 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
             [("10", "singleton"), ("20", "spin_off_branch")],
         )
 
+    def test_spin_off_boundary_blocks_indirect_sequel_rejoin(self):
+        self._assert_indirect_boundary_rejoin_is_blocked(
+            relation_type="spin_off",
+            expected_group_kind="spin_off_branch",
+        )
+
+    def test_alternative_version_boundary_blocks_indirect_sequel_rejoin(self):
+        self._assert_indirect_boundary_rejoin_is_blocked(
+            relation_type="alternative_version",
+            expected_group_kind="alternative_branch",
+        )
+
+    def test_alternative_setting_boundary_blocks_indirect_sequel_rejoin(self):
+        self._assert_indirect_boundary_rejoin_is_blocked(
+            relation_type="alternative_setting",
+            expected_group_kind="alternative_branch",
+        )
+
+    def _assert_indirect_boundary_rejoin_is_blocked(
+        self,
+        *,
+        relation_type,
+        expected_group_kind,
+    ):
+        snapshot = self._snapshot(
+            [self._node("10"), self._node("20"), self._node("30")],
+            [
+                AnimeRelation("10", "20", relation_type),
+                AnimeRelation("10", "30", "sequel"),
+                AnimeRelation("30", "20", "sequel"),
+            ],
+            root_media_id="10",
+            series_line_ids=("10", "30"),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"10", "20", "30"}).groups
+
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0].member_media_ids, ["10", "30"])
+        self.assertEqual(groups[1].member_media_ids, ["20"])
+        self.assertEqual(groups[1].group_kind, expected_group_kind)
+        self.assertEqual(groups[1].context_parent_media_id, "10")
+        self.assertEqual(groups[1].context_relation_type, relation_type)
+
     def test_konosuba_explosion_is_a_separate_spin_off_branch(self):
         snapshot = self._snapshot(
             [
