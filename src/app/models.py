@@ -819,6 +819,71 @@ class AnimeImportScanState(models.Model):
         ]
 
 
+class AnimeLocalSeriesGroupKind(models.TextChoices):
+    """Kinds of locally resolved anime series groups."""
+
+    MAIN_CONTINUITY = "main_continuity", "Main continuity"
+    ALTERNATIVE_BRANCH = "alternative_branch", "Alternative branch"
+    SPIN_OFF_BRANCH = "spin_off_branch", "Spin-off branch"
+    SINGLETON = "singleton", "Singleton"
+
+
+class AnimeLocalSeriesMembership(models.Model):
+    """Persisted projection of one tracked anime's local series membership."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    media_id = models.CharField(max_length=36)
+    root_media_id = models.CharField(max_length=36)
+    group_kind = models.CharField(
+        max_length=24,
+        choices=AnimeLocalSeriesGroupKind,
+    )
+    context_parent_media_id = models.CharField(
+        max_length=36,
+        blank=True,
+        default="",
+    )
+    context_relation_type = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+    component_size = models.PositiveIntegerField()
+    source_profile_key = models.CharField(max_length=50)
+    resolver_version = models.CharField(max_length=20)
+    discovered_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Meta options for local anime series memberships."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "user",
+                    "media_id",
+                    "source_profile_key",
+                    "resolver_version",
+                ],
+                name="app_anilocseries_scope_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "root_media_id"],
+                name="app_anilocseries_root_idx",
+            ),
+            models.Index(
+                fields=["user", "group_kind"],
+                name="app_anilocseries_kind_idx",
+            ),
+        ]
+
+    def __str__(self):
+        """Return a compact membership description."""
+        return f"{self.user_id}:{self.media_id} → {self.root_media_id}"
+
+
 class UserMessageLevel(models.TextChoices):
     """Choices for persistent user messages."""
 
