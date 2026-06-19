@@ -478,8 +478,8 @@ def _contains_forbidden_user_data(value) -> bool:
     return False
 
 
-def load_payload(media_id) -> tuple[dict | None, dict]:
-    """Load a valid franchise payload and metadata, updating access metadata."""
+def load_payload(media_id, *, touch: bool = True) -> tuple[dict | None, dict]:
+    """Load a valid franchise payload and optionally update access metadata."""
     payload = cache.get(get_payload_key(media_id))
     meta = normalize_meta(cache.get(get_meta_key(media_id)))
     if payload is None:
@@ -505,10 +505,11 @@ def load_payload(media_id) -> tuple[dict | None, dict]:
         )
         return None, meta
 
-    ttl = get_ttl_seconds()
-    meta["last_accessed_at"] = timezone.now().isoformat()
-    _touch_or_set(get_payload_key(media_id), payload, ttl)
-    cache.set(get_meta_key(media_id), meta, timeout=ttl)
+    if touch:
+        ttl = get_ttl_seconds()
+        meta["last_accessed_at"] = timezone.now().isoformat()
+        _touch_or_set(get_payload_key(media_id), payload, ttl)
+        cache.set(get_meta_key(media_id), meta, timeout=ttl)
     return payload, meta
 
 
@@ -642,13 +643,21 @@ def replace_aliases(
     return len(new_alias_ids)
 
 
-def _load_alias_for_media(media_id) -> dict | None:
+def _load_alias_for_media(media_id, *, repair: bool = True) -> dict | None:
     media_id = str(media_id)
-    alias = _normalize_alias_record(cache.get(get_alias_key(media_id)))
+    alias_key = get_alias_key(media_id)
+    raw_alias = cache.get(alias_key)
+    if raw_alias is None:
+        return None
+
+    alias = _normalize_alias_record(raw_alias)
     if alias is None:
+        if repair:
+            cache.delete(alias_key)
         return None
     if alias["aliased_media_id"] != media_id:
-        cache.delete(get_alias_key(media_id))
+        if repair:
+            cache.delete(alias_key)
         return None
     return alias
 
@@ -696,11 +705,11 @@ def load_valid_alias_payload_for_media(media_id) -> FranchisePayloadLookup | Non
     )
 
 
-def load_payload_for_media(media_id) -> FranchisePayloadLookup:
+def load_payload_for_media(media_id, *, touch: bool = True) -> FranchisePayloadLookup:
     """Load a complete payload for media_id, resolving canonical aliases safely."""
     requested_media_id = str(media_id)
 
-    direct_payload, direct_meta = load_payload(requested_media_id)
+    direct_payload, direct_meta = load_payload(requested_media_id, touch=touch)
     if direct_payload is not None:
         return FranchisePayloadLookup(
             requested_media_id=requested_media_id,
@@ -713,7 +722,7 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
     if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
         return _empty_lookup(requested_media_id, direct_meta)
 
-    alias = _load_alias_for_media(requested_media_id)
+    alias = _load_alias_for_media(requested_media_id, repair=touch)
     if alias is None:
         return _empty_lookup(requested_media_id, direct_meta)
 
@@ -721,7 +730,10 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
     canonical_payload = None
     canonical_meta = direct_meta
     if canonical_media_id != requested_media_id:
-        canonical_payload, canonical_meta = load_payload(canonical_media_id)
+        canonical_payload, canonical_meta = load_payload(
+            canonical_media_id,
+            touch=touch,
+        )
         if canonical_payload is not None and not payload_covers_media_id(
             canonical_payload,
             requested_media_id,
@@ -729,7 +741,8 @@ def load_payload_for_media(media_id) -> FranchisePayloadLookup:
             canonical_payload = None
 
     if canonical_payload is None:
-        cache.delete(get_alias_key(requested_media_id))
+        if touch:
+            cache.delete(get_alias_key(requested_media_id))
         return _empty_lookup(requested_media_id, direct_meta)
 
     logger.info(

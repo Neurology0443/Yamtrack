@@ -846,6 +846,109 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(lookup.canonical_media_id, "223")
         self.assertEqual(lookup.payload["root_media_id"], "223")
 
+    def test_load_payload_without_touch_does_not_mutate_payload_or_metadata(self):
+        anime_franchise_cache.save_payload("100", self.payload, node_count=1)
+        original_meta = cache.get(anime_franchise_cache.get_meta_key("100"))
+
+        with (
+            patch.object(
+                anime_franchise_cache,
+                "_touch_or_set",
+            ) as mock_touch_or_set,
+            patch.object(cache, "set", wraps=cache.set) as mock_cache_set,
+        ):
+            payload, meta = anime_franchise_cache.load_payload("100", touch=False)
+
+        self.assertEqual(payload["root_media_id"], "100")
+        self.assertEqual(meta, original_meta)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_meta_key("100")),
+            original_meta,
+        )
+        mock_touch_or_set.assert_not_called()
+        mock_cache_set.assert_not_called()
+
+    def test_load_payload_for_media_without_touch_keeps_valid_alias_read_only(self):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223", "269"]
+        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.replace_aliases("223", payload)
+        original_meta = cache.get(anime_franchise_cache.get_meta_key("223"))
+
+        with (
+            patch.object(
+                anime_franchise_cache,
+                "_touch_or_set",
+            ) as mock_touch_or_set,
+            patch.object(cache, "set", wraps=cache.set) as mock_cache_set,
+            patch.object(cache, "delete", wraps=cache.delete) as mock_cache_delete,
+        ):
+            lookup = anime_franchise_cache.load_payload_for_media(
+                "269",
+                touch=False,
+            )
+
+        self.assertTrue(lookup.alias_hit)
+        self.assertEqual(lookup.canonical_media_id, "223")
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_meta_key("223")),
+            original_meta,
+        )
+        mock_touch_or_set.assert_not_called()
+        mock_cache_set.assert_not_called()
+        mock_cache_delete.assert_not_called()
+
+    def test_load_payload_for_media_without_touch_preserves_mismatched_alias(self):
+        alias = anime_franchise_cache._build_alias_record(
+            canonical_media_id="223",
+            aliased_media_id="999",
+        )
+        cache.set(anime_franchise_cache.get_alias_key("269"), alias)
+
+        lookup = anime_franchise_cache.load_payload_for_media("269", touch=False)
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_alias_key("269")),
+            alias,
+        )
+
+    def test_load_payload_for_media_without_touch_preserves_broken_alias(self):
+        alias = anime_franchise_cache._build_alias_record(
+            canonical_media_id="223",
+            aliased_media_id="269",
+        )
+        cache.set(anime_franchise_cache.get_alias_key("269"), alias)
+
+        lookup = anime_franchise_cache.load_payload_for_media("269", touch=False)
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_alias_key("269")),
+            alias,
+        )
+
+    def test_load_payload_for_media_without_touch_preserves_non_covering_alias(self):
+        payload = self._dragon_ball_payload()
+        payload["aliasable_media_ids"] = ["223"]
+        anime_franchise_cache.save_payload("223", payload)
+        alias = anime_franchise_cache._build_alias_record(
+            canonical_media_id="223",
+            aliased_media_id="269",
+        )
+        cache.set(anime_franchise_cache.get_alias_key("269"), alias)
+
+        lookup = anime_franchise_cache.load_payload_for_media("269", touch=False)
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_alias_key("269")),
+            alias,
+        )
+
     def test_load_payload_for_media_deletes_broken_alias_without_payload(self):
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
@@ -892,6 +995,18 @@ class AnimeFranchiseCacheTests(TestCase):
                 canonical_media_id="223",
                 aliased_media_id="999",
             ),
+        )
+
+        lookup = anime_franchise_cache.load_payload_for_media("269")
+
+        self.assertIsNone(lookup.payload)
+        self.assertFalse(lookup.alias_hit)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
+
+    def test_load_payload_for_media_deletes_malformed_alias(self):
+        cache.set(
+            anime_franchise_cache.get_alias_key("269"),
+            {"bad": "alias"},
         )
 
         lookup = anime_franchise_cache.load_payload_for_media("269")
