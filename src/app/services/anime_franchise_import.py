@@ -271,12 +271,16 @@ class AnimeFranchiseImportService:
                 root_key = (user.id, component_root_mal_id)
                 force_baseline_suppression = root_key in baseline_roots_created_this_run
                 if not dry_run:
+                    local_memberships = (
+                        self.component_membership_service.resolve_local_memberships(
+                            snapshot=snapshot,
+                            selected_media_ids=selection.media_ids,
+                        )
+                    )
                     stats.component_memberships_recorded += (
-                        self.component_membership_service.record_tracked_component(
+                        self.component_membership_service.record_tracked_memberships(
                             user_id=due_seed.user_id,
-                            media_ids=self._continuity_media_ids(snapshot),
-                            component_root_mal_id=component_root_mal_id,
-                            component_size=len(snapshot.continuity_component),
+                            memberships=local_memberships,
                             source_profile_key=profile_key,
                         )
                     )
@@ -358,14 +362,6 @@ class AnimeFranchiseImportService:
                         stats.state_rows_updated += 1
 
         return stats
-
-    def _continuity_media_ids(self, snapshot) -> set[str]:
-        """Return normalized media IDs from a canonical continuity component."""
-        return {
-            str(getattr(node, "media_id", node))
-            for node in snapshot.continuity_component
-            if getattr(node, "media_id", node) not in (None, "")
-        }
 
     @transaction.atomic
     def _create_anime_entry(

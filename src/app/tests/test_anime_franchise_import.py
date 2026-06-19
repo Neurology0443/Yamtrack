@@ -5,7 +5,9 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
+from django.template.loader import render_to_string
 from django.test import TestCase
+from django.urls import reverse
 
 from app.models import (
     Anime,
@@ -22,6 +24,7 @@ from app.services.anime_franchise_cache_warmer import (
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_types import AnimeRelation
 from app.services.anime_series_list import AnimeSeriesListService
 from events.models import AnimeReleaseDateScanState
 
@@ -83,13 +86,20 @@ class AnimeFranchiseImportNotificationTests(TestCase):
     def _assert_cache_warm_stats_invariant(self, stats):
         self.assertEqual(stats.cache_warm_scheduled, len(stats.cache_warm_targets))
 
-    def _run_component_membership_import(self, *, media_ids, root_media_id):
-        for media_id in media_ids:
+    def _run_component_membership_import(
+        self,
+        *,
+        titles_by_media_id,
+        selected_media_ids,
+        global_root_media_id,
+        relations,
+    ):
+        for media_id, title in titles_by_media_id.items():
             item = Item.objects.create(
                 media_id=media_id,
                 source=Sources.MAL.value,
                 media_type=MediaTypes.ANIME.value,
-                title=f"Anime {media_id}",
+                title=title,
                 image=f"https://example.com/{media_id}.jpg",
             )
             anime = Anime(
@@ -102,13 +112,11 @@ class AnimeFranchiseImportNotificationTests(TestCase):
 
         due_seed = SimpleNamespace(
             user_id=self.user.id,
-            seed_mal_id=root_media_id,
+            seed_mal_id=global_root_media_id,
         )
         snapshot = SimpleNamespace(
-            continuity_component=[
-                SimpleNamespace(media_id=media_id)
-                for media_id in [*media_ids, "9999"]
-            ],
+            continuity_component=[SimpleNamespace(media_id=global_root_media_id)],
+            all_normalized_relations=relations,
         )
         snapshot_service = Mock()
         snapshot_service.build.return_value = snapshot
@@ -118,9 +126,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         state_service.record_success.return_value = (None, True, None)
         state_service.record_error.return_value = (None, True)
         profile = Mock()
-        profile.component_root_media_id.return_value = root_media_id
+        profile.component_root_media_id.return_value = global_root_media_id
         profile.select.return_value = SimpleNamespace(
-            media_ids=set(),
+            media_ids=set(selected_media_ids),
             fingerprint_payload={},
         )
         profile.detail_cache_warm_media_ids.return_value = set()
@@ -139,12 +147,35 @@ class AnimeFranchiseImportNotificationTests(TestCase):
             return_value=profile,
         ):
             return service.run(
-                profile_key="continuity",
+                profile_key="complete",
                 dry_run=False,
                 full_rescan=False,
                 limit=None,
                 refresh_cache=False,
                 user_ids=[self.user.id],
+            )
+
+    def _empty_lookup(self, media_id):
+        return FranchisePayloadLookup(
+            requested_media_id=str(media_id),
+            canonical_media_id=str(media_id),
+            payload=None,
+            meta={},
+            alias_hit=False,
+        )
+
+    def _build_cache_cold_series_groups(self):
+        with patch(
+            "app.services.anime_series_list."
+            "anime_franchise_cache.load_payload_for_media",
+            side_effect=lambda media_id, **_kwargs: self._empty_lookup(media_id),
+        ):
+            return AnimeSeriesListService().build_groups(
+                target_user=self.user,
+                anime_queryset=Anime.objects.filter(
+                    user=self.user,
+                ).select_related("item"),
+                sort_filter="title",
             )
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
@@ -266,13 +297,29 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_notify.assert_not_called()
         mock_anime_minimal.assert_not_called()
 
-    def test_import_persists_component_root_for_every_tracked_member(
+    def test_dragon_ball_import_persists_local_branch_and_renders_no_893_card(
         self,
     ):
-        media_ids = ["2966", "5341", "6007"]
+        titles = {
+            "223": "Dragon Ball",
+            "502": "Dragon Ball Movie 1: Shen Long no Densetsu",
+            "891": "Dragon Ball Movie 2: Majinjou no Nemurihime",
+            "892": "Dragon Ball Movie 3: Makafushigi Daibouken",
+            "893": "Dragon Ball Movie 4: Saikyou e no Michi",
+        }
         stats = self._run_component_membership_import(
-            media_ids=media_ids,
-            root_media_id="2966",
+            titles_by_media_id=titles,
+            selected_media_ids={"223", "502"},
+            global_root_media_id="223",
+            relations=[
+                AnimeRelation("223", media_id, "alternative_version")
+                for media_id in ("502", "891", "892", "893")
+            ]
+            + [
+                AnimeRelation("502", "891", "sequel"),
+                AnimeRelation("891", "892", "sequel"),
+                AnimeRelation("892", "893", "sequel"),
+            ],
         )
 
         mappings = dict(
@@ -283,63 +330,51 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(
             mappings,
             {
-                "2966": "2966",
-                "5341": "2966",
-                "6007": "2966",
+                "223": "223",
+                "502": "502",
+                "891": "502",
+                "892": "502",
+                "893": "502",
             },
         )
-        self.assertEqual(stats.component_memberships_recorded, 3)
-        self.assertFalse(
-            AnimeImportComponentMembership.objects.filter(
-                user=self.user,
-                media_id="9999",
-            ).exists(),
-        )
-        empty_lookup = lambda media_id, **_kwargs: FranchisePayloadLookup(  # noqa: E731
-            requested_media_id=str(media_id),
-            canonical_media_id=str(media_id),
-            payload=None,
-            meta={},
-            alias_hit=False,
-        )
-        with patch(
-            "app.services.anime_series_list."
-            "anime_franchise_cache.load_payload_for_media",
-            side_effect=empty_lookup,
-        ):
-            groups = AnimeSeriesListService().build_groups(
-                target_user=self.user,
-                anime_queryset=Anime.objects.filter(
-                    user=self.user,
-                ).select_related("item"),
-                sort_filter="title",
-            )
+        self.assertEqual(stats.component_memberships_recorded, 5)
 
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0].group_key, "2966")
+        groups = self._build_cache_cold_series_groups()
+        groups_by_key = {group.group_key: group for group in groups}
+        self.assertEqual(set(groups_by_key), {"223", "502"})
         self.assertEqual(
-            {entry.media_id for entry in groups[0].entries},
-            set(media_ids),
+            {entry.media_id for entry in groups_by_key["502"].entries},
+            {"502", "891", "892", "893"},
         )
 
-    def test_import_persists_dragon_ball_component_for_all_tracked_members(self):
-        media_ids = ["502", "891", "892", "893"]
-
-        stats = self._run_component_membership_import(
-            media_ids=media_ids,
-            root_media_id="502",
+        html = render_to_string(
+            "app/components/anime_series_groups.html",
+            {
+                "media_list": groups,
+                "target_user": self.user,
+                "media_type": MediaTypes.ANIME.value,
+            },
         )
-
-        mappings = dict(
-            AnimeImportComponentMembership.objects.filter(
-                user=self.user,
-            ).values_list("media_id", "component_root_mal_id"),
+        movie_893_url = reverse(
+            "media_details",
+            kwargs={
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "media_id": "893",
+                "title": "dragon-ball-movie-4-saikyou-e-no-michi",
+            },
         )
-        self.assertEqual(
-            mappings,
-            dict.fromkeys(media_ids, "502"),
+        movie_502_url = reverse(
+            "media_details",
+            kwargs={
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "media_id": "502",
+                "title": "dragon-ball-movie-1-shen-long-no-densetsu",
+            },
         )
-        self.assertEqual(stats.component_memberships_recorded, 4)
+        self.assertNotIn(movie_893_url, html)
+        self.assertIn(movie_502_url, html)
 
     @patch("app.services.anime_franchise_import.get_import_profile")
     def test_dry_run_does_not_persist_component_memberships(
