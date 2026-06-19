@@ -52,12 +52,12 @@ SEPARATE_RELATION_KINDS = {
     "alternative_setting": "alternative_branch",
     "spin_off": "spin_off_branch",
 }
-BRANCH_RELATION_LABELS = {
+CONTEXT_LABELS_BY_RELATION = {
     "alternative_version": "Alternative version",
     "alternative_setting": "Alternative setting",
     "spin_off": "Spin off",
 }
-BRANCH_SECTION_RELATIONS = {
+CONTEXT_RELATIONS_BY_SECTION = {
     "alternatives": "alternative_version",
     "alternative_versions": "alternative_version",
     "alternative_settings": "alternative_setting",
@@ -84,6 +84,9 @@ PARENT_TO_CHILD_RELATIONS = frozenset(
         "summary",
     },
 )
+# Parent-affiliated relations are directional in Series View.
+# They prevent warmed child payloads with return links such as full_story
+# from pulling the parent into the child group.
 
 
 @dataclass(frozen=True)
@@ -167,6 +170,8 @@ class AnimeSeriesGroup:
     context_label: str = ""
     context_title: str = ""
     user_score: Decimal | None = None
+    mal_score: Decimal | float | None = None
+    source_material: str = ""
     best_score: Decimal | None = None
     best_progress_ratio: float = 0
     earliest_start_date: datetime | None = None
@@ -375,15 +380,6 @@ class AnimeSeriesListService:
                 lookup=lookup,
             )
 
-        if self._has_external_separator(memberships, current_media_id=media_id):
-            return _ResolvedEntry(
-                media=anime,
-                group_key=media_id,
-                group_kind="main_continuity",
-                membership=None,
-                lookup=lookup,
-            )
-
         if self._is_direct_local_payload(lookup, media_id):
             return _ResolvedEntry(
                 media=anime,
@@ -392,10 +388,20 @@ class AnimeSeriesListService:
                 membership=None,
                 lookup=lookup,
             )
+
         if state_root:
             return _ResolvedEntry(
                 media=anime,
                 group_key=state_root,
+                group_kind="main_continuity",
+                membership=None,
+                lookup=lookup,
+            )
+
+        if self._has_external_separator(memberships, current_media_id=media_id):
+            return _ResolvedEntry(
+                media=anime,
+                group_key=media_id,
                 group_kind="main_continuity",
                 membership=None,
                 lookup=lookup,
@@ -535,7 +541,7 @@ class AnimeSeriesListService:
                     BranchContext(
                         kind=SEPARATE_RELATION_KINDS[relation_type],
                         relation_type=relation_type,
-                        label=BRANCH_RELATION_LABELS[relation_type],
+                        label=CONTEXT_LABELS_BY_RELATION[relation_type],
                         parent_key=parent_group_key,
                         parent_title=self._payload_parent_title(membership),
                         explicit_relation=(
@@ -599,7 +605,7 @@ class AnimeSeriesListService:
         relation_type = membership.relation_type.lower()
         if relation_type in SEPARATE_BY_DEFAULT_RELATIONS:
             return relation_type
-        return BRANCH_SECTION_RELATIONS.get(membership.section_key.lower())
+        return CONTEXT_RELATIONS_BY_SECTION.get(membership.section_key.lower())
 
     def _payload_branch_count(self, payload: dict) -> int:
         branch_ids = set()
@@ -688,6 +694,10 @@ class AnimeSeriesListService:
             if branch_context is not None
             else representative.group_kind
         )
+        local_metadata = self._local_group_metadata(
+            representative,
+            payload=payload,
+        )
 
         return AnimeSeriesGroup(
             group_key=group_key,
@@ -699,6 +709,8 @@ class AnimeSeriesListService:
             context_label=branch_context.label if branch_context else "",
             context_title=self._context_title(branch_context),
             user_score=representative_media.score,
+            mal_score=local_metadata["mal_score"],
+            source_material=local_metadata["source_material"],
             best_score=max(scores) if scores else None,
             best_progress_ratio=max(
                 (entry.progress_ratio for entry in entries),
@@ -707,6 +719,90 @@ class AnimeSeriesListService:
             earliest_start_date=min(starts) if starts else None,
             latest_end_date=max(ends) if ends else None,
         )
+
+    def _local_group_metadata(
+        self,
+        representative: _ResolvedEntry,
+        *,
+        payload: dict | None,
+    ) -> dict:
+        """Return optional metadata already embedded in local franchise data."""
+        media_id = str(representative.media.item.media_id)
+        candidates = []
+        if representative.membership is not None:
+            candidates.append(representative.membership.entry_data)
+        if payload:
+            candidates.extend(self._payload_entries_for_media(payload, media_id))
+            candidates.append(payload)
+
+        mal_score = None
+        source_material = ""
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if mal_score is None:
+                mal_score = self._first_optional_number(
+                    candidate,
+                    ("mal_score", "mean", "rating", "score"),
+                )
+            if not source_material:
+                source_material = self._first_optional_text(
+                    candidate,
+                    ("source_material", "original_source"),
+                )
+            if mal_score is not None and source_material:
+                break
+        return {
+            "mal_score": mal_score,
+            "source_material": source_material,
+        }
+
+    def _payload_entries_for_media(
+        self,
+        payload: dict,
+        media_id: str,
+    ) -> list[dict]:
+        entries = []
+        for block in [payload.get("series", {}), *payload.get("sections", [])]:
+            entries.extend(
+                entry
+                for entry in block.get("entries", [])
+                if (
+                    isinstance(entry, dict)
+                    and str(entry.get("media_id") or "") == media_id
+                )
+            )
+        return entries
+
+    def _optional_number(self, value) -> Decimal | float | None:
+        if isinstance(value, bool) or not isinstance(value, (Decimal, int, float)):
+            return None
+        return float(value) if isinstance(value, int) else value
+
+    def _first_optional_number(
+        self,
+        candidate: dict,
+        keys: tuple[str, ...],
+    ) -> Decimal | float | None:
+        for key in keys:
+            value = self._optional_number(candidate.get(key))
+            if value is not None:
+                return value
+        return None
+
+    def _optional_text(self, value) -> str:
+        return str(value).strip() if value not in (None, "") else ""
+
+    def _first_optional_text(
+        self,
+        candidate: dict,
+        keys: tuple[str, ...],
+    ) -> str:
+        for key in keys:
+            value = self._optional_text(candidate.get(key))
+            if value:
+                return value
+        return ""
 
     def _context_title(self, context: BranchContext | None) -> str:
         if context is None:

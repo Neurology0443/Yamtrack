@@ -175,26 +175,41 @@ class MediaListViewTests(TestCase):
                 context_label=context_label,
                 context_title=context_title,
                 user_score=score,
+                mal_score=mal_score,
+                source_material=source_material,
             )
-            for title, context_label, context_title, score in [
-                ("Main Series", "", "", 8),
+            for (
+                title,
+                context_label,
+                context_title,
+                score,
+                mal_score,
+                source_material,
+            ) in [
+                ("Main Series", "", "", 8, 8.7, "Light Novel"),
                 (
                     "Alternative Series",
                     "Alternative version",
                     "Alternative version · Parent Series",
                     None,
+                    None,
+                    "",
                 ),
                 (
                     "Alternative Setting Series",
                     "Alternative setting",
                     "Alternative setting · Parent Series",
                     None,
+                    None,
+                    "",
                 ),
                 (
                     "Spin off Series",
                     "Spin off",
                     "Spin off · Parent Series",
                     None,
+                    None,
+                    "",
                 ),
             ]
         ]
@@ -206,14 +221,21 @@ class MediaListViewTests(TestCase):
         content = response.content.decode()
 
         self.assertContains(response, 'class="anime-series-list media-grid"')
-        self.assertContains(response, ">Alternative version</span>")
-        self.assertContains(response, ">Alternative setting</span>")
-        self.assertContains(response, ">Spin off</span>")
+        self.assertContains(response, "bg-black/50")
+        self.assertContains(response, "hover-tap:opacity-100")
+        self.assertContains(response, "My score: 8")
+        self.assertContains(response, "MAL: 8.7")
+        self.assertContains(response, "Source: Light Novel")
+        self.assertContains(response, "Alternative version · Parent Series")
+        self.assertContains(response, "Alternative setting · Parent Series")
+        self.assertContains(response, "Spin off · Parent Series")
         self.assertContains(
             response,
             'title="Alternative version · Parent Series"',
         )
-        self.assertContains(response, ">8</span>")
+        self.assertNotContains(response, ">Alternative version</span>")
+        self.assertNotContains(response, ">Alternative setting</span>")
+        self.assertNotContains(response, ">Spin off</span>")
         self.assertNotIn("Open series", content)
         self.assertNotIn("Alternative continuity", content)
         self.assertNotIn("Spin-off continuity", content)

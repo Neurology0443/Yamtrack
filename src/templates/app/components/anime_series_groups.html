@@ -11,26 +11,42 @@
                src="{{ IMG_NONE }}">
         </a>
 
-        {% if group.user_score is not None %}
-          <div class="absolute top-2 right-2 bg-gray-900/90 text-white text-xs px-2 py-1 rounded-md flex items-center shadow-md">
-            {% include "app/icons/star.svg" with classes="w-4 h-4 text-yellow-400 mr-1 fill-current" %}
-            <span class="text-sm text-white">{{ group.user_score }}</span>
+        <div class="absolute inset-0 flex bg-black/50 opacity-0 transition-opacity duration-200 hover-tap:opacity-100">
+          <a href="{{ group.detail_item|media_url }}"
+             class="absolute inset-0"
+             aria-label="{{ group.display_title }}"></a>
+          <div class="pointer-events-none relative z-10 flex w-full flex-col justify-end p-3 text-white">
+            <h3 class="line-clamp-2 text-sm font-semibold"
+                title="{{ group.display_title }}">{{ group.display_title }}</h3>
+            {% if group.user_score is not None or group.mal_score is not None or group.source_material or group.context_title %}
+              <div class="mt-2 space-y-1 text-xs text-gray-200">
+                {% if group.user_score is not None %}
+                  <div class="flex items-center gap-1">
+                    {% include "app/icons/star.svg" with classes="w-3.5 h-3.5 text-yellow-400 fill-current" %}
+                    <span>My score: {{ group.user_score }}</span>
+                  </div>
+                {% endif %}
+                {% if group.mal_score is not None %}
+                  <div class="flex items-center gap-1">
+                    {% include "app/icons/star.svg" with classes="w-3.5 h-3.5 text-blue-300 fill-current" %}
+                    <span>MAL: {{ group.mal_score }}</span>
+                  </div>
+                {% endif %}
+                {% if group.source_material %}<div>Source: {{ group.source_material }}</div>{% endif %}
+                {% if group.context_title %}
+                  <div class="line-clamp-2 pt-1 text-indigo-200"
+                       title="{{ group.context_title }}">{{ group.context_title }}</div>
+                {% endif %}
+              </div>
+            {% endif %}
           </div>
-        {% endif %}
-
-        <a href="{{ group.detail_item|media_url }}"
-           class="absolute inset-0 bg-black/25 opacity-0 hover-tap:opacity-100 transition-opacity"
-           aria-label="{{ group.display_title }}"></a>
+        </div>
       </div>
 
       <div class="p-3">
         <a href="{{ group.detail_item|media_url }}"
            class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
            title="{{ group.display_title }}">{{ group.display_title }}</a>
-        {% if group.context_label %}
-          <span class="mt-1 inline-flex max-w-full rounded bg-gray-900/60 px-2 py-0.5 text-[11px] text-gray-300"
-                title="{{ group.context_title }}">{{ group.context_label }}</span>
-        {% endif %}
       </div>
     </article>
   </div>

@@ -107,7 +107,14 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             "sections": sections or [],
         }
 
-    def entry(self, media_id, title, relation_type="", anime_media_type="movie"):
+    def entry(
+        self,
+        media_id,
+        title,
+        relation_type="",
+        anime_media_type="movie",
+        **metadata,
+    ):
         return {
             "media_id": str(media_id),
             "source": "mal",
@@ -115,6 +122,7 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             "anime_media_type": anime_media_type,
             "title": title,
             "relation_type": relation_type,
+            **metadata,
         }
 
     def build_groups(self, anime_list, lookups, *, state_roots=None, sort="title"):
@@ -216,6 +224,10 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                 "20": self.lookup("20", parent_payload),
                 "21": self.lookup("21", chibi_payload),
                 "22": self.lookup("22"),
+            },
+            state_roots={
+                "21": "21",
+                "22": "21",
             },
         )
 
@@ -573,6 +585,69 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         self.assertEqual(groups[0].group_key, "59")
         self.assertEqual(groups[0].context_label, "")
 
+    def test_direct_local_payload_wins_over_state_root_fallback(self):
+        anime = self.anime("61", "Direct local root")
+        local_payload = self.payload(
+            "61",
+            "Direct local root",
+            series=[self.entry("61", "Direct local root")],
+        )
+
+        groups = self.build_groups(
+            [anime],
+            {"61": self.lookup("61", local_payload)},
+            state_roots={"61": "59"},
+        )
+
+        self.assertEqual(groups[0].group_key, "61")
+
+    def test_state_root_groups_cache_cold_local_alternative_continuity(self):
+        parent = self.anime("51122", "Spice and Wolf")
+        old_1 = self.anime("2966", "Old adaptation")
+        old_2 = self.anime("5341", "Old adaptation II")
+        old_extra = self.anime("6007", "Old adaptation OVA")
+        parent_payload = self.payload(
+            "51122",
+            "Spice and Wolf",
+            series=[self.entry("51122", "Spice and Wolf")],
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternatives",
+                    "entries": [
+                        self.entry("2966", "Old adaptation", "alternative_version"),
+                        self.entry("5341", "Old adaptation II", "alternative_version"),
+                        self.entry("6007", "Old adaptation OVA", "alternative_version"),
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, old_1, old_2, old_extra],
+            {
+                "51122": self.lookup("51122", parent_payload),
+                "2966": self.lookup("2966"),
+                "5341": self.lookup("5341"),
+                "6007": self.lookup("6007"),
+            },
+            state_roots={
+                "2966": "2966",
+                "5341": "2966",
+                "6007": "2966",
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            {entry.media_id for entry in groups_by_key["2966"].entries},
+            {"2966", "5341", "6007"},
+        )
+        self.assertEqual(
+            groups_by_key["2966"].context_title,
+            "Alternative version · Spice and Wolf",
+        )
+
     def test_card_score_comes_from_representative_user_score(self):
         anime = self.anime("70", "Scored anime", score=4)
 
@@ -580,6 +655,45 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
 
         self.assertEqual(groups[0].user_score, 4)
         self.assertEqual(groups[0].best_score, 4)
+
+    def test_optional_overlay_metadata_uses_only_explicit_local_fields(self):
+        anime = self.anime("71", "Locally enriched")
+        payload = self.payload(
+            "71",
+            "Locally enriched",
+            series=[
+                self.entry(
+                    "71",
+                    "Locally enriched",
+                    mal_score=8.4,
+                    source_material="Light Novel",
+                ),
+            ],
+        )
+
+        groups = self.build_groups(
+            [anime],
+            {"71": self.lookup("71", payload)},
+        )
+
+        self.assertEqual(groups[0].mal_score, 8.4)
+        self.assertEqual(groups[0].source_material, "Light Novel")
+
+    def test_provider_source_is_not_exposed_as_source_material(self):
+        anime = self.anime("72", "No original source")
+        payload = self.payload(
+            "72",
+            "No original source",
+            series=[self.entry("72", "No original source")],
+        )
+
+        groups = self.build_groups(
+            [anime],
+            {"72": self.lookup("72", payload)},
+        )
+
+        self.assertIsNone(groups[0].mal_score)
+        self.assertEqual(groups[0].source_material, "")
 
     def test_franchise_payload_reads_never_touch_cache(self):
         anime = self.anime("80", "Read only")
