@@ -12,7 +12,7 @@
         <meta name="author" content="FuzzyGrim">
       
       
-        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/architecture-overview/">
+        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-release-date-notifications/">
       
       
       
@@ -25,7 +25,7 @@
     
     
       
-        <title>Architecture overview - Yamtrack Documentation</title>
+        <title>MAL anime release-date notifications - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#architecture-overview" class="md-skip">
+        <a href="#mal-anime-release-date-notifications" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Architecture overview
+              MAL anime release-date notifications
             
           </span>
         </div>
@@ -563,7 +563,7 @@
                 
                   
   
-    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/architecture-overview.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-release-date-notifications.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -572,178 +572,115 @@
     
       
     
-    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/architecture-overview.md" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-release-date-notifications.md" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
     </a>
   
 
 
-<h1 id="architecture-overview">Architecture overview<a class="headerlink" href="#architecture-overview" title="Permanent link">&para;</a></h1>
-<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
-<p>This fork is scoped to MAL anime franchise handling:</p>
-<ul>
-<li>MAL anime only.</li>
-<li>Anime detail pages for grouping and display.</li>
-<li>Import automation only for existing user library entries whose source is MAL anime.</li>
-<li>Non-MAL anime providers and other media types keep upstream Yamtrack behavior.</li>
-</ul>
-<p>The goal is to keep the user-facing page stable while letting provider fetching, graph normalization, UI placement, import selection, and cache delivery evolve independently.</p>
-<h2 id="high-level-model">High-level model<a class="headerlink" href="#high-level-model" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>MAL Provider
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ↓
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Franchise Graph
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ↓
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Franchise Snapshot
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── UI Projection
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── Import Projection
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└── Cache Projection
+<h1 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h1>
+<h2 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h2>
+<p>Yamtrack can notify a user when the start date of an actively tracked
+MyAnimeList anime is announced, becomes more precise, or changes.</p>
+<p>The feature is opt-in per user. It is disabled by default and applies only to
+MAL anime in <code>Planning</code> or <code>In progress</code> with at least one notification URL.
+Items excluded from notifications are ignored.</p>
+<h2 id="source-of-truth">Source of truth<a class="headerlink" href="#source-of-truth" title="Permanent link">&para;</a></h2>
+<p>The only release-date source is:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;details&quot;</span><span class="p">][</span><span class="s2">&quot;start_date&quot;</span><span class="p">]</span>
 </span></code></pre></div>
-<p>The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.</p>
-<h2 id="mental-model">Mental model<a class="headerlink" href="#mental-model" title="Permanent link">&para;</a></h2>
-<p>Think of the franchise snapshot as the single source of franchise truth.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Snapshot
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    ↓
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>├── UI grouping
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── Import selection
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>└── Cache payload
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    ↓
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Rendering
-</span></code></pre></div>
-<p>The snapshot describes what a franchise is. UI grouping, import selection, and cache delivery are independent consumers of that same snapshot.</p>
-<p>This separation allows page layout, import automation, and cache delivery to evolve without changing franchise semantics.</p>
-<h2 id="what-this-fork-changes-compared-to-upstream">What this fork changes compared to upstream<a class="headerlink" href="#what-this-fork-changes-compared-to-upstream" title="Permanent link">&para;</a></h2>
-<p>Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on top of the existing tracker:</p>
+<p>This value comes from the MAL anime provider. The feature does not use AniList
+<code>airingSchedule</code>, calendar <code>Event</code> rows, or <code>Event.notification_sent</code>. Episode
+and actual-release notifications remain separate features.</p>
+<p>Supported values are parsed strictly:</p>
 <ul>
-<li>clearer MAL anime franchise pages;</li>
-<li>automatic grouping of related MAL anime entries;</li>
-<li>optional automatic import of useful missing franchise entries;</li>
-<li>persistent scan scheduling for franchise imports;</li>
-<li>complete franchise cache payloads for responsive detail pages;</li>
-<li>cache warmup after import-created entries;</li>
-<li>entry-added notifications for automatically imported anime;</li>
-<li>opt-in MAL anime start-date notifications;</li>
-<li>configurable MAL provider rate limiting.</li>
+<li><code>YYYY</code></li>
+<li><code>YYYY-MM</code></li>
+<li><code>YYYY-MM-DD</code></li>
 </ul>
-<p>These additions are scoped to MAL anime franchise behavior. Existing Yamtrack features for other media types and providers remain upstream-compatible.</p>
-<h2 id="core-concepts">Core concepts<a class="headerlink" href="#core-concepts" title="Permanent link">&para;</a></h2>
+<p>Empty, malformed, or impossible dates do not generate notifications. Partial
+dates are stored as first-class states so transitions such as <code>2027</code> to
+<code>2027-05</code> and <code>2027-05</code> to <code>2027-05-27</code> can be detected.</p>
+<h2 id="observation-paths">Observation paths<a class="headerlink" href="#observation-paths" title="Permanent link">&para;</a></h2>
+<p>There are four ways to observe the MAL value:</p>
+<ol>
+<li>An existing MAL metadata refresh passes its old and new payloads to the
+   service. No extra provider request is made.</li>
+<li>Franchise import passes the payload already returned by <code>anime_minimal()</code>.
+   The state is initialized silently and no extra provider request is made.</li>
+<li>A MAL anime detail page initializes a missing state from the metadata already
+   loaded for rendering. The hook is silent, makes no provider request, and a
+   hook failure does not break the page.</li>
+<li>A dedicated Celery scan processes a bounded deterministic batch of due
+   states. It uses the MAL cache when its <code>fetched_at</code> value is recent enough
+   and refreshes MAL only as a last resort.</li>
+</ol>
+<p>The dedicated scan is a safety net for anime whose detail page is never opened.</p>
+<h2 id="dedicated-scan-eligibility">Dedicated scan eligibility<a class="headerlink" href="#dedicated-scan-eligibility" title="Permanent link">&para;</a></h2>
+<p>An item is considered for the dedicated scan only when all of these conditions
+are true:</p>
 <ul>
-<li><strong>Franchise graph</strong>: hydrated MAL anime nodes plus normalized relation edges. Built by <code>AnimeFranchiseGraphBuilder</code> from MAL metadata and direct neighbors.</li>
-<li><strong>Franchise snapshot</strong>: normalized, deterministic representation around one seed. Built by <code>AnimeFranchiseSnapshotService</code>.</li>
-<li><code>continuity_component</code>: nodes reached by the graph builder for the franchise continuity component.</li>
-<li><code>series_line</code>: ordered TV-only continuity line derived from prequel/sequel direction and dates. This feeds the fixed UI <code>Series</code> block.</li>
-<li><code>direct_anchors</code>: nodes used for direct secondary candidate discovery. Usually the full TV series line; for a non-TV root it can include the root too.</li>
-<li><code>direct_candidates</code>: direct relations from anchors after excluding entries already in the TV series line.</li>
-<li><code>promoted_continuity_candidates</code>: non-TV prequel/sequel chains promoted from the series line so transitive OVAs/movies can still be considered as main-story extras.</li>
-<li><code>no_series_line_secondary_candidates</code>: secondary candidates used when the snapshot has no TV series line.</li>
-<li><code>root_story_parent_candidates</code>: direct <code>full_story</code> links from a non-TV root to a TV parent.</li>
-<li><code>canonical_root_media_id</code>: stable root used for scan state and canonical cache payloads. It is the first series-line item when available, otherwise the earliest continuity node.</li>
-<li><code>fallback_anchor_media_id</code>: root media ID used for anchoring no-series-line layouts.</li>
-<li><code>has_series_line</code>: boolean guard for UI and candidate assembly when no TV line exists.</li>
+<li>the item source is MAL;</li>
+<li>the item media type is anime;</li>
+<li>at least one user tracks it as <code>Planning</code> or <code>In progress</code>;</li>
+<li>that user enabled anime release-date notifications;</li>
+<li>that user has at least one non-empty Apprise notification URL;</li>
+<li>that user did not exclude the item from notifications;</li>
+<li>the global scan state is enabled and its <code>next_scan_at</code> is due;</li>
+<li>the minimum refresh cooldown has elapsed.</li>
 </ul>
-<h2 id="main-runtime-flows">Main runtime flows<a class="headerlink" href="#main-runtime-flows" title="Permanent link">&para;</a></h2>
-<h3 id="detail-page">Detail page<a class="headerlink" href="#detail-page" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>media_details view
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> -&gt; load complete franchise cache / alias
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> -&gt; prepare request-specific context if payload is valid
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a> -&gt; render media_details.html
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a> -&gt; schedule background build on miss/stale/invalid when allowed
-</span></code></pre></div>
-<p>The view does not synchronously build a large franchise on a cache miss. It keeps the standard related-anime fallback for that request and asks Celery to build the full payload.</p>
-<h3 id="background-cache-build">Background cache build<a class="headerlink" href="#background-cache-build" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build MAL anime franchise payload task
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a> -&gt; graph build
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a> -&gt; snapshot build
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; UI projection
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a> -&gt; serialize user-agnostic payload
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a> -&gt; save canonical payload, metadata, and safe aliases
-</span></code></pre></div>
-<h3 id="import-automation">Import automation<a class="headerlink" href="#import-automation" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Existing user MAL anime
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a> -&gt; due seed selection
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a> -&gt; snapshot build
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a> -&gt; profile selection
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a> -&gt; missing Item/Anime creation
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a> -&gt; scan-state update
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a> -&gt; entry-added notification
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a> -&gt; cache warmup scheduling
-</span></code></pre></div>
-<h3 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>MAL metadata[&quot;details&quot;][&quot;start_date&quot;]
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a> -&gt; opportunistic metadata refresh / franchise import / bounded scan
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a> -&gt; global AnimeReleaseDateScanState per MAL anime Item
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a> -&gt; per-user transition delivery
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a> -&gt; Apprise notification
-</span></code></pre></div>
-<p>This flow is deliberately independent from AniList <code>airingSchedule</code>, calendar
-events, and episode release notifications. The dedicated scan considers only
-actively tracked MAL anime with an eligible user, uses a recent MAL cache entry
-before making a provider request, and applies cooldown, deterministic batching,
-backoff, and jitter.</p>
-<h2 id="ui-projection">UI projection<a class="headerlink" href="#ui-projection" title="Permanent link">&para;</a></h2>
-<p>The UI projection builds the anime detail-page franchise layout:</p>
+<p><code>Completed</code>, <code>Paused</code>, and <code>Dropped</code> tracking entries do not make an anime
+eligible. Multiple eligible users tracking the same anime still produce only
+one global cache lookup or MAL refresh.</p>
+<p>The known start date then controls how long the item remains scannable:</p>
 <ul>
-<li><code>Series</code> is fixed and comes only from <code>snapshot.series_line</code>.</li>
-<li>Secondary sections are rule-driven.</li>
-<li>Classification belongs in rule packs, not in templates.</li>
-<li>The adapter is a compatibility layer; it should not decide placement.</li>
+<li>no valid date: keep scanning with progressive backoff;</li>
+<li>a current or future <code>YYYY</code> date: keep scanning because MAL may add a month or
+  day, or change the year;</li>
+<li>a current or future <code>YYYY-MM</code> date: keep scanning because MAL may add a day or
+  change the month;</li>
+<li>a complete date today or in the future: keep scanning because MAL may still
+  move the date;</li>
+<li>a complete date before today: disable the scan state;</li>
+<li>a partial year older than the current year: disable the scan state;</li>
+<li>a partial month older than the current month: disable the scan state;</li>
+<li>MAL status <code>Finished</code>: disable the scan state.</li>
 </ul>
-<p>Current UI pipeline:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>AnimeFranchiseSnapshot
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a> -&gt; SeriesBuilder
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a> -&gt; UiCandidateAssembler
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a> -&gt; RulePipeline
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a> -&gt; LayoutCompiler
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a> -&gt; ViewModelAdapter
-</span></code></pre></div>
-<h2 id="import-projection">Import projection<a class="headerlink" href="#import-projection" title="Permanent link">&para;</a></h2>
-<p>The import projection also uses the snapshot, but it has its own policy:</p>
+<p>Finished-status matching is defensive and accepts normalized or raw-looking
+variants such as <code>Finished</code>, <code>finished</code>, <code>finished_airing</code>, and
+<code>Finished Airing</code>.</p>
+<p>Known partial or complete future dates use the long backoff and normally return
+after seven days plus jitter. Therefore, having a precise future date does not
+cause frequent MAL requests, but still allows a later postponement to be
+detected.</p>
+<h2 id="persistence-and-deduplication">Persistence and deduplication<a class="headerlink" href="#persistence-and-deduplication" title="Permanent link">&para;</a></h2>
+<p><code>AnimeReleaseDateScanState</code> stores one global state per MAL anime <code>Item</code>. One
+provider refresh therefore serves every user tracking the same anime.</p>
+<p><code>AnimeReleaseDateNotificationDelivery</code> stores one row per user and date
+transition. Its uniqueness constraint includes both the previous and new text
+values, allowing a later reverse transition while preventing the same
+transition from being sent twice.</p>
+<p>The first observed state is always initialized silently. This prevents existing
+known dates from producing a notification storm when the feature is deployed.</p>
+<h2 id="scan-controls">Scan controls<a class="headerlink" href="#scan-controls" title="Permanent link">&para;</a></h2>
+<p>The scan uses:</p>
 <ul>
-<li><code>continuity</code> imports continuity-component entries that pass format/runtime/summary filters.</li>
-<li><code>satellites</code> imports selected direct spin-off, alternative-version, and side-story entries from canonical seeds.</li>
-<li><code>complete</code> is the union of continuity and satellites.</li>
+<li>a global cache lock;</li>
+<li>deterministic ordering by <code>next_scan_at</code> and row ID;</li>
+<li>a configurable batch size;</li>
+<li>chunked creation of missing state rows to avoid a large initial write spike;</li>
+<li>a minimum refresh cooldown;</li>
+<li>recent MAL cache data before any provider request;</li>
+<li>stable-state backoff up to the configured maximum;</li>
+<li>jitter only when calculating the next scan time;</li>
+<li>automatic disabling for definitively past dates and MAL <code>Finished</code> status.</li>
 </ul>
-<p>Import profiles must not follow UI sections blindly. UI placement is about detail-page readability; import selection is about creating useful library entries without over-importing noise.</p>
-<h2 id="cache-projection">Cache projection<a class="headerlink" href="#cache-projection" title="Permanent link">&para;</a></h2>
-<p>The cache projection stores a complete, user-agnostic payload for detail pages:</p>
-<ul>
-<li>payload is JSON-safe and schema-versioned;</li>
-<li>no user status/progress, <code>Item</code>, <code>BasicMedia</code>, user IDs, or rendered HTML;</li>
-<li>stale payloads can still render while a refresh is queued;</li>
-<li>canonical aliases let aliasable media IDs resolve to one canonical payload;</li>
-<li>import-created entries schedule cache warmup after transaction commit.</li>
-</ul>
-<h2 id="delivery-layer">Delivery layer<a class="headerlink" href="#delivery-layer" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Celery task <code>Build MAL anime franchise payload</code> builds cache payloads.</li>
-<li>Celery task <code>Import anime franchise</code> runs import automation.</li>
-<li>Celery task <code>Scan MAL anime release dates</code> checks a bounded batch of due
-  start-date states.</li>
-<li>Beat schedule entry <code>auto_import_anime_franchise</code> exists only when import automation is enabled.</li>
-<li><code>views.py</code> enriches cached payloads with current-user data at render time.</li>
-<li><code>media_details.html</code> renders prepared context and should not classify entries.</li>
-</ul>
+<p>The default schedule runs every 12 hours with a batch of 25 and a minimum
+24-hour refresh interval. This caps the theoretical provider refresh volume at
+50 anime per day, while recent cache entries reduce it further.</p>
 <h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
-<p>Documented settings currently present in <code>src/config/settings.py</code>. For setting behavior details, see the dedicated grouping/import/cache docs.</p>
 <ul>
-<li><code>ANIME_FRANCHISE_GROUPING_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_ALIASES_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code></li>
-<li><code>ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS</code></li>
-<li><code>ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS</code></li>
-<li><code>ANIME_FRANCHISE_QUEUE_LOCK_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_TASK_LOCK_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_MAX_NODES</code></li>
-<li><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></li>
-<li><code>MAL_RATE_LIMIT_PER_MINUTE</code></li>
 <li><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code></li>
 <li><code>ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS</code></li>
 <li><code>ANIME_RELEASE_DATE_SCAN_BATCH_SIZE</code></li>
@@ -751,25 +688,6 @@ backoff, and jitter.</p>
 <li><code>ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS</code></li>
 <li><code>ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS</code></li>
 <li><code>ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES</code></li>
-</ul>
-<h2 id="related-docs">Related docs<a class="headerlink" href="#related-docs" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../anime-franchise-snapshot/">Anime franchise snapshot</a></li>
-<li><a href="../anime-franchise-grouping/">Anime franchise grouping</a></li>
-<li><a href="../anime-franchise-import/">Anime franchise import</a></li>
-<li><a href="../anime-franchise-cache/">Anime franchise cache</a></li>
-<li><a href="../anime-release-date-notifications/">Anime release-date notifications</a></li>
-</ul>
-<h2 id="design-rules">Design rules<a class="headerlink" href="#design-rules" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Snapshot is the canonical franchise source.</li>
-<li>UI, import, and cache are separate projections.</li>
-<li>Rule packs own placement policy.</li>
-<li>Layout code owns structure and ordering.</li>
-<li>Adapter/context code owns compatibility and request enrichment.</li>
-<li>Views should orchestrate cache/context only, not patch placement.</li>
-<li>Templates render only.</li>
-<li>Complete franchise cache never stores user-specific data.</li>
 </ul>
 
 
