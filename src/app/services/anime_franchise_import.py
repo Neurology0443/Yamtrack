@@ -18,6 +18,9 @@ from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryServic
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
+from app.services.anime_local_series_constants import (
+    LOCAL_SERIES_VIEW_PROFILE_KEY,
+)
 from app.services.anime_local_series_projection import (
     AnimeLocalSeriesProjectionService,
 )
@@ -303,7 +306,7 @@ class AnimeFranchiseImportService:
                             self.local_series_projection_service.persist(
                                 user=user,
                                 resolution=local_series_resolution,
-                                source_profile_key=profile_key,
+                                source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
                                 scope_media_ids=snapshot_media_ids,
                             )
                         )

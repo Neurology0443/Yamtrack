@@ -14,6 +14,9 @@ from app.services.anime_franchise_cache_warmer import (
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_local_series_constants import (
+    LOCAL_SERIES_VIEW_PROFILE_KEY,
+)
 from app.services.anime_local_series_projection import (
     AnimeLocalSeriesProjectionStats,
 )
@@ -1269,7 +1272,7 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
         projection_service.persist.assert_called_once_with(
             user=self.user,
             resolution=resolution,
-            source_profile_key="complete",
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
             scope_media_ids={"10", "20"},
         )
         self.assertEqual(stats.local_series_groups_resolved, 1)
@@ -1304,6 +1307,10 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
 
         resolver.resolve.assert_called_once_with(snapshot, {"10", "20"})
         projection_service.persist.assert_not_called()
+        profile.select.assert_called_once_with(snapshot)
+        self.assertEqual(stats.planned_creations, 1)
+        self.assertEqual(stats.created, 0)
+        self.assertEqual(stats.already_exists, 0)
         self.assertEqual(stats.local_series_projection_skipped_dry_run, 1)
         self.assertEqual(stats.local_series_memberships_recorded, 0)
 
