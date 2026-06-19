@@ -136,14 +136,15 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                 sort_filter=sort,
             )
 
-    def test_singleton_has_no_subtitle(self):
+    def test_singleton_has_no_context(self):
         anime = self.anime("1", "Standalone")
 
         groups = self.build_groups([anime], {"1": self.lookup("1")})
 
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0].group_kind, "singleton")
-        self.assertEqual(groups[0].subtitle, "")
+        self.assertEqual(groups[0].context_label, "")
+        self.assertEqual(groups[0].context_title, "")
 
     def test_isolated_side_story_stays_in_parent(self):
         parent = self.anime("10", "Parent")
@@ -226,51 +227,121 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             {"20", "21", "22"},
         )
 
-    def test_side_story_navigation_payload_does_not_create_affiliation_loop(self):
-        parent = self.anime("25", "Parent")
-        side_story = self.anime("26", "Side Story")
+    def test_parent_child_return_links_do_not_create_affiliation_loops(self):
+        for index, relation_type in enumerate(
+            ("side_story", "special", "ova", "summary"),
+            start=1,
+        ):
+            with self.subTest(relation_type=relation_type):
+                parent_id = str(index * 10)
+                child_id = str(index * 10 + 1)
+                parent = self.anime(parent_id, "Parent")
+                child = self.anime(child_id, "Child")
+                parent_payload = self.payload(
+                    parent_id,
+                    "Parent",
+                    series=[self.entry(parent_id, "Parent")],
+                    sections=[
+                        {
+                            "key": "related_series",
+                            "title": "Related Series",
+                            "entries": [
+                                self.entry(child_id, "Child", relation_type),
+                            ],
+                        },
+                    ],
+                )
+                navigation_payload = self.payload(
+                    child_id,
+                    "Child",
+                    series=[self.entry(child_id, "Child")],
+                    sections=[
+                        {
+                            "key": "related_series",
+                            "title": "Related Series",
+                            "entries": [
+                                self.entry(parent_id, "Parent", "full_story"),
+                            ],
+                        },
+                    ],
+                )
+
+                groups = self.build_groups(
+                    [parent, child],
+                    {
+                        parent_id: self.lookup(parent_id, parent_payload),
+                        child_id: self.lookup(child_id, navigation_payload),
+                    },
+                )
+
+                self.assertEqual(len(groups), 1)
+                self.assertEqual(groups[0].group_key, parent_id)
+                self.assertEqual(
+                    {entry.media_id for entry in groups[0].entries},
+                    {parent_id, child_id},
+                )
+
+    def test_spice_like_alternatives_collapse_into_local_continuity(self):
+        parent = self.anime("51122", "Spice and Wolf")
+        old_1 = self.anime("2966", "Old adaptation")
+        old_2 = self.anime("5341", "Old adaptation II")
+        old_extra = self.anime("6007", "Old adaptation OVA")
         parent_payload = self.payload(
-            "25",
-            "Parent",
-            series=[self.entry("25", "Parent")],
+            "51122",
+            "Spice and Wolf",
+            series=[self.entry("51122", "Spice and Wolf")],
             sections=[
                 {
-                    "key": "related_series",
-                    "title": "Related Series",
+                    "key": "alternatives",
+                    "title": "Alternatives",
                     "entries": [
-                        self.entry("26", "Side Story", "side_story"),
+                        self.entry("2966", "Old adaptation", "alternative_version"),
+                        self.entry("5341", "Old adaptation II", "alternative_version"),
+                        self.entry("6007", "Old adaptation OVA", "alternative_version"),
                     ],
                 },
             ],
         )
-        navigation_payload = self.payload(
-            "26",
-            "Side Story",
-            series=[self.entry("26", "Side Story")],
+        local_payload = self.payload(
+            "2966",
+            "Old adaptation",
+            series=[
+                self.entry("2966", "Old adaptation"),
+                self.entry("5341", "Old adaptation II", "sequel"),
+            ],
             sections=[
                 {
-                    "key": "related_series",
-                    "title": "Related Series",
+                    "key": "specials",
+                    "title": "Specials",
                     "entries": [
-                        self.entry("25", "Parent", "full_story"),
+                        self.entry("6007", "Old adaptation OVA", "ova"),
                     ],
                 },
             ],
         )
 
         groups = self.build_groups(
-            [parent, side_story],
+            [parent, old_1, old_2, old_extra],
             {
-                "25": self.lookup("25", parent_payload),
-                "26": self.lookup("26", navigation_payload),
+                "51122": self.lookup("51122", parent_payload),
+                "2966": self.lookup("2966", local_payload),
+                "5341": self.lookup("5341"),
+                "6007": self.lookup("6007"),
             },
         )
+        groups_by_key = {group.group_key: group for group in groups}
 
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0].group_key, "25")
         self.assertEqual(
-            {entry.media_id for entry in groups[0].entries},
-            {"25", "26"},
+            {entry.media_id for entry in groups_by_key["2966"].entries},
+            {"2966", "5341", "6007"},
+        )
+        self.assertEqual(
+            groups_by_key["2966"].context_label,
+            "Alternative version",
+        )
+        self.assertIn(
+            "Spice and Wolf",
+            groups_by_key["2966"].context_title,
         )
 
     def test_alternative_local_continuity_keeps_parent_context(self):
@@ -305,6 +376,11 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                     "title": "Related Series",
                     "entries": [
                         self.entry("32", "SAO Progressive 2", "sequel"),
+                        self.entry(
+                            "30",
+                            "Sword Art Online",
+                            "alternative_version",
+                        ),
                     ],
                 },
             ],
@@ -326,10 +402,50 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         )
         self.assertEqual(groups_by_key["31"].group_kind, "alternative_branch")
         self.assertEqual(
-            groups_by_key["31"].subtitle,
-            "Alternative continuity · Sword Art Online",
+            groups_by_key["31"].context_label,
+            "Alternative version",
         )
-        self.assertEqual(groups_by_key["30"].subtitle, "")
+        self.assertEqual(
+            groups_by_key["31"].context_title,
+            "Alternative version · Sword Art Online",
+        )
+        self.assertEqual(groups_by_key["30"].context_label, "")
+
+    def test_alternative_setting_uses_specific_context_label(self):
+        parent = self.anime("35", "Parent")
+        branch = self.anime("36", "Different setting")
+        parent_payload = self.payload(
+            "35",
+            "Parent",
+            series=[self.entry("35", "Parent")],
+            sections=[
+                {
+                    "key": "alternative_settings",
+                    "title": "Alternative Settings",
+                    "entries": [
+                        self.entry(
+                            "36",
+                            "Different setting",
+                            "",
+                        ),
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, branch],
+            {
+                "35": self.lookup("35", parent_payload),
+                "36": self.lookup("36"),
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            groups_by_key["36"].context_label,
+            "Alternative setting",
+        )
 
     def test_spin_off_local_continuity_keeps_parent_context(self):
         parent = self.anime("40", "A Certain Magical Index")
@@ -385,8 +501,12 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         )
         self.assertEqual(groups_by_key["41"].group_kind, "spin_off_branch")
         self.assertEqual(
-            groups_by_key["41"].subtitle,
-            "Spin-off continuity · A Certain Magical Index",
+            groups_by_key["41"].context_label,
+            "Spin off",
+        )
+        self.assertEqual(
+            groups_by_key["41"].context_title,
+            "Spin off · A Certain Magical Index",
         )
 
     def test_return_relation_does_not_reclassify_parent(self):
@@ -435,7 +555,11 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         groups_by_key = {group.group_key: group for group in groups}
 
         self.assertEqual(groups_by_key["50"].group_kind, "main_continuity")
-        self.assertEqual(groups_by_key["50"].subtitle, "")
+        self.assertEqual(groups_by_key["50"].context_label, "")
+        self.assertEqual(
+            groups_by_key["51"].context_label,
+            "Alternative version",
+        )
 
     def test_state_root_remains_cache_cold_group_key_fallback(self):
         anime = self.anime("60", "Cache-cold sequel")
@@ -447,7 +571,7 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         )
 
         self.assertEqual(groups[0].group_key, "59")
-        self.assertEqual(groups[0].subtitle, "")
+        self.assertEqual(groups[0].context_label, "")
 
     def test_card_score_comes_from_representative_user_score(self):
         anime = self.anime("70", "Scored anime", score=4)
@@ -456,3 +580,25 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
 
         self.assertEqual(groups[0].user_score, 4)
         self.assertEqual(groups[0].best_score, 4)
+
+    def test_franchise_payload_reads_never_touch_cache(self):
+        anime = self.anime("80", "Read only")
+        with (
+            patch.object(
+                AnimeSeriesListService,
+                "_load_state_roots",
+                return_value={},
+            ),
+            patch(
+                "app.services.anime_series_list."
+                "anime_franchise_cache.load_payload_for_media",
+                return_value=self.lookup("80"),
+            ) as load_payload,
+        ):
+            self.service.build_groups(
+                target_user=self.user,
+                anime_queryset=[anime],
+                sort_filter="title",
+            )
+
+        load_payload.assert_called_once_with("80", touch=False)

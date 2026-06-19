@@ -172,19 +172,28 @@ class MediaListViewTests(TestCase):
                 detail_item=item,
                 display_title=title,
                 display_image=item.image,
-                subtitle=subtitle,
+                context_label=context_label,
+                context_title=context_title,
                 user_score=score,
             )
-            for title, subtitle, score in [
-                ("Main Series", "", 8),
+            for title, context_label, context_title, score in [
+                ("Main Series", "", "", 8),
                 (
                     "Alternative Series",
-                    "Alternative continuity · Parent Series",
+                    "Alternative version",
+                    "Alternative version · Parent Series",
                     None,
                 ),
                 (
-                    "Spin-off Series",
-                    "Spin-off continuity · Parent Series",
+                    "Alternative Setting Series",
+                    "Alternative setting",
+                    "Alternative setting · Parent Series",
+                    None,
+                ),
+                (
+                    "Spin off Series",
+                    "Spin off",
+                    "Spin off · Parent Series",
                     None,
                 ),
             ]
@@ -197,10 +206,17 @@ class MediaListViewTests(TestCase):
         content = response.content.decode()
 
         self.assertContains(response, 'class="anime-series-list media-grid"')
-        self.assertContains(response, "Alternative continuity · Parent Series")
-        self.assertContains(response, "Spin-off continuity · Parent Series")
+        self.assertContains(response, ">Alternative version</span>")
+        self.assertContains(response, ">Alternative setting</span>")
+        self.assertContains(response, ">Spin off</span>")
+        self.assertContains(
+            response,
+            'title="Alternative version · Parent Series"',
+        )
         self.assertContains(response, ">8</span>")
         self.assertNotIn("Open series", content)
+        self.assertNotIn("Alternative continuity", content)
+        self.assertNotIn("Spin-off continuity", content)
         self.assertNotIn("Main continuity", content)
         self.assertNotIn("Side-story", content)
         self.assertNotIn("Single", content)

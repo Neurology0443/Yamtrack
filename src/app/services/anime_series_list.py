@@ -52,6 +52,17 @@ SEPARATE_RELATION_KINDS = {
     "alternative_setting": "alternative_branch",
     "spin_off": "spin_off_branch",
 }
+BRANCH_RELATION_LABELS = {
+    "alternative_version": "Alternative version",
+    "alternative_setting": "Alternative setting",
+    "spin_off": "Spin off",
+}
+BRANCH_SECTION_RELATIONS = {
+    "alternatives": "alternative_version",
+    "alternative_versions": "alternative_version",
+    "alternative_settings": "alternative_setting",
+    "spin_offs": "spin_off",
+}
 PARENT_BY_DEFAULT_RELATIONS = frozenset(
     {
         "prequel",
@@ -153,7 +164,8 @@ class AnimeSeriesGroup:
     detail_item: Item
     entries: list[AnimeSeriesEntry]
     group_kind: str
-    subtitle: str = ""
+    context_label: str = ""
+    context_title: str = ""
     user_score: Decimal | None = None
     best_score: Decimal | None = None
     best_progress_ratio: float = 0
@@ -175,7 +187,12 @@ class BranchContext:
     """External relation that gives an Alternative or Spin-off UX context."""
 
     kind: str
+    relation_type: str
+    label: str
+    parent_key: str
     parent_title: str
+    explicit_relation: bool
+    parent_branch_count: int
 
 
 @dataclass(frozen=True)
@@ -218,7 +235,7 @@ class AnimeSeriesListService:
         state_roots = self._load_state_roots(target_user.id, media_ids)
         memberships = self._build_membership_index(lookups.values())
         resolved = [
-            self._resolve_entry(
+            self._resolve_group_identity(
                 anime=anime,
                 lookup=lookups[str(anime.item.media_id)],
                 memberships=memberships.get(str(anime.item.media_id), []),
@@ -228,6 +245,11 @@ class AnimeSeriesListService:
             for anime in anime_list
         ]
         resolved = self._collapse_group_keys(resolved)
+        resolved = self._attach_branch_contexts(
+            resolved,
+            memberships=memberships,
+            tracked_media_ids=set(media_ids),
+        )
 
         grouped: dict[str, list[_ResolvedEntry]] = defaultdict(list)
         for entry in resolved:
@@ -324,7 +346,7 @@ class AnimeSeriesListService:
             ),
         )
 
-    def _resolve_entry(
+    def _resolve_group_identity(
         self,
         *,
         anime,
@@ -334,21 +356,6 @@ class AnimeSeriesListService:
         tracked_media_ids,
     ) -> _ResolvedEntry:
         media_id = str(anime.item.media_id)
-        branch_context = self._branch_context(
-            memberships,
-            current_media_id=media_id,
-            tracked_media_ids=tracked_media_ids,
-        )
-        if branch_context is not None:
-            return _ResolvedEntry(
-                media=anime,
-                group_key=media_id,
-                group_kind=branch_context.kind,
-                membership=None,
-                lookup=lookup,
-                branch_context=branch_context,
-            )
-
         affiliation = self._affiliation_membership(
             memberships,
             state_root=state_root,
@@ -365,6 +372,15 @@ class AnimeSeriesListService:
                 group_key=affiliation.parent_key,
                 group_kind=decision.group_kind,
                 membership=affiliation,
+                lookup=lookup,
+            )
+
+        if self._has_external_separator(memberships, current_media_id=media_id):
+            return _ResolvedEntry(
+                media=anime,
+                group_key=media_id,
+                group_kind="main_continuity",
+                membership=None,
                 lookup=lookup,
             )
 
@@ -392,44 +408,16 @@ class AnimeSeriesListService:
             lookup=lookup,
         )
 
-    def _branch_context(
+    def _has_external_separator(
         self,
         memberships: list[_PayloadMembership],
         *,
         current_media_id: str,
-        tracked_media_ids: set[str],
-    ) -> BranchContext | None:
-        candidates = []
-        for membership in memberships:
-            if membership.parent_key == current_media_id:
-                continue
-            branch_kind = SEPARATE_SECTION_KINDS.get(
-                membership.section_key.lower(),
-                SEPARATE_RELATION_KINDS.get(membership.relation_type.lower()),
-            )
-            if branch_kind is None or self._local_payload_links_to(
-                memberships,
-                current_media_id=current_media_id,
-                target_media_id=membership.parent_key,
-                relation_types=SEPARATE_BY_DEFAULT_RELATIONS,
-                section_keys=frozenset(SEPARATE_SECTION_KINDS),
-            ):
-                continue
-            candidates.append((membership, branch_kind))
-
-        if not candidates:
-            return None
-
-        membership, branch_kind = min(
-            candidates,
-            key=lambda candidate: (
-                0 if candidate[0].parent_key in tracked_media_ids else 1,
-                candidate[0].parent_key,
-            ),
-        )
-        return BranchContext(
-            kind=branch_kind,
-            parent_title=self._payload_parent_title(membership),
+    ) -> bool:
+        return any(
+            membership.parent_key != current_media_id
+            and self._membership_branch_relation(membership) is not None
+            for membership in memberships
         )
 
     def _local_payload_links_to(
@@ -439,7 +427,6 @@ class AnimeSeriesListService:
         current_media_id: str,
         target_media_id: str,
         relation_types: frozenset[str],
-        section_keys: frozenset[str] = frozenset(),
     ) -> bool:
         for membership in memberships:
             if membership.parent_key != current_media_id:
@@ -452,8 +439,7 @@ class AnimeSeriesListService:
                     if str(entry.get("media_id") or "") != target_media_id:
                         continue
                     relation_type = str(entry.get("relation_type") or "").lower()
-                    section_key = str(block.get("key") or "").lower()
-                    if relation_type in relation_types or section_key in section_keys:
+                    if relation_type in relation_types:
                         return True
         return False
 
@@ -520,6 +506,114 @@ class AnimeSeriesListService:
                 group_key = next_key
             collapsed.append(replace(entry, group_key=group_key))
         return collapsed
+
+    def _attach_branch_contexts(
+        self,
+        resolved_entries: list[_ResolvedEntry],
+        *,
+        memberships: dict[str, list[_PayloadMembership]],
+        tracked_media_ids: set[str],
+    ) -> list[_ResolvedEntry]:
+        """Attach external branch context after local group identities stabilize."""
+        group_by_media_id = {
+            str(entry.media.item.media_id): entry.group_key
+            for entry in resolved_entries
+        }
+        candidates_by_group: dict[str, list[BranchContext]] = defaultdict(list)
+        for media_id, group_key in group_by_media_id.items():
+            for membership in memberships.get(media_id, []):
+                relation_type = self._membership_branch_relation(membership)
+                if relation_type is None:
+                    continue
+                parent_group_key = group_by_media_id.get(
+                    membership.parent_key,
+                    membership.parent_key,
+                )
+                if parent_group_key == group_key:
+                    continue
+                candidates_by_group[group_key].append(
+                    BranchContext(
+                        kind=SEPARATE_RELATION_KINDS[relation_type],
+                        relation_type=relation_type,
+                        label=BRANCH_RELATION_LABELS[relation_type],
+                        parent_key=parent_group_key,
+                        parent_title=self._payload_parent_title(membership),
+                        explicit_relation=(
+                            membership.relation_type.lower()
+                            in SEPARATE_BY_DEFAULT_RELATIONS
+                        ),
+                        parent_branch_count=self._payload_branch_count(
+                            membership.payload,
+                        ),
+                    ),
+                )
+
+        selected = {
+            group_key: min(
+                candidates,
+                key=lambda context: (
+                    0 if context.parent_key in tracked_media_ids else 1,
+                    0 if context.explicit_relation else 1,
+                    context.parent_key,
+                    context.relation_type,
+                ),
+            )
+            for group_key, candidates in candidates_by_group.items()
+        }
+        self._remove_reciprocal_contexts(selected)
+        return [
+            replace(
+                entry,
+                group_kind=(
+                    selected[entry.group_key].kind
+                    if entry.group_key in selected
+                    else entry.group_kind
+                ),
+                branch_context=selected.get(entry.group_key),
+            )
+            for entry in resolved_entries
+        ]
+
+    def _remove_reciprocal_contexts(
+        self,
+        contexts: dict[str, BranchContext],
+    ) -> None:
+        """Keep one deterministic direction when MAL exposes reciprocal branches."""
+        for group_key, context in list(contexts.items()):
+            reverse = contexts.get(context.parent_key)
+            if reverse is None or reverse.parent_key != group_key:
+                continue
+            if context.parent_branch_count > reverse.parent_branch_count:
+                contexts.pop(context.parent_key, None)
+            elif context.parent_branch_count < reverse.parent_branch_count:
+                contexts.pop(group_key, None)
+            elif context.parent_key < group_key:
+                contexts.pop(context.parent_key, None)
+            else:
+                contexts.pop(group_key, None)
+
+    def _membership_branch_relation(
+        self,
+        membership: _PayloadMembership,
+    ) -> str | None:
+        relation_type = membership.relation_type.lower()
+        if relation_type in SEPARATE_BY_DEFAULT_RELATIONS:
+            return relation_type
+        return BRANCH_SECTION_RELATIONS.get(membership.section_key.lower())
+
+    def _payload_branch_count(self, payload: dict) -> int:
+        branch_ids = set()
+        for section in payload.get("sections", []):
+            section_key = str(section.get("key") or "").lower()
+            for entry in section.get("entries", []):
+                relation_type = str(entry.get("relation_type") or "").lower()
+                if (
+                    relation_type in SEPARATE_BY_DEFAULT_RELATIONS
+                    or section_key in SEPARATE_SECTION_KINDS
+                ):
+                    branch_ids.add(str(entry.get("media_id") or ""))
+        branch_ids.discard("")
+        return len(branch_ids)
 
     def _is_direct_local_payload(self, lookup, media_id: str) -> bool:
         payload = lookup.payload
@@ -602,7 +696,8 @@ class AnimeSeriesListService:
             detail_item=representative_media.item,
             entries=entries,
             group_kind=group_kind,
-            subtitle=self._subtitle(branch_context),
+            context_label=branch_context.label if branch_context else "",
+            context_title=self._context_title(branch_context),
             user_score=representative_media.score,
             best_score=max(scores) if scores else None,
             best_progress_ratio=max(
@@ -613,15 +708,12 @@ class AnimeSeriesListService:
             latest_end_date=max(ends) if ends else None,
         )
 
-    def _subtitle(self, context: BranchContext | None) -> str:
+    def _context_title(self, context: BranchContext | None) -> str:
         if context is None:
             return ""
-        prefix = (
-            "Alternative continuity"
-            if context.kind == "alternative_branch"
-            else "Spin-off continuity"
-        )
-        return f"{prefix} · {context.parent_title}" if context.parent_title else prefix
+        if context.parent_title:
+            return f"{context.label} · {context.parent_title}"
+        return context.label
 
     def _choose_representative(
         self,
