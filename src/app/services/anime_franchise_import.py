@@ -18,6 +18,11 @@ from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryServic
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
+from app.services.anime_local_series_projection import (
+    AnimeLocalSeriesProjectionService,
+)
+from app.services.anime_local_series_resolver import AnimeLocalSeriesResolver
+from app.services.anime_tracking import bulk_mal_anime_tracked_ids
 from events.notifications import notify_entry_added_after_commit
 
 if TYPE_CHECKING:
@@ -59,6 +64,10 @@ class FranchiseImportStats:
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
     discovery_errors: int = 0
+    local_series_memberships_recorded: int = 0
+    local_series_groups_resolved: int = 0
+    local_series_projection_skipped_dry_run: int = 0
+    local_series_projection_errors: int = 0
 
 
 class AnimeFranchiseImportService:
@@ -71,6 +80,9 @@ class AnimeFranchiseImportService:
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
         discovery_service: AnimeFranchiseDiscoveryService | None = None,
+        local_series_resolver: AnimeLocalSeriesResolver | None = None,
+        local_series_projection_service: AnimeLocalSeriesProjectionService
+        | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -79,6 +91,13 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
+        self.local_series_resolver = (
+            local_series_resolver or AnimeLocalSeriesResolver()
+        )
+        self.local_series_projection_service = (
+            local_series_projection_service
+            or AnimeLocalSeriesProjectionService()
+        )
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -256,6 +275,52 @@ class AnimeFranchiseImportService:
                             kind="detail",
                             component_root_mal_id=component_root_mal_id,
                         )
+
+                snapshot_media_ids = {
+                    str(media_id)
+                    for media_id in getattr(snapshot, "nodes_by_media_id", {})
+                }
+                snapshot_media_ids.update(
+                    str(media_id) for media_id in selection.media_ids
+                )
+                tracked_media_ids = bulk_mal_anime_tracked_ids(
+                    user_id=user.id,
+                    media_ids=snapshot_media_ids,
+                )
+                tracked_media_ids.update(imported_media_ids_for_snapshot)
+                try:
+                    local_series_resolution = self.local_series_resolver.resolve(
+                        snapshot,
+                        tracked_media_ids,
+                    )
+                    stats.local_series_groups_resolved += len(
+                        local_series_resolution.groups
+                    )
+                    if dry_run:
+                        stats.local_series_projection_skipped_dry_run += 1
+                    else:
+                        projection_stats = (
+                            self.local_series_projection_service.persist(
+                                user=user,
+                                resolution=local_series_resolution,
+                                source_profile_key=profile_key,
+                                scope_media_ids=snapshot_media_ids,
+                            )
+                        )
+                        stats.local_series_memberships_recorded += (
+                            projection_stats.memberships_recorded
+                        )
+                except Exception:
+                    stats.local_series_projection_errors += 1
+                    logger.exception(
+                        "Failed to update local anime series projection",
+                        extra={
+                            "user_id": due_seed.user_id,
+                            "component_root_mal_id": component_root_mal_id,
+                            "seed_media_id": due_seed.seed_mal_id,
+                            "profile_key": profile_key,
+                        },
+                    )
 
                 root_key = (user.id, component_root_mal_id)
                 force_baseline_suppression = root_key in baseline_roots_created_this_run

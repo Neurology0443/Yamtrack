@@ -114,6 +114,10 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             cache_warm_roots=["100", "200"],
             cache_warm_errors=0,
             discovery_errors=2,
+            local_series_memberships_recorded=8,
+            local_series_groups_resolved=3,
+            local_series_projection_skipped_dry_run=0,
+            local_series_projection_errors=1,
         )
 
         result = import_anime_franchise(
@@ -157,6 +161,10 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                 "cache_warm_roots": ["100", "200"],
                 "cache_warm_errors": 0,
                 "discovery_errors": 2,
+                "local_series_memberships_recorded": 8,
+                "local_series_groups_resolved": 3,
+                "local_series_projection_skipped_dry_run": 0,
+                "local_series_projection_errors": 1,
             },
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
@@ -176,6 +184,10 @@ class ImportAnimeFranchiseTaskTests(TestCase):
         self.assertEqual(result["cache_warm_roots"], [])
         self.assertEqual(result["cache_warm_errors"], 0)
         self.assertEqual(result["discovery_errors"], 0)
+        self.assertEqual(result["local_series_memberships_recorded"], 0)
+        self.assertEqual(result["local_series_groups_resolved"], 0)
+        self.assertEqual(result["local_series_projection_skipped_dry_run"], 0)
+        self.assertEqual(result["local_series_projection_errors"], 0)
 
     @patch("app.tasks.cache")
     @patch("app.tasks.AnimeFranchiseImportService")

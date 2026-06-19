@@ -1,4 +1,4 @@
-# ruff: noqa: D101,D102,D107
+# ruff: noqa: D101,D102,S106
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -6,7 +6,15 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
-from app.models import Anime, AnimeImportScanState, Item, MediaTypes, Sources, Status
+from app.models import (
+    Anime,
+    AnimeImportScanState,
+    AnimeLocalSeriesMembership,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services.anime_franchise_import import FranchiseImportStats
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import AnimeNode
@@ -25,7 +33,10 @@ class ImportAnimeFranchiseCommandTests(TestCase):
         self.metadata_patcher.start()
         self.addCleanup(self.metadata_patcher.stop)
 
-        self.user = get_user_model().objects.create_user(username="importer", password="pwd")
+        self.user = get_user_model().objects.create_user(
+            username="importer",
+            password="pwd",
+        )
 
     @patch("app.management.commands.import_anime_franchise.AnimeFranchiseImportService.run")
     def test_dry_run_writes_nothing(self, mock_run):
@@ -34,6 +45,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
         self.assertFalse(Item.objects.exists())
         self.assertFalse(Anime.objects.exists())
         self.assertFalse(AnimeImportScanState.objects.exists())
+        self.assertFalse(AnimeLocalSeriesMembership.objects.exists())
 
     @patch("app.providers.mal.anime_minimal")
     @patch("app.services.anime_franchise_import.AnimeFranchiseSnapshotService.build")
@@ -90,6 +102,7 @@ class ImportAnimeFranchiseCommandTests(TestCase):
 
         self.assertEqual(Anime.objects.filter(user=self.user).count(), 1)
         self.assertEqual(AnimeImportScanState.objects.count(), 0)
+        self.assertEqual(AnimeLocalSeriesMembership.objects.count(), 0)
 
     def test_limit_must_be_positive(self):
         with self.assertRaisesMessage(
@@ -125,7 +138,11 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             title="Seed",
             image="https://example.com/100.jpg",
         )
-        Anime.objects.create(user=self.user, item=seed_item, status=Status.IN_PROGRESS.value)
+        Anime.objects.create(
+            user=self.user,
+            item=seed_item,
+            status=Status.IN_PROGRESS.value,
+        )
 
         node = AnimeNode("100", "Seed", "mal", "tv", "img", None, [])
         canonical_node = AnimeNode("99", "Seed S0", "mal", "tv", "img0", None, [])
@@ -167,7 +184,14 @@ class ImportAnimeFranchiseCommandTests(TestCase):
             str(self.user.id),
             "--refresh-cache",
         )
-        call_command("import_anime_franchise", "--profile", "continuity", "--user-id", str(self.user.id), "--full-rescan")
+        call_command(
+            "import_anime_franchise",
+            "--profile",
+            "continuity",
+            "--user-id",
+            str(self.user.id),
+            "--full-rescan",
+        )
 
         created = Anime.objects.filter(user=self.user, item__media_id="101").count()
         self.assertEqual(created, 1)

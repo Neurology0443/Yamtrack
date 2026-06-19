@@ -175,6 +175,16 @@ def import_anime_franchise(
             "cache_warm_roots": stats.cache_warm_roots,
             "cache_warm_errors": stats.cache_warm_errors,
             "discovery_errors": stats.discovery_errors,
+            "local_series_memberships_recorded": (
+                stats.local_series_memberships_recorded
+            ),
+            "local_series_groups_resolved": stats.local_series_groups_resolved,
+            "local_series_projection_skipped_dry_run": (
+                stats.local_series_projection_skipped_dry_run
+            ),
+            "local_series_projection_errors": (
+                stats.local_series_projection_errors
+            ),
         }
 
         logger.info("Anime franchise import completed: %s", result)

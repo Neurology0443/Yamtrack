@@ -14,6 +14,13 @@ from app.services.anime_franchise_cache_warmer import (
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_local_series_projection import (
+    AnimeLocalSeriesProjectionStats,
+)
+from app.services.anime_local_series_resolver import (
+    LocalSeriesGroup,
+    LocalSeriesResolution,
+)
 from events.models import AnimeReleaseDateScanState
 
 
@@ -1151,3 +1158,212 @@ class AnimeFranchiseImportDiscoveryHardeningTests(TestCase):
         calls = discovery_service.process_snapshot.call_args_list
         self.assertFalse(calls[0].kwargs["force_baseline_suppression"])
         self.assertTrue(calls[1].kwargs["force_baseline_suppression"])
+
+
+class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="local-series-import-user"
+        )
+
+    def _track(self, media_id):
+        item = Item.objects.create(
+            media_id=str(media_id),
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title=f"Anime {media_id}",
+            image=f"https://example.com/{media_id}.jpg",
+        )
+        Anime.objects.bulk_create(
+            [
+                Anime(
+                    user=self.user,
+                    item=item,
+                    status=Status.PLANNING.value,
+                )
+            ]
+        )
+
+    def _build_service(
+        self,
+        *,
+        selection_media_ids,
+        resolver,
+        projection_service,
+    ):
+        due_seed = SimpleNamespace(user_id=self.user.id, seed_mal_id="10")
+        snapshot = SimpleNamespace(
+            nodes_by_media_id={"10": object(), "20": object()},
+            continuity_component=["10", "20"],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = ([due_seed], 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+
+        profile = Mock()
+        profile.component_root_media_id.return_value = "10"
+        profile.select.return_value = SimpleNamespace(
+            media_ids=set(selection_media_ids),
+            fingerprint_payload={},
+        )
+        profile.detail_cache_warm_media_ids.return_value = set()
+
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = (
+            AnimeFranchiseDiscoveryStats()
+        )
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+            local_series_resolver=resolver,
+            local_series_projection_service=projection_service,
+        )
+        return service, profile, state_service, snapshot
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_real_import_resolves_and_persists_local_series_projection(
+        self,
+        mock_get_profile,
+    ):
+        self._track("10")
+        resolution = LocalSeriesResolution(
+            groups=[
+                LocalSeriesGroup(
+                    root_media_id="10",
+                    group_kind="singleton",
+                    member_media_ids=["10"],
+                )
+            ],
+            resolver_version="v1",
+        )
+        resolver = Mock()
+        resolver.resolve.return_value = resolution
+        projection_service = Mock()
+        projection_service.persist.return_value = (
+            AnimeLocalSeriesProjectionStats(memberships_recorded=1)
+        )
+        service, profile, _state_service, snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=projection_service,
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="complete",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        resolver.resolve.assert_called_once_with(snapshot, {"10"})
+        projection_service.persist.assert_called_once_with(
+            user=self.user,
+            resolution=resolution,
+            source_profile_key="complete",
+            scope_media_ids={"10", "20"},
+        )
+        self.assertEqual(stats.local_series_groups_resolved, 1)
+        self.assertEqual(stats.local_series_memberships_recorded, 1)
+        self.assertEqual(stats.local_series_projection_errors, 0)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_dry_run_resolves_planned_entries_without_persisting(
+        self,
+        mock_get_profile,
+    ):
+        self._track("10")
+        resolution = LocalSeriesResolution(groups=[], resolver_version="v1")
+        resolver = Mock()
+        resolver.resolve.return_value = resolution
+        projection_service = Mock()
+        service, profile, _state_service, snapshot = self._build_service(
+            selection_media_ids={"20"},
+            resolver=resolver,
+            projection_service=projection_service,
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        resolver.resolve.assert_called_once_with(snapshot, {"10", "20"})
+        projection_service.persist.assert_not_called()
+        self.assertEqual(stats.local_series_projection_skipped_dry_run, 1)
+        self.assertEqual(stats.local_series_memberships_recorded, 0)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_resolver_error_does_not_fail_import(
+        self,
+        mock_get_profile,
+    ):
+        resolver = Mock()
+        resolver.resolve.side_effect = RuntimeError("resolver boom")
+        projection_service = Mock()
+        service, profile, state_service, _snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=projection_service,
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="complete",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.local_series_projection_errors, 1)
+        self.assertEqual(stats.errors, 0)
+        projection_service.persist.assert_not_called()
+        state_service.record_success.assert_called_once()
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_persistence_error_does_not_fail_import(
+        self,
+        mock_get_profile,
+    ):
+        resolver = Mock()
+        resolver.resolve.return_value = LocalSeriesResolution(
+            groups=[],
+            resolver_version="v1",
+        )
+        projection_service = Mock()
+        projection_service.persist.side_effect = RuntimeError("persist boom")
+        service, profile, state_service, _snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=projection_service,
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="complete",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.local_series_projection_errors, 1)
+        self.assertEqual(stats.errors, 0)
+        state_service.record_success.assert_called_once()
