@@ -1,13 +1,20 @@
 # ruff: noqa: D101,D102
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import transaction
 from django.test import TestCase
 
-from app.models import Anime, Item, MediaTypes, Sources, Status
+from app.models import (
+    Anime,
+    AnimeLocalSeriesMembership,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
@@ -18,6 +25,7 @@ from app.services.anime_local_series_constants import (
     LOCAL_SERIES_VIEW_PROFILE_KEY,
 )
 from app.services.anime_local_series_projection import (
+    AnimeLocalSeriesProjectionService,
     AnimeLocalSeriesProjectionStats,
 )
 from app.services.anime_local_series_resolver import (
@@ -1187,15 +1195,56 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
             ]
         )
 
+    @staticmethod
+    def _projection_snapshot(
+        *,
+        seed_media_id,
+        media_ids,
+        relations=(),
+        canonical_root_media_id=None,
+    ):
+        nodes = {
+            str(media_id): SimpleNamespace(media_id=str(media_id))
+            for media_id in media_ids
+        }
+        return SimpleNamespace(
+            root_node=nodes[str(seed_media_id)],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=list(relations),
+            continuity_component=list(nodes.values()),
+            series_line=list(nodes.values()),
+            direct_anchors=[],
+            direct_candidates=[],
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=[],
+            canonical_root_media_id=str(
+                canonical_root_media_id or seed_media_id
+            ),
+        )
+
+    @staticmethod
+    def _relation(source_media_id, target_media_id, relation_type):
+        return SimpleNamespace(
+            source_media_id=str(source_media_id),
+            target_media_id=str(target_media_id),
+            relation_type=relation_type,
+        )
+
     def _build_service(
         self,
         *,
         selection_media_ids,
         resolver,
         projection_service,
+        seed_media_id="10",
+        snapshot=None,
     ):
-        due_seed = SimpleNamespace(user_id=self.user.id, seed_mal_id="10")
-        snapshot = SimpleNamespace(
+        due_seed = SimpleNamespace(
+            user_id=self.user.id,
+            seed_mal_id=str(seed_media_id),
+        )
+        snapshot = snapshot or SimpleNamespace(
             nodes_by_media_id={"10": object(), "20": object()},
             continuity_component=[
                 SimpleNamespace(media_id="10"),
@@ -1329,6 +1378,370 @@ class AnimeFranchiseImportLocalSeriesProjectionTests(TestCase):
             projection_service.persist.call_args.kwargs["scope_media_ids"],
             {"10", "20", "30", "40"},
         )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_re_zero_satellite_seed_uses_canonical_projection_snapshot(
+        self,
+        mock_get_profile,
+    ):
+        tracked_ids = {
+            "31240",
+            "36286",
+            "38414",
+            "39587",
+            "42203",
+            "54857",
+            "61316",
+        }
+        for media_id in tracked_ids:
+            self._track(media_id)
+        local_snapshot = self._projection_snapshot(
+            seed_media_id="36286",
+            media_ids={"31240", "36286"},
+            relations=[
+                self._relation("36286", "31240", "parent_story"),
+                self._relation("31240", "36286", "side_story"),
+            ],
+        )
+        canonical_snapshot = self._projection_snapshot(
+            seed_media_id="31240",
+            media_ids=tracked_ids,
+            canonical_root_media_id="31240",
+        )
+        resolution = LocalSeriesResolution(
+            groups=[
+                LocalSeriesGroup(
+                    root_media_id="38414",
+                    group_kind="main_continuity",
+                    member_media_ids=[
+                        "38414",
+                        "31240",
+                        "39587",
+                        "42203",
+                        "54857",
+                        "61316",
+                        "36286",
+                    ],
+                )
+            ],
+            resolver_version="v1",
+        )
+        resolver = Mock()
+        resolver.resolve.return_value = resolution
+        projection_service = Mock()
+        projection_service.persist.return_value = (
+            AnimeLocalSeriesProjectionStats(memberships_recorded=7)
+        )
+        service, profile, _state_service, _snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=projection_service,
+            seed_media_id="36286",
+            snapshot=local_snapshot,
+        )
+        service.snapshot_service.build.side_effect = [
+            local_snapshot,
+            canonical_snapshot,
+        ]
+        profile.component_root_media_id.return_value = "36286"
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            service.snapshot_service.build.call_args_list,
+            [
+                call("36286", refresh_cache=False),
+                call("31240", refresh_cache=False),
+            ],
+        )
+        resolver.resolve.assert_called_once_with(canonical_snapshot, tracked_ids)
+        projection_service.persist.assert_called_once_with(
+            user=self.user,
+            resolution=resolution,
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+            scope_media_ids=tracked_ids,
+        )
+        self.assertEqual(stats.local_series_memberships_recorded, 7)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_satellite_import_persists_all_tracked_canonical_memberships(
+        self,
+        mock_get_profile,
+    ):
+        tracked_ids = {
+            "31240",
+            "36286",
+            "38414",
+            "39587",
+            "42203",
+            "54857",
+            "61316",
+        }
+        for media_id in tracked_ids:
+            self._track(media_id)
+        local_snapshot = self._projection_snapshot(
+            seed_media_id="36286",
+            media_ids={"31240", "36286"},
+            relations=[
+                self._relation("36286", "31240", "parent_story"),
+                self._relation("31240", "36286", "side_story"),
+            ],
+        )
+        canonical_snapshot = self._projection_snapshot(
+            seed_media_id="31240",
+            media_ids=tracked_ids,
+            canonical_root_media_id="31240",
+        )
+        resolver = Mock()
+        resolver.resolve.return_value = LocalSeriesResolution(
+            groups=[
+                LocalSeriesGroup(
+                    root_media_id="38414",
+                    group_kind="main_continuity",
+                    member_media_ids=sorted(tracked_ids),
+                )
+            ],
+            resolver_version="v1",
+        )
+        service, profile, _state_service, _snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=AnimeLocalSeriesProjectionService(),
+            seed_media_id="36286",
+            snapshot=local_snapshot,
+        )
+        service.snapshot_service.build.side_effect = [
+            local_snapshot,
+            canonical_snapshot,
+        ]
+        profile.component_root_media_id.return_value = "36286"
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        memberships = AnimeLocalSeriesMembership.objects.filter(
+            user=self.user,
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+        )
+        self.assertEqual(
+            set(memberships.values_list("media_id", flat=True)),
+            tracked_ids,
+        )
+        self.assertEqual(
+            set(memberships.values_list("root_media_id", flat=True)),
+            {"38414"},
+        )
+
+        service.snapshot_service.build.side_effect = [
+            local_snapshot,
+            canonical_snapshot,
+        ]
+        service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        memberships = AnimeLocalSeriesMembership.objects.filter(
+            user=self.user,
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+        )
+        self.assertEqual(memberships.count(), len(tracked_ids))
+        self.assertEqual(
+            set(memberships.values_list("media_id", flat=True)),
+            tracked_ids,
+        )
+        self.assertEqual(
+            set(memberships.values_list("root_media_id", flat=True)),
+            {"38414"},
+        )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_canonical_rebuild_failure_preserves_existing_projection(
+        self,
+        mock_get_profile,
+    ):
+        self._track("31240")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="31240",
+            root_media_id="38414",
+            group_kind="main_continuity",
+            component_size=6,
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+            resolver_version="v1",
+        )
+        local_snapshot = self._projection_snapshot(
+            seed_media_id="36286",
+            media_ids={"31240", "36286"},
+            relations=[
+                self._relation("36286", "31240", "parent_story"),
+            ],
+        )
+        resolver = Mock()
+        projection_service = Mock()
+        service, profile, state_service, _snapshot = self._build_service(
+            selection_media_ids=set(),
+            resolver=resolver,
+            projection_service=projection_service,
+            seed_media_id="36286",
+            snapshot=local_snapshot,
+        )
+        service.snapshot_service.build.side_effect = [
+            local_snapshot,
+            RuntimeError("canonical build failed"),
+        ]
+        profile.component_root_media_id.return_value = "36286"
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        resolver.resolve.assert_not_called()
+        projection_service.persist.assert_not_called()
+        self.assertEqual(stats.local_series_projection_errors, 1)
+        self.assertEqual(stats.errors, 0)
+        state_service.record_success.assert_called_once()
+        membership = AnimeLocalSeriesMembership.objects.get(
+            user=self.user,
+            media_id="31240",
+        )
+        self.assertEqual(membership.root_media_id, "38414")
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_strong_branch_relations_do_not_promote_canonical_parent(
+        self,
+        mock_get_profile,
+    ):
+        for relation_type in (
+            "spin_off",
+            "alternative_version",
+            "alternative_setting",
+        ):
+            with self.subTest(relation_type=relation_type):
+                snapshot = self._projection_snapshot(
+                    seed_media_id="20",
+                    media_ids={"10", "20"},
+                    relations=[
+                        self._relation("10", "20", relation_type),
+                        self._relation("20", "10", "parent_story"),
+                        self._relation("10", "20", "side_story"),
+                    ],
+                )
+                resolver = Mock()
+                resolution = LocalSeriesResolution(
+                    groups=[],
+                    resolver_version="v1",
+                )
+                resolver.resolve.return_value = resolution
+                projection_service = Mock()
+                projection_service.persist.return_value = (
+                    AnimeLocalSeriesProjectionStats()
+                )
+                service, profile, _state_service, _snapshot = (
+                    self._build_service(
+                        selection_media_ids=set(),
+                        resolver=resolver,
+                        projection_service=projection_service,
+                        seed_media_id="20",
+                        snapshot=snapshot,
+                    )
+                )
+                profile.component_root_media_id.return_value = "20"
+                mock_get_profile.return_value = profile
+
+                service.run(
+                    profile_key="satellites",
+                    dry_run=False,
+                    full_rescan=False,
+                    limit=None,
+                    refresh_cache=False,
+                    user_ids=[self.user.id],
+                )
+
+                service.snapshot_service.build.assert_called_once_with(
+                    "20",
+                    refresh_cache=False,
+                )
+                resolver.resolve.assert_called_once_with(snapshot, set())
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_satellite_import_selection_remains_independent_from_projection(
+        self,
+        mock_get_profile,
+    ):
+        self._track("31240")
+        local_snapshot = self._projection_snapshot(
+            seed_media_id="36286",
+            media_ids={"31240", "36286"},
+            relations=[
+                self._relation("36286", "31240", "parent_story"),
+            ],
+        )
+        canonical_snapshot = self._projection_snapshot(
+            seed_media_id="31240",
+            media_ids={"31240", "36286", "38414"},
+        )
+        resolver = Mock()
+        resolver.resolve.return_value = LocalSeriesResolution(
+            groups=[],
+            resolver_version="v1",
+        )
+        projection_service = Mock()
+        service, profile, _state_service, _snapshot = self._build_service(
+            selection_media_ids={"999"},
+            resolver=resolver,
+            projection_service=projection_service,
+            seed_media_id="36286",
+            snapshot=local_snapshot,
+        )
+        service.snapshot_service.build.side_effect = [
+            local_snapshot,
+            canonical_snapshot,
+        ]
+        profile.component_root_media_id.return_value = "36286"
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        profile.select.assert_called_once_with(local_snapshot)
+        self.assertEqual(stats.planned_creations, 1)
+        resolver.resolve.assert_called_once_with(
+            canonical_snapshot,
+            {"31240", "999"},
+        )
+        projection_service.persist.assert_not_called()
 
     @patch("app.services.anime_franchise_import.get_import_profile")
     def test_dry_run_resolves_planned_entries_without_persisting(

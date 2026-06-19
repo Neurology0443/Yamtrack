@@ -35,6 +35,20 @@ logger = logging.getLogger(__name__)
 
 
 CacheWarmKind = Literal["root", "detail"]
+NON_CANONICAL_PARENT_RELATION_TYPES = frozenset(
+    {"spin_off", "alternative_version", "alternative_setting"}
+)
+
+
+class _CanonicalProjectionSnapshotBuildError(RuntimeError):
+    """Raised after a canonical projection snapshot rebuild was logged."""
+
+
+def _media_id_sort_key(media_id: str) -> tuple[int, int | str]:
+    media_id = str(media_id)
+    if media_id.isdigit():
+        return (0, int(media_id))
+    return (1, media_id)
 
 
 class CacheWarmTarget(TypedDict):
@@ -290,6 +304,7 @@ class AnimeFranchiseImportService:
                     profile_key=profile_key,
                     due_seed=due_seed,
                     component_root_mal_id=component_root_mal_id,
+                    refresh_cache=refresh_cache,
                     stats=stats,
                 )
 
@@ -385,28 +400,49 @@ class AnimeFranchiseImportService:
         profile_key,
         due_seed,
         component_root_mal_id,
+        refresh_cache,
         stats,
     ) -> None:
-        """Resolve and persist the best-effort Series View projection."""
-        snapshot_media_ids = self._local_series_scope_media_ids(
-            snapshot=snapshot,
-            selection=selection,
-            imported_media_ids=imported_media_ids_for_snapshot,
-        )
-        tracked_media_ids = bulk_mal_anime_tracked_ids(
-            user_id=user.id,
-            media_ids=snapshot_media_ids,
-        )
-        tracked_media_ids.update(imported_media_ids_for_snapshot)
-
+        """Resolve and persist Series View from a canonical franchise snapshot."""
         try:
+            projection_snapshot, projection_seed, projection_reason = (
+                self._build_canonical_series_projection_snapshot(
+                    snapshot=snapshot,
+                    seed_media_id=due_seed.seed_mal_id,
+                    profile_key=profile_key,
+                    refresh_cache=refresh_cache,
+                )
+            )
+            snapshot_media_ids = self._local_series_scope_media_ids(
+                snapshot=projection_snapshot,
+                selection=selection,
+                imported_media_ids=imported_media_ids_for_snapshot,
+            )
+            tracked_media_ids = bulk_mal_anime_tracked_ids(
+                user_id=user.id,
+                media_ids=snapshot_media_ids,
+            )
+            tracked_media_ids.update(imported_media_ids_for_snapshot)
             resolution = self.local_series_resolver.resolve(
-                snapshot,
+                projection_snapshot,
                 tracked_media_ids,
             )
             stats.local_series_groups_resolved += len(resolution.groups)
             if dry_run:
                 stats.local_series_projection_skipped_dry_run += 1
+                self._log_local_series_projection(
+                    user_id=user.id,
+                    import_seed_media_id=due_seed.seed_mal_id,
+                    profile_key=profile_key,
+                    initial_snapshot=snapshot,
+                    projection_snapshot=projection_snapshot,
+                    projection_seed_media_id=projection_seed,
+                    projection_reason=projection_reason,
+                    tracked_count=len(tracked_media_ids),
+                    group_count=len(resolution.groups),
+                    membership_count=0,
+                    dry_run=True,
+                )
                 return
 
             projection_stats = self.local_series_projection_service.persist(
@@ -418,6 +454,21 @@ class AnimeFranchiseImportService:
             stats.local_series_memberships_recorded += (
                 projection_stats.memberships_recorded
             )
+            self._log_local_series_projection(
+                user_id=user.id,
+                import_seed_media_id=due_seed.seed_mal_id,
+                profile_key=profile_key,
+                initial_snapshot=snapshot,
+                projection_snapshot=projection_snapshot,
+                projection_seed_media_id=projection_seed,
+                projection_reason=projection_reason,
+                tracked_count=len(tracked_media_ids),
+                group_count=len(resolution.groups),
+                membership_count=projection_stats.memberships_recorded,
+                dry_run=False,
+            )
+        except _CanonicalProjectionSnapshotBuildError:
+            stats.local_series_projection_errors += 1
         except Exception:
             stats.local_series_projection_errors += 1
             logger.exception(
@@ -429,6 +480,132 @@ class AnimeFranchiseImportService:
                     "profile_key": profile_key,
                 },
             )
+
+    def _build_canonical_series_projection_snapshot(
+        self,
+        *,
+        snapshot,
+        seed_media_id,
+        profile_key,
+        refresh_cache,
+    ):
+        """Return a canonical snapshot, promoting local story satellites."""
+        seed_media_id = str(seed_media_id)
+        branch_boundary_pairs = {
+            frozenset(
+                {
+                    str(relation.source_media_id),
+                    str(relation.target_media_id),
+                }
+            )
+            for relation in getattr(snapshot, "all_normalized_relations", ())
+            if getattr(relation, "relation_type", "")
+            in NON_CANONICAL_PARENT_RELATION_TYPES
+        }
+        parent_candidates = []
+        for relation in getattr(snapshot, "all_normalized_relations", ()):
+            source_media_id = str(relation.source_media_id)
+            target_media_id = str(relation.target_media_id)
+            relation_type = getattr(relation, "relation_type", "")
+            if (
+                frozenset({source_media_id, target_media_id})
+                in branch_boundary_pairs
+            ):
+                continue
+            if (
+                source_media_id == seed_media_id
+                and relation_type == "parent_story"
+            ):
+                parent_candidates.append(
+                    (0, target_media_id, "parent_story_promoted")
+                )
+            elif (
+                target_media_id == seed_media_id
+                and relation_type == "side_story"
+            ):
+                parent_candidates.append(
+                    (1, source_media_id, "side_story_parent_promoted")
+                )
+
+        if not parent_candidates:
+            return snapshot, seed_media_id, "already_canonical"
+
+        _priority, parent_media_id, reason = min(
+            parent_candidates,
+            key=lambda candidate: (candidate[0], _media_id_sort_key(candidate[1])),
+        )
+        try:
+            projection_snapshot = self.snapshot_service.build(
+                parent_media_id,
+                refresh_cache=refresh_cache,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Skipped local anime series projection because canonical "
+                "snapshot rebuild failed",
+                extra={
+                    "import_seed_media_id": seed_media_id,
+                    "profile_key": profile_key,
+                    "initial_canonical_root_media_id": str(
+                        getattr(snapshot, "canonical_root_media_id", "")
+                    ),
+                    "projection_seed_media_id": parent_media_id,
+                    "projection_reason": "skipped_canonical_build_failed",
+                    "initial_node_count": len(
+                        getattr(snapshot, "nodes_by_media_id", {})
+                    ),
+                },
+                exc_info=True,
+            )
+            message = (
+                "Failed to rebuild canonical local anime series projection "
+                f"snapshot from media_id={parent_media_id}"
+            )
+            raise _CanonicalProjectionSnapshotBuildError(message) from exc
+
+        return projection_snapshot, parent_media_id, reason
+
+    @staticmethod
+    def _log_local_series_projection(
+        *,
+        user_id,
+        import_seed_media_id,
+        profile_key,
+        initial_snapshot,
+        projection_snapshot,
+        projection_seed_media_id,
+        projection_reason,
+        tracked_count,
+        group_count,
+        membership_count,
+        dry_run,
+    ) -> None:
+        logger.info(
+            "Processed canonical local anime series projection",
+            extra={
+                "user_id": user_id,
+                "import_seed_media_id": str(import_seed_media_id),
+                "profile_key": profile_key,
+                "initial_canonical_root_media_id": str(
+                    getattr(initial_snapshot, "canonical_root_media_id", "")
+                ),
+                "projection_canonical_root_media_id": str(
+                    getattr(projection_snapshot, "canonical_root_media_id", "")
+                ),
+                "projection_seed_media_id": str(projection_seed_media_id),
+                "projection_reason": projection_reason,
+                "initial_node_count": len(
+                    getattr(initial_snapshot, "nodes_by_media_id", {})
+                ),
+                "projection_node_count": len(
+                    getattr(projection_snapshot, "nodes_by_media_id", {})
+                ),
+                "tracked_count": tracked_count,
+                "group_count": group_count,
+                "membership_count": membership_count,
+                "dry_run": dry_run,
+            },
+        )
 
     @staticmethod
     def _local_series_scope_media_ids(
