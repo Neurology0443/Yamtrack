@@ -37,6 +37,7 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
+from app.services.anime_series_list import AnimeSeriesListService
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
@@ -183,6 +184,9 @@ def media_list(request, username, media_type):
 
     search_query = request.GET.get("search", "")
     page = request.GET.get("page", 1)
+    is_anime_series_layout = (
+        media_type == MediaTypes.ANIME.value and layout == "series"
+    )
 
     # Prepare status filter for database query
     if not status_filter:
@@ -197,14 +201,13 @@ def media_list(request, username, media_type):
         search=search_query,
     )
 
-    # Paginate results
-    items_per_page = 32
-    paginator = Paginator(media_queryset, items_per_page)
-    media_page = paginator.get_page(page)
-
-    BasicMedia.objects.annotate_max_progress(
-        media_page.object_list,
-        media_type,
+    media_page, layout_class = _paginate_media_list(
+        media_queryset=media_queryset,
+        media_type=media_type,
+        layout=layout,
+        target_user=target_user,
+        sort_filter=sort_filter,
+        page=page,
     )
 
     context = {
@@ -212,7 +215,7 @@ def media_list(request, username, media_type):
         "media_type_plural": app_tags.media_type_readable_plural(media_type).lower(),
         "media_list": media_page,
         "current_layout": layout,
-        "layout_class": ".media-grid" if layout == "grid" else "tbody",
+        "layout_class": layout_class,
         "current_sort": sort_filter,
         "current_status": status_filter,
         "sort_choices": MediaSortChoices.choices,
@@ -220,25 +223,72 @@ def media_list(request, username, media_type):
         "target_user": target_user,
     }
 
-    # Handle HTMX requests for partial updates
-    if request.headers.get("HX-Request"):
-        # Filtering from empty list
-        if request.headers.get("HX-Target") == "empty_list":
-            # If still empty, keep user in the same page
-            if not media_page.object_list:
-                return HttpResponse(status=204)
-            response = HttpResponse()
-            response["HX-Redirect"] = reverse(
-                "medialist", args=[target_user.username, media_type]
-            )
-            return response
-        if layout == "grid":
-            template_name = "app/components/media_grid_items.html"
-        else:
-            template_name = "app/components/media_table_items.html"
-    else:
-        template_name = "app/media_list.html"
+    return _render_media_list_response(
+        request=request,
+        context=context,
+        target_user=target_user,
+        media_type=media_type,
+        layout=layout,
+        is_anime_series_layout=is_anime_series_layout,
+    )
 
+
+def _paginate_media_list(
+    *,
+    media_queryset,
+    media_type,
+    layout,
+    target_user,
+    sort_filter,
+    page,
+):
+    """Paginate raw media or computed anime series groups."""
+    items_per_page = 32
+    if media_type == MediaTypes.ANIME.value and layout == "series":
+        anime_list = list(media_queryset)
+        BasicMedia.objects.annotate_max_progress(anime_list, media_type)
+        groups = AnimeSeriesListService().build_groups(
+            target_user=target_user,
+            anime_queryset=anime_list,
+            sort_filter=sort_filter,
+        )
+        return Paginator(groups, items_per_page).get_page(page), ".anime-series-list"
+
+    media_page = Paginator(media_queryset, items_per_page).get_page(page)
+    BasicMedia.objects.annotate_max_progress(media_page.object_list, media_type)
+    layout_class = ".media-grid" if layout == "grid" else "tbody"
+    return media_page, layout_class
+
+
+def _render_media_list_response(
+    *,
+    request,
+    context,
+    target_user,
+    media_type,
+    layout,
+    is_anime_series_layout,
+):
+    """Render the full list page or the matching HTMX fragment."""
+    if not request.headers.get("HX-Request"):
+        return render(request, "app/media_list.html", context)
+
+    if request.headers.get("HX-Target") == "empty_list":
+        if not context["media_list"].object_list:
+            return HttpResponse(status=204)
+        response = HttpResponse()
+        response["HX-Redirect"] = reverse(
+            "medialist",
+            args=[target_user.username, media_type],
+        )
+        return response
+
+    if is_anime_series_layout:
+        template_name = "app/components/anime_series_groups.html"
+    elif layout == "grid":
+        template_name = "app/components/media_grid_items.html"
+    else:
+        template_name = "app/components/media_table_items.html"
     return render(request, template_name, context)
 
 

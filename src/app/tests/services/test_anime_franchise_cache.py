@@ -192,6 +192,23 @@ class AnimeFranchiseCacheTests(TestCase):
             {"223", "813", "225", "999", "998", "997", "996"},
         )
 
+    def test_load_payload_without_touch_does_not_write_cache(self):
+        anime_franchise_cache.save_payload("100", self.payload)
+
+        with (
+            patch.object(anime_franchise_cache.cache, "set") as cache_set,
+            patch.object(anime_franchise_cache.cache, "touch") as cache_touch,
+        ):
+            payload, _meta = anime_franchise_cache.load_payload(
+                "100",
+                touch=False,
+            )
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["root_media_id"], "100")
+        cache_set.assert_not_called()
+        cache_touch.assert_not_called()
+
     def test_extract_series_media_ids_only_reads_series_entries(self):
         payload = self._dragon_ball_payload()
 

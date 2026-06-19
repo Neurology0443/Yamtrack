@@ -133,6 +133,13 @@
              :class="layout === 'table' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] hover:bg-[#454d5a]'"
              title="Table View"
              @click="layout = 'table'">{% include "app/icons/table.svg" with classes="w-5 h-5" %}</a>
+          {% if media_type == MediaTypes.ANIME.value %}
+            <a :href="`{% url 'medialist' target_user.username media_type %}?${search ? 'search=' + search + '&' : ''}${status !== 'all' ? 'status=' + status + '&' : ''}${sort !== 'score' ? 'sort=' + sort + '&' : ''}layout=series`"
+               class="p-2 cursor-pointer"
+               :class="layout === 'series' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] hover:bg-[#454d5a]'"
+               title="Series View"
+               @click="layout = 'series'">{% include "app/icons/list.svg" with classes="w-5 h-5" %}</a>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -155,6 +162,10 @@
             </a>
           {% endif %}
         </div>
+      </div>
+    {% elif current_layout == "series" %}
+      <div class="anime-series-list grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {% include "app/components/anime_series_groups.html" %}
       </div>
     {% elif current_layout == "grid" %}
       <div class="media-grid">{% include "app/components/media_grid_items.html" %}</div>

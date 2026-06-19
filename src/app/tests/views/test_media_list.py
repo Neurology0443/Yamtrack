@@ -1,8 +1,11 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from app.models import (
+    Anime,
     Item,
     MediaTypes,
     Movie,
@@ -113,6 +116,48 @@ class MediaListViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "app/components/media_table_items.html")
+
+    @patch("app.views.AnimeSeriesListService.build_groups", return_value=[])
+    def test_anime_series_layout_uses_series_partial(self, build_groups):
+        """Series layout uses its dedicated service and HTMX fragment."""
+        item = Item.objects.create(
+            media_id="1",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Test Anime",
+            image="http://example.com/anime.jpg",
+        )
+        anime = Anime(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+        anime._skip_hot_priority = True
+        anime.save()
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series",
+            headers={"hx-request": "true"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(
+            response,
+            "app/components/anime_series_groups.html",
+        )
+        self.assertEqual(response.context["current_layout"], "series")
+        build_groups.assert_called_once()
+
+    def test_series_layout_is_not_valid_for_non_anime_preferences(self):
+        """Series remains invalid for every non-anime preference field."""
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.MOVIE.value])
+            + "?layout=series",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["current_layout"], self.user.movie_layout)
 
     def test_public_media_list_ignores_invalid_filters(self):
         """Test invalid public filters fall back to the target user's preferences."""

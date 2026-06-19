@@ -1,0 +1,80 @@
+{% load app_tags %}
+
+{% for group in media_list %}
+  <article class="bg-[#2a2f35] rounded-lg overflow-hidden border border-gray-700/60"
+           {% if forloop.last and media_list.has_next %} hx-get="{% url 'medialist' target_user.username media_type %}?page={{ media_list.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
+    <div class="flex flex-col sm:flex-row">
+      <a href="{{ group.detail_item|media_url }}" class="sm:w-40 shrink-0">
+        <img alt="{{ group.display_title }}"
+             class="lazyload w-full h-56 sm:h-full object-cover"
+             data-src="{{ group.display_image }}"
+             src="{{ IMG_NONE }}">
+      </a>
+      <div class="p-5 grow min-w-0">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <a href="{{ group.detail_item|media_url }}"
+               class="text-xl font-semibold hover:text-indigo-400 transition-colors line-clamp-2">
+              {{ group.display_title }}
+            </a>
+            <p class="text-sm text-gray-400 mt-1">
+              {{ group.tracked_count }} tracked entr{{ group.tracked_count|pluralize:"y,ies" }}
+            </p>
+          </div>
+          <span class="px-2 py-1 rounded-full text-xs bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+            {% if group.group_kind == "alternative_branch" %}
+              Alternative branch
+            {% elif group.group_kind == "spin_off_branch" %}
+              Spin-off branch
+            {% elif group.group_kind == "side_story_branch" %}
+              Side-story branch
+            {% elif group.group_kind == "singleton" %}
+              Single entry
+            {% else %}
+              Main continuity
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-4 text-sm">
+          {% for status, count in group.statuses.items %}
+            <span><span class="text-gray-400">{{ status|media_status_readable }}:</span> {{ count }}</span>
+          {% endfor %}
+          {% if group.best_score is not None %}
+            <span><span class="text-gray-400">Best score:</span> {{ group.best_score }}</span>
+          {% endif %}
+        </div>
+
+        {% if group.sections %}
+          <div class="flex flex-wrap gap-2 mt-4">
+            {% for section in group.sections %}
+              {% if section.tracked_count or section.tracked_branch_count %}
+                <span class="px-2 py-1 rounded text-xs bg-[#39404b] text-gray-300">
+                  {{ section.title }} {{ section.tracked_count }}/{{ section.total_count }}
+                  {% if section.tracked_branch_count %}
+                    · {{ section.tracked_branch_count }} branch{{ section.tracked_branch_count|pluralize:"es" }}
+                  {% endif %}
+                </span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <ul class="mt-4 space-y-1 text-sm text-gray-300">
+          {% for entry in group.entries|slice:":4" %}
+            <li class="flex items-center justify-between gap-3">
+              <span class="truncate">{{ entry.title }}</span>
+              <span class="text-gray-500 shrink-0">{{ entry.progress }}
+                {% if entry.max_progress %}/{{ entry.max_progress }}{% endif %}
+              </span>
+            </li>
+          {% endfor %}
+          {% if group.tracked_count > 4 %}<li class="text-gray-500">+ {{ group.tracked_count|add:"-4" }} more</li>{% endif %}
+        </ul>
+
+        <a href="{{ group.detail_item|media_url }}"
+           class="inline-flex mt-5 text-sm text-indigo-400 hover:text-indigo-300">Open series</a>
+      </div>
+    </div>
+  </article>
+{% endfor %}
