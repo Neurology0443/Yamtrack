@@ -342,6 +342,27 @@ class AnimeReleaseDateNotificationServiceTests(TestCase):
             AnimeReleaseDateNotificationDelivery.objects.exists(),
         )
 
+    @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
+    def test_past_partial_dates_initialize_silently_and_disable_state(
+        self,
+        _mock_jitter,
+    ):
+        for start_date in ("2020", "2020-05"):
+            with self.subTest(start_date=start_date):
+                AnimeReleaseDateScanState.objects.filter(item=self.item).delete()
+                self.service.process_metadata_refresh(
+                    media_id=self.item.media_id,
+                    old_metadata=None,
+                    new_metadata=self.metadata(start_date),
+                    source="metadata_refresh",
+                )
+
+                state = AnimeReleaseDateScanState.objects.get(item=self.item)
+                self.assertTrue(state.disabled)
+                self.assertFalse(
+                    AnimeReleaseDateNotificationDelivery.objects.exists(),
+                )
+
     @patch("events.services.anime_release_date_notifications.mal.anime")
     def test_scan_disables_complete_date_once_it_has_passed(self, mock_anime):
         AnimeReleaseDateScanState.objects.create(
@@ -359,6 +380,153 @@ class AnimeReleaseDateNotificationServiceTests(TestCase):
         self.assertTrue(state.disabled)
         self.assertEqual(result["scanned"], 0)
         mock_anime.assert_not_called()
+
+    @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
+    @patch("events.services.anime_release_date_notifications.mal.anime")
+    def test_due_future_complete_date_uses_recent_cache(
+        self,
+        mock_anime,
+        _mock_jitter,
+    ):
+        future_date = timezone.localdate() + timedelta(days=30)
+        future_text = future_date.isoformat()
+        AnimeReleaseDateScanState.objects.create(
+            item=self.item,
+            initialized_at=timezone.now() - timedelta(days=30),
+            last_seen_start_date_text=future_text,
+            last_seen_start_date_precision=AnimeStartDatePrecision.DAY,
+            last_seen_start_date=future_date,
+            last_checked_at=timezone.now() - timedelta(days=8),
+            next_scan_at=timezone.now() - timedelta(hours=1),
+        )
+        mal_cache.save_anime_cache(
+            self.item.media_id,
+            self.metadata(future_text),
+            fetched_at=timezone.now(),
+        )
+
+        result = self.service.scan_due_items()
+
+        self.assertEqual(result["scanned"], 1)
+        mock_anime.assert_not_called()
+
+    def test_missing_states_are_created_in_chunks(self):
+        items = Item.objects.bulk_create(
+            [
+                Item(
+                    media_id=str(media_id),
+                    source=Sources.MAL.value,
+                    media_type=MediaTypes.ANIME.value,
+                    title=f"Anime {media_id}",
+                    image="https://example.com/anime.jpg",
+                )
+                for media_id in range(200, 205)
+            ],
+        )
+        item_ids = [item.id for item in items]
+        real_bulk_create = AnimeReleaseDateScanState.objects.bulk_create
+
+        with (
+            patch(
+                "events.services.anime_release_date_notifications."
+                "STATE_CREATE_CHUNK_SIZE",
+                2,
+            ),
+            patch.object(
+                AnimeReleaseDateScanState.objects,
+                "bulk_create",
+                side_effect=real_bulk_create,
+            ) as mock_bulk_create,
+        ):
+            created = self.service._create_missing_states(
+                item_ids,
+                now=timezone.now(),
+            )
+
+        self.assertEqual(created, 5)
+        self.assertEqual(mock_bulk_create.call_count, 3)
+        self.assertEqual(
+            AnimeReleaseDateScanState.objects.filter(item_id__in=item_ids).count(),
+            5,
+        )
+
+    @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
+    def test_detail_page_metadata_initializes_only_missing_mal_anime_state(
+        self,
+        _mock_jitter,
+    ):
+        self.service.initialize_from_detail_page_metadata(
+            item=self.item,
+            metadata=self.metadata("2027-05", status="Upcoming"),
+        )
+
+        state = AnimeReleaseDateScanState.objects.get(item=self.item)
+        self.assertEqual(state.last_seen_start_date_text, "2027-05")
+        self.assertEqual(state.last_seen_mal_status, "Upcoming")
+        self.assertFalse(
+            AnimeReleaseDateNotificationDelivery.objects.exists(),
+        )
+
+        original_next_scan_at = state.next_scan_at
+        self.service.initialize_from_detail_page_metadata(
+            item=self.item,
+            metadata=self.metadata("2028", status="Airing"),
+        )
+        state.refresh_from_db()
+        self.assertEqual(state.last_seen_start_date_text, "2027-05")
+        self.assertEqual(state.next_scan_at, original_next_scan_at)
+
+    def test_detail_page_metadata_ignores_non_mal_or_non_anime_items(self):
+        non_mal = Item.objects.create(
+            media_id="300",
+            source=Sources.TMDB.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Non MAL",
+            image="https://example.com/anime.jpg",
+        )
+        non_anime = Item.objects.create(
+            media_id="301",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.MANGA.value,
+            title="Non Anime",
+            image="https://example.com/manga.jpg",
+        )
+
+        for item in (non_mal, non_anime):
+            self.service.initialize_from_detail_page_metadata(
+                item=item,
+                metadata=self.metadata("2027"),
+            )
+
+        self.assertFalse(
+            AnimeReleaseDateScanState.objects.filter(
+                item__in=(non_mal, non_anime),
+            ).exists(),
+        )
+
+    @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
+    def test_finished_status_variants_disable_state(self, _mock_jitter):
+        for status in ("Finished", "finished", "finished_airing", "Finished Airing"):
+            with self.subTest(status=status):
+                AnimeReleaseDateScanState.objects.filter(item=self.item).delete()
+                self.service.initialize_from_detail_page_metadata(
+                    item=self.item,
+                    metadata=self.metadata("2027", status=status),
+                )
+                self.assertTrue(
+                    AnimeReleaseDateScanState.objects.get(item=self.item).disabled,
+                )
+
+        for status in ("Upcoming", "Airing"):
+            with self.subTest(status=status):
+                AnimeReleaseDateScanState.objects.filter(item=self.item).delete()
+                self.service.initialize_from_detail_page_metadata(
+                    item=self.item,
+                    metadata=self.metadata("2027", status=status),
+                )
+                self.assertFalse(
+                    AnimeReleaseDateScanState.objects.get(item=self.item).disabled,
+                )
 
     @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
     def test_import_initializes_state_without_eligible_user(self, _mock_jitter):

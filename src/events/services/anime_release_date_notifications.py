@@ -31,8 +31,10 @@ YEAR_RE = re.compile(r"^\d{4}$")
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ACTIVE_ANIME_STATUSES = (Status.PLANNING.value, Status.IN_PROGRESS.value)
+FINISHED_MAL_STATUSES = {"finished", "finished airing"}
 LONG_BACKOFF_STABLE_SCANS = 6
 MEDIUM_BACKOFF_STABLE_SCANS = 3
+STATE_CREATE_CHUNK_SIZE = 500
 
 
 @dataclass(frozen=True)
@@ -183,16 +185,19 @@ class AnimeReleaseDateNotificationService:
                 "Anime release date scan started batch_size=%s",
                 settings.ANIME_RELEASE_DATE_SCAN_BATCH_SIZE,
             )
+            today = timezone.localdate()
+            disabled_past = self._disable_past_complete_dates(today=today)
+            if disabled_past:
+                logger.info(
+                    "Disabled MAL anime release-date states with past complete "
+                    "dates count=%s",
+                    disabled_past,
+                )
             eligible_item_ids = self._eligible_item_ids()
             stats.states_created = self._create_missing_states(
                 eligible_item_ids,
                 now=now,
             )
-            today = timezone.localdate()
-            AnimeReleaseDateScanState.objects.filter(
-                disabled=False,
-                last_seen_start_date__lt=today,
-            ).update(disabled=True)
             cutoff = now - timedelta(
                 hours=settings.ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS,
             )
@@ -314,6 +319,20 @@ class AnimeReleaseDateNotificationService:
             state.next_scan_at = now
             state.save(update_fields=["next_scan_at"])
 
+    def initialize_from_detail_page_metadata(self, *, item, metadata) -> None:
+        """Initialize a missing state from metadata already loaded for a page."""
+        if not self._is_mal_anime(item):
+            return
+        if AnimeReleaseDateScanState.objects.filter(item=item).exists():
+            return
+        self._process_item_metadata(
+            item=item,
+            metadata=metadata or {},
+            source="detail_page",
+            notify=False,
+            require_eligible_users=False,
+        )
+
     def _eligible_item_ids(self) -> list[int]:
         candidates = (
             Anime.objects.filter(
@@ -355,14 +374,28 @@ class AnimeReleaseDateNotificationService:
             ).values_list("item_id", flat=True),
         )
         missing_ids = sorted(set(item_ids) - existing_ids)
-        AnimeReleaseDateScanState.objects.bulk_create(
-            [
-                AnimeReleaseDateScanState(item_id=item_id, next_scan_at=now)
-                for item_id in missing_ids
-            ],
-            ignore_conflicts=True,
+        created_count = 0
+        for start in range(0, len(missing_ids), STATE_CREATE_CHUNK_SIZE):
+            chunk = missing_ids[start : start + STATE_CREATE_CHUNK_SIZE]
+            AnimeReleaseDateScanState.objects.bulk_create(
+                [
+                    AnimeReleaseDateScanState(item_id=item_id, next_scan_at=now)
+                    for item_id in chunk
+                ],
+                ignore_conflicts=True,
+            )
+            created_count += len(chunk)
+        return created_count
+
+    @staticmethod
+    def _disable_past_complete_dates(*, today) -> int:
+        return (
+            AnimeReleaseDateScanState.objects.filter(
+                disabled=False,
+                last_seen_start_date__isnull=False,
+                last_seen_start_date__lt=today,
+            ).update(disabled=True)
         )
-        return len(missing_ids)
 
     def _process_due_state(
         self,
@@ -625,7 +658,7 @@ class AnimeReleaseDateNotificationService:
         )
 
     def _finish_state_schedule(self, state, parsed, mal_status, *, now) -> None:
-        if mal_status.strip().lower() == "finished":
+        if self._is_finished_mal_status(mal_status):
             state.disabled = True
             return
         state.next_scan_at = self._next_scan_at(
@@ -648,6 +681,11 @@ class AnimeReleaseDateNotificationService:
             item.source == Sources.MAL.value
             and item.media_type == MediaTypes.ANIME.value
         )
+
+    @staticmethod
+    def _is_finished_mal_status(mal_status: str) -> bool:
+        normalized = str(mal_status or "").strip().lower().replace("_", " ")
+        return normalized in FINISHED_MAL_STATUSES
 
     @staticmethod
     def _is_definitively_past(parsed, today: date) -> bool:

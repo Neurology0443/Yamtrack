@@ -33,13 +33,16 @@ dates are stored as first-class states so transitions such as `2027` to
 
 ## Observation paths
 
-There are three ways to observe the MAL value:
+There are four ways to observe the MAL value:
 
 1. An existing MAL metadata refresh passes its old and new payloads to the
    service. No extra provider request is made.
 2. Franchise import passes the payload already returned by `anime_minimal()`.
    The state is initialized silently and no extra provider request is made.
-3. A dedicated Celery scan processes a bounded deterministic batch of due
+3. A MAL anime detail page initializes a missing state from the metadata already
+   loaded for rendering. The hook is silent, makes no provider request, and a
+   hook failure does not break the page.
+4. A dedicated Celery scan processes a bounded deterministic batch of due
    states. It uses the MAL cache when its `fetched_at` value is recent enough
    and refreshes MAL only as a last resort.
 
@@ -77,6 +80,10 @@ The known start date then controls how long the item remains scannable:
 - a partial month older than the current month: disable the scan state;
 - MAL status `Finished`: disable the scan state.
 
+Finished-status matching is defensive and accepts normalized or raw-looking
+variants such as `Finished`, `finished`, `finished_airing`, and
+`Finished Airing`.
+
 Known partial or complete future dates use the long backoff and normally return
 after seven days plus jitter. Therefore, having a precise future date does not
 cause frequent MAL requests, but still allows a later postponement to be
@@ -102,6 +109,7 @@ The scan uses:
 - a global cache lock;
 - deterministic ordering by `next_scan_at` and row ID;
 - a configurable batch size;
+- chunked creation of missing state rows to avoid a large initial write spike;
 - a minimum refresh cooldown;
 - recent MAL cache data before any provider request;
 - stable-state backoff up to the configured maximum;
