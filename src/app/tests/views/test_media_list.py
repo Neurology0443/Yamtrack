@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -148,6 +149,61 @@ class MediaListViewTests(TestCase):
         )
         self.assertEqual(response.context["current_layout"], "series")
         build_groups.assert_called_once()
+
+    @patch("app.views.AnimeSeriesListService.build_groups")
+    def test_anime_series_layout_renders_compact_grid_cards(self, build_groups):
+        """Series cards reuse Grid View's compact visual language."""
+        item = Item.objects.create(
+            media_id="2",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Series Representative",
+            image="http://example.com/series.jpg",
+        )
+        anime = Anime(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+        anime._skip_hot_priority = True
+        anime.save()
+        build_groups.return_value = [
+            SimpleNamespace(
+                detail_item=item,
+                display_title=title,
+                display_image=item.image,
+                group_kind=kind,
+                tracked_count=2,
+                best_score=None,
+            )
+            for kind, title in [
+                ("main_continuity", "Main Series"),
+                ("alternative_branch", "Alternative Series"),
+                ("spin_off_branch", "Spin-off Series"),
+                ("side_story_branch", "Side-story Series"),
+                ("singleton", "Single Series"),
+            ]
+        ]
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series",
+        )
+        content = response.content.decode()
+
+        self.assertContains(response, 'class="anime-series-list media-grid"')
+        for label in (
+            "Main continuity",
+            "Alternative",
+            "Spin-off",
+            "Side-story",
+            "Single",
+        ):
+            self.assertContains(response, label)
+        self.assertNotIn("Open series", content)
+        self.assertNotIn("Alternative branch", content)
+        self.assertNotIn("Spin-off branch", content)
+        self.assertNotIn("Side-story branch", content)
 
     def test_series_layout_is_not_valid_for_non_anime_preferences(self):
         """Series remains invalid for every non-anime preference field."""

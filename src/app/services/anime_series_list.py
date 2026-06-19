@@ -85,7 +85,7 @@ class AnimeSeriesBranchClassifier:
         section_key: str,
         relation_type: str,
         has_followed_local_prequel_or_sequel: bool = False,
-        tracked_branch_size: int = 1,
+        followed_local_branch_size: int = 1,
         has_meaningful_local_branch_payload: bool = False,
         is_tv_with_followed_prequel_or_sequel: bool = False,
         parent_known: bool = True,
@@ -112,7 +112,7 @@ class AnimeSeriesBranchClassifier:
         elif relation_type in CONDITIONAL_BRANCH_RELATIONS:
             separate = (
                 has_followed_local_prequel_or_sequel
-                or tracked_branch_size > 1
+                or followed_local_branch_size >= MIN_FOLLOWED_BRANCH_ENTRIES
                 or has_meaningful_local_branch_payload
                 or is_tv_with_followed_prequel_or_sequel
             )
@@ -261,9 +261,6 @@ class AnimeSeriesListService:
             for media_id in media_ids
         }
         state_roots = self._load_state_roots(target_user.id, media_ids)
-        state_root_counts = Counter(
-            root for root in state_roots.values() if root
-        )
         memberships = self._build_membership_index(lookups.values())
         resolved = [
             self._resolve_entry(
@@ -271,7 +268,6 @@ class AnimeSeriesListService:
                 lookup=lookups[str(anime.item.media_id)],
                 memberships=memberships.get(str(anime.item.media_id), []),
                 state_root=state_roots.get(str(anime.item.media_id), ""),
-                state_root_counts=state_root_counts,
                 tracked_media_ids=set(media_ids),
             )
             for anime in anime_list
@@ -392,7 +388,6 @@ class AnimeSeriesListService:
         lookup,
         memberships,
         state_root,
-        state_root_counts,
         tracked_media_ids,
     ) -> _ResolvedEntry:
         media_id = str(anime.item.media_id)
@@ -419,13 +414,14 @@ class AnimeSeriesListService:
                 lookup=lookup,
                 tracked_media_ids=tracked_media_ids,
             )
+            followed_local_branch_size = self._followed_local_branch_size(
+                media_id=media_id,
+                parent_media_id=preferred_membership.parent_key,
+                lookup=lookup,
+                tracked_media_ids=tracked_media_ids,
+            )
             has_meaningful_local_payload = (
-                self._has_meaningful_local_branch_payload(
-                    media_id=media_id,
-                    parent_media_id=preferred_membership.parent_key,
-                    lookup=lookup,
-                    tracked_media_ids=tracked_media_ids,
-                )
+                followed_local_branch_size >= MIN_FOLLOWED_BRANCH_ENTRIES
             )
             anime_media_type = str(
                 preferred_membership.entry_data.get("anime_media_type") or ""
@@ -434,7 +430,7 @@ class AnimeSeriesListService:
                 section_key=preferred_membership.section_key,
                 relation_type=preferred_membership.relation_type,
                 has_followed_local_prequel_or_sequel=has_followed_local_relation,
-                tracked_branch_size=state_root_counts.get(state_root, 1),
+                followed_local_branch_size=followed_local_branch_size,
                 has_meaningful_local_branch_payload=has_meaningful_local_payload,
                 is_tv_with_followed_prequel_or_sequel=(
                     anime_media_type == "tv" and has_followed_local_relation
@@ -473,11 +469,7 @@ class AnimeSeriesListService:
                 media=anime,
                 group_key=state_root,
                 group_role="series",
-                group_kind=(
-                    "main_continuity"
-                    if state_root_counts[state_root] > 1
-                    else "singleton"
-                ),
+                group_kind="main_continuity",
                 membership=None,
                 lookup=lookup,
             )
@@ -522,18 +514,18 @@ class AnimeSeriesListService:
                     return True
         return False
 
-    def _has_meaningful_local_branch_payload(
+    def _followed_local_branch_size(
         self,
         *,
         media_id: str,
         parent_media_id: str,
         lookup: anime_franchise_cache.FranchisePayloadLookup,
         tracked_media_ids: set[str],
-    ) -> bool:
-        """Return whether a local payload proves a followed continuity branch."""
+    ) -> int:
+        """Count followed entries proven to belong to the local payload branch."""
         payload = lookup.payload
         if not isinstance(payload, dict) or lookup.alias_hit:
-            return False
+            return 1
 
         payload_root = str(
             payload.get("canonical_root_media_id")
@@ -541,7 +533,7 @@ class AnimeSeriesListService:
             or ""
         )
         if payload_root != media_id:
-            return False
+            return 1
 
         followed_branch_ids = {media_id}
         series = payload.get("series", {})
@@ -562,12 +554,13 @@ class AnimeSeriesListService:
                     or entry_media_id == parent_media_id
                 ):
                     continue
-                if relation_type in {"prequel", "sequel"}:
-                    return True
-                if relation_type not in SEPARATE_BY_DEFAULT_RELATIONS:
+                if (
+                    relation_type in {"prequel", "sequel"}
+                    or relation_type not in SEPARATE_BY_DEFAULT_RELATIONS
+                ):
                     followed_branch_ids.add(entry_media_id)
 
-        return len(followed_branch_ids) >= MIN_FOLLOWED_BRANCH_ENTRIES
+        return len(followed_branch_ids)
 
     def _preferred_membership(
         self,

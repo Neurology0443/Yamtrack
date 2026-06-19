@@ -61,6 +61,12 @@ class AnimeSeriesBranchClassifierTests(SimpleTestCase):
             has_meaningful_local_branch_payload=True,
         )
 
+    def test_side_story_with_multiple_followed_local_entries_is_separate(self):
+        self.assert_separate(
+            "side_story",
+            followed_local_branch_size=2,
+        )
+
     def test_parent_relations_and_sections_remain_with_parent(self):
         for relation_type in ("prequel", "sequel", "full_story", "summary"):
             with self.subTest(relation_type=relation_type):
@@ -436,3 +442,73 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         groups_by_key = {group.group_key: group for group in groups}
         self.assertEqual(groups_by_key["40"].group_kind, "main_continuity")
         self.assertEqual(groups_by_key["41"].group_kind, "alternative_branch")
+
+    @patch.object(
+        AnimeSeriesListService,
+        "_load_state_roots",
+        return_value={"50": "50", "51": "50"},
+    )
+    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
+    def test_shared_import_component_does_not_separate_isolated_side_story(
+        self,
+        load_payload,
+        _load_state_roots,
+    ):
+        parent = self.anime("50", "Parent Series")
+        side_story = self.anime("51", "Isolated OVA")
+        parent_payload = self.payload(
+            "50",
+            "Parent Series",
+            series=[self.entry("50", "Parent Series", anime_media_type="tv")],
+            sections=[
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        self.entry("51", "Isolated OVA", "side_story"),
+                    ],
+                },
+            ],
+        )
+        lookups = {
+            "50": self.lookup("50", parent_payload),
+            "51": self.lookup("51"),
+        }
+        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
+
+        groups = self.service.build_groups(
+            target_user=self.user,
+            anime_queryset=[parent, side_story],
+            sort_filter="title",
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "50")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"50", "51"},
+        )
+
+    @patch.object(
+        AnimeSeriesListService,
+        "_load_state_roots",
+        return_value={"60": "59"},
+    )
+    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
+    def test_state_root_remains_group_key_fallback_without_payload(
+        self,
+        load_payload,
+        _load_state_roots,
+    ):
+        orphan = self.anime("60", "Cache-cold sequel")
+        load_payload.return_value = self.lookup("60")
+
+        groups = self.service.build_groups(
+            target_user=self.user,
+            anime_queryset=[orphan],
+            sort_filter="title",
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "59")
+        self.assertEqual(groups[0].group_kind, "main_continuity")
