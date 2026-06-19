@@ -153,6 +153,80 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
         self.assertEqual(branch.context_parent_media_id, "10")
         self.assertEqual(branch.context_relation_type, "spin_off")
 
+    def test_branch_boundary_wins_over_noisy_sequel_relation(self):
+        snapshot = self._snapshot(
+            [self._node("10"), self._node("20")],
+            [
+                AnimeRelation("10", "20", "alternative_version"),
+                AnimeRelation("10", "20", "sequel"),
+            ],
+            root_media_id="10",
+            series_line_ids=("10",),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"10", "20"}).groups
+
+        self.assertEqual(
+            [(group.root_media_id, group.group_kind) for group in groups],
+            [("10", "singleton"), ("20", "alternative_branch")],
+        )
+
+    def test_alternative_setting_boundary_wins_over_noisy_sequel(self):
+        snapshot = self._snapshot(
+            [self._node("10"), self._node("20")],
+            [
+                AnimeRelation("10", "20", "alternative_setting"),
+                AnimeRelation("10", "20", "sequel"),
+            ],
+            root_media_id="10",
+            series_line_ids=("10",),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"10", "20"}).groups
+
+        self.assertEqual(
+            [(group.root_media_id, group.group_kind) for group in groups],
+            [("10", "singleton"), ("20", "alternative_branch")],
+        )
+
+    def test_spin_off_boundary_wins_over_noisy_sequel(self):
+        snapshot = self._snapshot(
+            [self._node("10"), self._node("20")],
+            [
+                AnimeRelation("10", "20", "spin_off"),
+                AnimeRelation("10", "20", "sequel"),
+            ],
+            root_media_id="10",
+            series_line_ids=("10",),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"10", "20"}).groups
+
+        self.assertEqual(
+            [(group.root_media_id, group.group_kind) for group in groups],
+            [("10", "singleton"), ("20", "spin_off_branch")],
+        )
+
+    def test_konosuba_explosion_is_a_separate_spin_off_branch(self):
+        snapshot = self._snapshot(
+            [
+                self._node("30831", "KonoSuba"),
+                self._node("51958", "KonoSuba: Explosion"),
+            ],
+            [AnimeRelation("30831", "51958", "spin_off")],
+            root_media_id="30831",
+            series_line_ids=("30831",),
+        )
+
+        groups = self.resolver.resolve(snapshot, {"30831", "51958"}).groups
+
+        self.assertEqual(len(groups), 2)
+        spin_off = groups[1]
+        self.assertEqual(spin_off.root_media_id, "51958")
+        self.assertEqual(spin_off.group_kind, "spin_off_branch")
+        self.assertEqual(spin_off.context_parent_media_id, "30831")
+        self.assertEqual(spin_off.context_relation_type, "spin_off")
+
     def test_prequel_and_sequel_keep_tracked_entries_in_one_local_group(self):
         nodes = [
             self._node("10", start_date=date(2020, 1, 1)),

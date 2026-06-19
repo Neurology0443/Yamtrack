@@ -178,8 +178,26 @@ class AnimeLocalSeriesResolver:
                 if node.media_type not in AFFILIATE_MEDIA_TYPES
             },
         )
+        branch_boundary_node_pairs = {
+            frozenset(
+                {
+                    relation.source_media_id,
+                    relation.target_media_id,
+                }
+            )
+            for relation in relations
+            if relation.relation_type in BRANCH_RELATION_TYPES
+        }
         for relation in relations:
             if relation.relation_type in CONTINUITY_RELATION_TYPES:
+                node_pair = frozenset(
+                    {
+                        relation.source_media_id,
+                        relation.target_media_id,
+                    }
+                )
+                if node_pair in branch_boundary_node_pairs:
+                    continue
                 disjoint_set.union(
                     relation.source_media_id,
                     relation.target_media_id,
