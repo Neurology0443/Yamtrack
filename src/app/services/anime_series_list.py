@@ -87,6 +87,7 @@ PARENT_TO_CHILD_RELATIONS = frozenset(
 # Parent-affiliated relations are directional in Series View.
 # They prevent warmed child payloads with return links such as full_story
 # from pulling the parent into the child group.
+# They must not decide Alternative/Spin-off group identity.
 
 
 @dataclass(frozen=True)
@@ -367,26 +368,14 @@ class AnimeSeriesListService:
             current_media_id=media_id,
             tracked_media_ids=tracked_media_ids,
         )
-        if affiliation is not None:
-            decision = self.classifier.classify(
-                section_key=affiliation.section_key,
-                relation_type=affiliation.relation_type,
-            )
-            return _ResolvedEntry(
-                media=anime,
-                group_key=affiliation.parent_key,
-                group_kind=decision.group_kind,
-                membership=affiliation,
+        if self._is_directional_parent_affiliation(
+            affiliation,
+            current_media_id=media_id,
+        ):
+            return self._resolved_from_affiliation(
+                anime=anime,
                 lookup=lookup,
-            )
-
-        if self._is_direct_local_payload(lookup, media_id):
-            return _ResolvedEntry(
-                media=anime,
-                group_key=media_id,
-                group_kind="main_continuity",
-                membership=None,
-                lookup=lookup,
+                affiliation=affiliation,
             )
 
         if state_root:
@@ -398,7 +387,14 @@ class AnimeSeriesListService:
                 lookup=lookup,
             )
 
-        if self._has_external_separator(memberships, current_media_id=media_id):
+        if affiliation is not None:
+            return self._resolved_from_affiliation(
+                anime=anime,
+                lookup=lookup,
+                affiliation=affiliation,
+            )
+
+        if self._is_direct_local_payload(lookup, media_id):
             return _ResolvedEntry(
                 media=anime,
                 group_key=media_id,
@@ -414,17 +410,34 @@ class AnimeSeriesListService:
             lookup=lookup,
         )
 
-    def _has_external_separator(
+    def _resolved_from_affiliation(
         self,
-        memberships: list[_PayloadMembership],
+        *,
+        anime,
+        lookup,
+        affiliation: _PayloadMembership,
+    ) -> _ResolvedEntry:
+        decision = self.classifier.classify(
+            section_key=affiliation.section_key,
+            relation_type=affiliation.relation_type,
+        )
+        return _ResolvedEntry(
+            media=anime,
+            group_key=affiliation.parent_key,
+            group_kind=decision.group_kind,
+            membership=affiliation,
+            lookup=lookup,
+        )
+
+    def _is_directional_parent_affiliation(
+        self,
+        membership: _PayloadMembership | None,
         *,
         current_media_id: str,
     ) -> bool:
-        return any(
-            membership.parent_key != current_media_id
-            and self._membership_branch_relation(membership) is not None
-            for membership in memberships
-        )
+        if membership is None or membership.parent_key == current_media_id:
+            return False
+        return membership.relation_type.lower() in PARENT_TO_CHILD_RELATIONS
 
     def _local_payload_links_to(
         self,
@@ -500,18 +513,44 @@ class AnimeSeriesListService:
         by_media_id = {
             str(entry.media.item.media_id): entry for entry in resolved_entries
         }
-        collapsed = []
-        for entry in resolved_entries:
-            group_key = entry.group_key
-            seen = {str(entry.media.item.media_id)}
-            while group_key in by_media_id and group_key not in seen:
-                seen.add(group_key)
-                next_key = by_media_id[group_key].group_key
-                if next_key == group_key:
-                    break
-                group_key = next_key
-            collapsed.append(replace(entry, group_key=group_key))
-        return collapsed
+        roots = {
+            media_id: self._collapsed_group_key(media_id, by_media_id)
+            for media_id in by_media_id
+        }
+        return [
+            replace(
+                entry,
+                group_key=roots[str(entry.media.item.media_id)],
+            )
+            for entry in resolved_entries
+        ]
+
+    def _collapsed_group_key(
+        self,
+        media_id: str,
+        by_media_id: dict[str, _ResolvedEntry],
+    ) -> str:
+        """Resolve chains and cycles to an order-independent stable key."""
+        path = []
+        positions = {}
+        current = media_id
+        while current in by_media_id:
+            if current in positions:
+                cycle = path[positions[current] :]
+                return min(cycle, key=self._stable_media_id_key)
+            positions[current] = len(path)
+            path.append(current)
+            next_key = by_media_id[current].group_key
+            if next_key == current:
+                return current
+            current = next_key
+        return current
+
+    def _stable_media_id_key(self, media_id: str) -> tuple[int, int | str]:
+        try:
+            return (0, int(media_id))
+        except ValueError:
+            return (1, media_id)
 
     def _attach_branch_contexts(
         self,

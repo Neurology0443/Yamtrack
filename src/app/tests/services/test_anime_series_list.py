@@ -1,5 +1,6 @@
 # ruff: noqa: D101, D102
 
+from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -585,7 +586,7 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         self.assertEqual(groups[0].group_key, "59")
         self.assertEqual(groups[0].context_label, "")
 
-    def test_direct_local_payload_wins_over_state_root_fallback(self):
+    def test_state_root_wins_over_direct_local_payload(self):
         anime = self.anime("61", "Direct local root")
         local_payload = self.payload(
             "61",
@@ -599,7 +600,218 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             state_roots={"61": "59"},
         )
 
-        self.assertEqual(groups[0].group_key, "61")
+        self.assertEqual(groups[0].group_key, "59")
+
+    def test_state_root_wins_over_warm_sequel_affiliation(self):
+        parent = self.anime("62", "Warm parent")
+        sequel = self.anime("63", "Warm sequel")
+        parent_payload = self.payload(
+            "62",
+            "Warm parent",
+            series=[
+                self.entry("62", "Warm parent"),
+                self.entry("63", "Warm sequel", "sequel"),
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, sequel],
+            {
+                "62": self.lookup("62", parent_payload),
+                "63": self.lookup("63"),
+            },
+            state_roots={
+                "62": "60",
+                "63": "60",
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "60")
+
+    def test_collapse_resolves_cycles_to_stable_key(self):
+        first = self.anime("91", "First")
+        second = self.anime("90", "Second")
+        first_payload = self.payload(
+            "91",
+            "First",
+            series=[self.entry("90", "Second", "sequel")],
+        )
+        second_payload = self.payload(
+            "90",
+            "Second",
+            series=[self.entry("91", "First", "prequel")],
+        )
+
+        groups = self.build_groups(
+            [first, second],
+            {
+                "91": self.lookup("91", first_payload),
+                "90": self.lookup("90", second_payload),
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "90")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"90", "91"},
+        )
+
+    def test_dragon_ball_like_state_roots_keep_all_alternatives_together(self):
+        parent = self.anime("223", "Dragon Ball")
+        branch = [
+            self.anime("502", "Movie 1"),
+            self.anime("891", "Movie 2"),
+            self.anime("892", "Movie 3"),
+            self.anime("893", "Movie 4"),
+        ]
+        parent_payload = self.payload(
+            "223",
+            "Dragon Ball",
+            series=[self.entry("223", "Dragon Ball")],
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternatives",
+                    "entries": [
+                        self.entry(
+                            media.item.media_id,
+                            media.item.title,
+                            "alternative_version",
+                        )
+                        for media in branch
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, *branch],
+            {
+                "223": self.lookup("223", parent_payload),
+                **{
+                    media.item.media_id: self.lookup(media.item.media_id)
+                    for media in branch
+                },
+            },
+            state_roots={
+                "502": "502",
+                "891": "502",
+                "892": "502",
+                "893": "502",
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            {entry.media_id for entry in groups_by_key["502"].entries},
+            {"502", "891", "892", "893"},
+        )
+        self.assertEqual(
+            groups_by_key["502"].context_title,
+            "Alternative version · Dragon Ball",
+        )
+
+    def test_dragon_ball_like_warm_local_chain_collapses(self):
+        branch = [
+            self.anime("502", "Movie 1"),
+            self.anime("891", "Movie 2"),
+            self.anime("892", "Movie 3"),
+            self.anime("893", "Movie 4"),
+        ]
+        lookups = {"893": self.lookup("893")}
+        for current, following in pairwise(branch):
+            payload = self.payload(
+                current.item.media_id,
+                current.item.title,
+                series=[
+                    self.entry(current.item.media_id, current.item.title),
+                    self.entry(
+                        following.item.media_id,
+                        following.item.title,
+                        "sequel",
+                    ),
+                ],
+            )
+            lookups[current.item.media_id] = self.lookup(
+                current.item.media_id,
+                payload,
+            )
+
+        groups = self.build_groups(branch, lookups)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "502")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"502", "891", "892", "893"},
+        )
+
+    def test_dragon_ball_like_mixed_cache_keeps_direct_alternative_in_branch(self):
+        parent = self.anime("223", "Dragon Ball")
+        branch = [
+            self.anime("502", "Movie 1"),
+            self.anime("891", "Movie 2"),
+            self.anime("892", "Movie 3"),
+            self.anime("893", "Movie 4"),
+        ]
+        parent_payload = self.payload(
+            "223",
+            "Dragon Ball",
+            series=[self.entry("223", "Dragon Ball")],
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternatives",
+                    "entries": [
+                        self.entry("893", "Movie 4", "alternative_version"),
+                    ],
+                },
+            ],
+        )
+        lookups = {
+            "223": self.lookup("223", parent_payload),
+            "893": self.lookup("893"),
+        }
+        for current, following in pairwise(branch):
+            payload = self.payload(
+                current.item.media_id,
+                current.item.title,
+                series=[
+                    self.entry(current.item.media_id, current.item.title),
+                    self.entry(
+                        following.item.media_id,
+                        following.item.title,
+                        "sequel",
+                    ),
+                ],
+            )
+            lookups[current.item.media_id] = self.lookup(
+                current.item.media_id,
+                payload,
+            )
+
+        groups = self.build_groups(
+            [parent, *branch],
+            lookups,
+            state_roots={
+                "502": "502",
+                "891": "502",
+                "892": "502",
+                "893": "502",
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            {entry.media_id for entry in groups_by_key["502"].entries},
+            {"502", "891", "892", "893"},
+        )
+        self.assertEqual(
+            groups_by_key["502"].context_title,
+            "Alternative version · Dragon Ball",
+        )
 
     def test_state_root_groups_cache_cold_local_alternative_continuity(self):
         parent = self.anime("51122", "Spice and Wolf")
@@ -708,6 +920,24 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                 "anime_franchise_cache.load_payload_for_media",
                 return_value=self.lookup("80"),
             ) as load_payload,
+            patch(
+                "app.services.anime_series_list."
+                "anime_franchise_cache.save_payload",
+            ) as save_payload,
+            patch(
+                "app.services.anime_series_list."
+                "anime_franchise_cache.replace_aliases",
+            ) as replace_aliases,
+            patch(
+                "app.services.anime_series_list."
+                "anime_franchise_cache.delete_alias_for_media",
+            ) as delete_alias,
+            patch(
+                "app.providers.services.get_media_metadata",
+            ) as get_media_metadata,
+            patch(
+                "app.tasks.build_mal_anime_franchise_payload.delay",
+            ) as rebuild_payload,
         ):
             self.service.build_groups(
                 target_user=self.user,
@@ -716,3 +946,8 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             )
 
         load_payload.assert_called_once_with("80", touch=False)
+        save_payload.assert_not_called()
+        replace_aliases.assert_not_called()
+        delete_alias.assert_not_called()
+        get_media_metadata.assert_not_called()
+        rebuild_payload.assert_not_called()
