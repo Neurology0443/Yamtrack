@@ -177,6 +177,7 @@ class MediaListViewTests(TestCase):
                 user_score=score,
                 mal_score=mal_score,
                 source_material=source_material,
+                entries=[],
             )
             for (
                 title,
@@ -243,6 +244,58 @@ class MediaListViewTests(TestCase):
         self.assertNotIn("Side-story", content)
         self.assertNotIn("Single", content)
         self.assertNotIn("entries", content)
+
+    @patch("app.views.AnimeSeriesListService.build_groups")
+    def test_anime_series_card_renders_group_entries_without_extra_cards(
+        self,
+        build_groups,
+    ):
+        """A grouped continuity exposes its members inside one representative card."""
+        item = Item.objects.create(
+            media_id="502",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Dragon Ball Movie 1",
+            image="http://example.com/dragon-ball-movie.jpg",
+        )
+        titles = [
+            "Dragon Ball Movie 1: Shen Long no Densetsu",
+            "Dragon Ball Movie 2: Majinjou no Nemurihime",
+            "Dragon Ball Movie 3: Makafushigi Daibouken",
+            "Dragon Ball Movie 4: Saikyou e no Michi",
+        ]
+        build_groups.return_value = [
+            SimpleNamespace(
+                detail_item=item,
+                display_title=titles[0],
+                display_image=item.image,
+                context_label="Alternative version",
+                context_title="Alternative version · Dragon Ball",
+                user_score=None,
+                mal_score=None,
+                source_material="",
+                entries=[
+                    SimpleNamespace(media_id=media_id, title=title)
+                    for media_id, title in zip(
+                        ("502", "891", "892", "893"),
+                        titles,
+                        strict=True,
+                    )
+                ],
+            ),
+        ]
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series",
+        )
+        content = response.content.decode()
+
+        self.assertContains(response, 'data-series-entry-count="4"')
+        self.assertContains(response, ">4 anime</div>")
+        for title in titles:
+            self.assertContains(response, title)
+        self.assertEqual(content.count("<article"), 1)
 
     def test_series_layout_is_not_valid_for_non_anime_preferences(self):
         """Series remains invalid for every non-anime preference field."""
