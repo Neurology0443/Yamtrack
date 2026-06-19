@@ -279,51 +279,19 @@ class AnimeFranchiseImportService:
                             component_root_mal_id=component_root_mal_id,
                         )
 
-                snapshot_media_ids = {
-                    str(media_id)
-                    for media_id in getattr(snapshot, "nodes_by_media_id", {})
-                }
-                snapshot_media_ids.update(
-                    str(media_id) for media_id in selection.media_ids
+                self._update_local_series_projection(
+                    user=user,
+                    snapshot=snapshot,
+                    selection=selection,
+                    imported_media_ids_for_snapshot=(
+                        imported_media_ids_for_snapshot
+                    ),
+                    dry_run=dry_run,
+                    profile_key=profile_key,
+                    due_seed=due_seed,
+                    component_root_mal_id=component_root_mal_id,
+                    stats=stats,
                 )
-                tracked_media_ids = bulk_mal_anime_tracked_ids(
-                    user_id=user.id,
-                    media_ids=snapshot_media_ids,
-                )
-                tracked_media_ids.update(imported_media_ids_for_snapshot)
-                try:
-                    local_series_resolution = self.local_series_resolver.resolve(
-                        snapshot,
-                        tracked_media_ids,
-                    )
-                    stats.local_series_groups_resolved += len(
-                        local_series_resolution.groups
-                    )
-                    if dry_run:
-                        stats.local_series_projection_skipped_dry_run += 1
-                    else:
-                        projection_stats = (
-                            self.local_series_projection_service.persist(
-                                user=user,
-                                resolution=local_series_resolution,
-                                source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
-                                scope_media_ids=snapshot_media_ids,
-                            )
-                        )
-                        stats.local_series_memberships_recorded += (
-                            projection_stats.memberships_recorded
-                        )
-                except Exception:
-                    stats.local_series_projection_errors += 1
-                    logger.exception(
-                        "Failed to update local anime series projection",
-                        extra={
-                            "user_id": due_seed.user_id,
-                            "component_root_mal_id": component_root_mal_id,
-                            "seed_media_id": due_seed.seed_mal_id,
-                            "profile_key": profile_key,
-                        },
-                    )
 
                 root_key = (user.id, component_root_mal_id)
                 force_baseline_suppression = root_key in baseline_roots_created_this_run
@@ -405,6 +373,64 @@ class AnimeFranchiseImportService:
                         stats.state_rows_updated += 1
 
         return stats
+
+    def _update_local_series_projection(
+        self,
+        *,
+        user,
+        snapshot,
+        selection,
+        imported_media_ids_for_snapshot,
+        dry_run,
+        profile_key,
+        due_seed,
+        component_root_mal_id,
+        stats,
+    ) -> None:
+        """Resolve and persist the best-effort Series View projection."""
+        snapshot_media_ids = {
+            str(media_id)
+            for media_id in getattr(snapshot, "nodes_by_media_id", {})
+        }
+        snapshot_media_ids.update(
+            str(media_id) for media_id in selection.media_ids
+        )
+        tracked_media_ids = bulk_mal_anime_tracked_ids(
+            user_id=user.id,
+            media_ids=snapshot_media_ids,
+        )
+        tracked_media_ids.update(imported_media_ids_for_snapshot)
+
+        try:
+            resolution = self.local_series_resolver.resolve(
+                snapshot,
+                tracked_media_ids,
+            )
+            stats.local_series_groups_resolved += len(resolution.groups)
+            if dry_run:
+                stats.local_series_projection_skipped_dry_run += 1
+                return
+
+            projection_stats = self.local_series_projection_service.persist(
+                user=user,
+                resolution=resolution,
+                source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+                scope_media_ids=snapshot_media_ids,
+            )
+            stats.local_series_memberships_recorded += (
+                projection_stats.memberships_recorded
+            )
+        except Exception:
+            stats.local_series_projection_errors += 1
+            logger.exception(
+                "Failed to update local anime series projection",
+                extra={
+                    "user_id": due_seed.user_id,
+                    "component_root_mal_id": component_root_mal_id,
+                    "seed_media_id": due_seed.seed_mal_id,
+                    "profile_key": profile_key,
+                },
+            )
 
     @transaction.atomic
     def _create_anime_entry(
