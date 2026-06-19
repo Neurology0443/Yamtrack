@@ -877,6 +877,14 @@ class AnimeLocalSeriesMembership(models.Model):
                 fields=["user", "group_kind"],
                 name="app_anilocseries_kind_idx",
             ),
+            models.Index(
+                fields=["user", "source_profile_key", "media_id"],
+                name="app_anilocseries_ui_media_idx",
+            ),
+            models.Index(
+                fields=["user", "source_profile_key", "root_media_id"],
+                name="app_anilocseries_ui_root_idx",
+            ),
         ]
 
     def __str__(self):
