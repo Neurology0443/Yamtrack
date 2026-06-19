@@ -64,6 +64,7 @@ PARENT_BY_DEFAULT_RELATIONS = frozenset(
         "tv_special",
     },
 )
+MIN_FOLLOWED_BRANCH_ENTRIES = 2
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ class AnimeSeriesBranchClassifier:
         relation_type: str,
         has_followed_local_prequel_or_sequel: bool = False,
         tracked_branch_size: int = 1,
-        has_valid_direct_or_scoped_payload: bool = False,
+        has_meaningful_local_branch_payload: bool = False,
         is_tv_with_followed_prequel_or_sequel: bool = False,
         parent_known: bool = True,
     ) -> BranchDecision:
@@ -112,7 +113,7 @@ class AnimeSeriesBranchClassifier:
             separate = (
                 has_followed_local_prequel_or_sequel
                 or tracked_branch_size > 1
-                or has_valid_direct_or_scoped_payload
+                or has_meaningful_local_branch_payload
                 or is_tv_with_followed_prequel_or_sequel
             )
             decision = BranchDecision(
@@ -408,13 +409,23 @@ class AnimeSeriesListService:
         preferred_membership = self._preferred_membership(
             memberships,
             state_root=state_root,
+            current_media_id=media_id,
         )
 
         if preferred_membership is not None:
             has_followed_local_relation = self._has_followed_local_relation(
                 media_id=media_id,
+                parent_media_id=preferred_membership.parent_key,
                 lookup=lookup,
                 tracked_media_ids=tracked_media_ids,
+            )
+            has_meaningful_local_payload = (
+                self._has_meaningful_local_branch_payload(
+                    media_id=media_id,
+                    parent_media_id=preferred_membership.parent_key,
+                    lookup=lookup,
+                    tracked_media_ids=tracked_media_ids,
+                )
             )
             anime_media_type = str(
                 preferred_membership.entry_data.get("anime_media_type") or ""
@@ -424,7 +435,7 @@ class AnimeSeriesListService:
                 relation_type=preferred_membership.relation_type,
                 has_followed_local_prequel_or_sequel=has_followed_local_relation,
                 tracked_branch_size=state_root_counts.get(state_root, 1),
-                has_valid_direct_or_scoped_payload=direct_local_payload,
+                has_meaningful_local_branch_payload=has_meaningful_local_payload,
                 is_tv_with_followed_prequel_or_sequel=(
                     anime_media_type == "tv" and has_followed_local_relation
                 ),
@@ -483,6 +494,7 @@ class AnimeSeriesListService:
         self,
         *,
         media_id: str,
+        parent_media_id: str,
         lookup: anime_franchise_cache.FranchisePayloadLookup,
         tracked_media_ids: set[str],
     ) -> bool:
@@ -504,17 +516,65 @@ class AnimeSeriesListService:
                 relation_type = str(entry.get("relation_type") or "").lower()
                 if (
                     entry_media_id in tracked_media_ids
-                    and entry_media_id != media_id
+                    and entry_media_id not in (media_id, parent_media_id)
                     and relation_type in {"prequel", "sequel"}
                 ):
                     return True
         return False
+
+    def _has_meaningful_local_branch_payload(
+        self,
+        *,
+        media_id: str,
+        parent_media_id: str,
+        lookup: anime_franchise_cache.FranchisePayloadLookup,
+        tracked_media_ids: set[str],
+    ) -> bool:
+        """Return whether a local payload proves a followed continuity branch."""
+        payload = lookup.payload
+        if not isinstance(payload, dict) or lookup.alias_hit:
+            return False
+
+        payload_root = str(
+            payload.get("canonical_root_media_id")
+            or payload.get("root_media_id")
+            or ""
+        )
+        if payload_root != media_id:
+            return False
+
+        followed_branch_ids = {media_id}
+        series = payload.get("series", {})
+        for entry in series.get("entries", []):
+            entry_media_id = str(entry.get("media_id") or "")
+            if (
+                entry_media_id in tracked_media_ids
+                and entry_media_id != parent_media_id
+            ):
+                followed_branch_ids.add(entry_media_id)
+
+        for section in payload.get("sections", []):
+            for entry in section.get("entries", []):
+                entry_media_id = str(entry.get("media_id") or "")
+                relation_type = str(entry.get("relation_type") or "").lower()
+                if (
+                    entry_media_id not in tracked_media_ids
+                    or entry_media_id == parent_media_id
+                ):
+                    continue
+                if relation_type in {"prequel", "sequel"}:
+                    return True
+                if relation_type not in SEPARATE_BY_DEFAULT_RELATIONS:
+                    followed_branch_ids.add(entry_media_id)
+
+        return len(followed_branch_ids) >= MIN_FOLLOWED_BRANCH_ENTRIES
 
     def _preferred_membership(
         self,
         memberships: list[_PayloadMembership],
         *,
         state_root: str,
+        current_media_id: str,
     ) -> _PayloadMembership | None:
         if not memberships:
             return None
@@ -522,14 +582,18 @@ class AnimeSeriesListService:
         def priority(membership):
             section_key = membership.section_key.lower()
             relation_type = membership.relation_type.lower()
-            local_root = bool(state_root and membership.parent_key == state_root)
+            current_media_root = membership.parent_key == current_media_id
+            state_component_root = bool(
+                state_root and membership.parent_key == state_root
+            )
             parent_section = section_key in PARENT_BY_DEFAULT_SECTION_KEYS
             separate_section = (
                 section_key in SEPARATE_SECTION_KINDS
                 or relation_type in SEPARATE_RELATION_KINDS
             )
             return (
-                0 if local_root else 1,
+                0 if current_media_root else 1,
+                0 if state_component_root else 1,
                 0 if separate_section else 1,
                 0 if parent_section else 1,
                 membership.parent_key,

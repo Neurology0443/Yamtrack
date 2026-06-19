@@ -55,10 +55,10 @@ class AnimeSeriesBranchClassifierTests(SimpleTestCase):
             has_followed_local_prequel_or_sequel=True,
         )
 
-    def test_side_story_with_direct_payload_is_separate(self):
+    def test_side_story_with_meaningful_local_payload_is_separate(self):
         self.assert_separate(
             "side_story",
-            has_valid_direct_or_scoped_payload=True,
+            has_meaningful_local_branch_payload=True,
         )
 
     def test_parent_relations_and_sections_remain_with_parent(self):
@@ -315,3 +315,124 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         }
         self.assertEqual(entries_by_group["20"], {"20"})
         self.assertEqual(entries_by_group["21"], {"21", "22"})
+
+    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
+    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
+    def test_side_story_with_navigation_payload_stays_in_parent(
+        self,
+        load_payload,
+        _load_state_roots,
+    ):
+        parent = self.anime("30", "Parent Series")
+        side_story = self.anime("31", "Isolated OVA")
+        parent_payload = self.payload(
+            "30",
+            "Parent Series",
+            series=[self.entry("30", "Parent Series", anime_media_type="tv")],
+            sections=[
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [
+                        self.entry("31", "Isolated OVA", "side_story"),
+                    ],
+                },
+            ],
+        )
+        navigation_payload = self.payload(
+            "31",
+            "Isolated OVA",
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry(
+                            "30",
+                            "Parent Series",
+                            "full_story",
+                            anime_media_type="tv",
+                        ),
+                    ],
+                },
+            ],
+        )
+        lookups = {
+            "30": self.lookup("30", parent_payload),
+            "31": self.lookup("31", navigation_payload),
+        }
+        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
+
+        groups = self.service.build_groups(
+            target_user=self.user,
+            anime_queryset=[parent, side_story],
+            sort_filter="title",
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "30")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"30", "31"},
+        )
+
+    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
+    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
+    def test_alternative_return_link_does_not_reclassify_parent(
+        self,
+        load_payload,
+        _load_state_roots,
+    ):
+        parent = self.anime("40", "Sword Art Online")
+        progressive = self.anime("41", "Sword Art Online Progressive")
+        parent_payload = self.payload(
+            "40",
+            "Sword Art Online",
+            series=[self.entry("40", "Sword Art Online", anime_media_type="tv")],
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternative Versions",
+                    "entries": [
+                        self.entry(
+                            "41",
+                            "Sword Art Online Progressive",
+                            "alternative_version",
+                        ),
+                    ],
+                },
+            ],
+        )
+        progressive_payload = self.payload(
+            "41",
+            "Sword Art Online Progressive",
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternative Versions",
+                    "entries": [
+                        self.entry(
+                            "40",
+                            "Sword Art Online",
+                            "alternative_version",
+                            anime_media_type="tv",
+                        ),
+                    ],
+                },
+            ],
+        )
+        lookups = {
+            "40": self.lookup("40", parent_payload),
+            "41": self.lookup("41", progressive_payload),
+        }
+        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
+
+        groups = self.service.build_groups(
+            target_user=self.user,
+            anime_queryset=[parent, progressive],
+            sort_filter="title",
+        )
+
+        groups_by_key = {group.group_key: group for group in groups}
+        self.assertEqual(groups_by_key["40"].group_kind, "main_continuity")
+        self.assertEqual(groups_by_key["41"].group_kind, "alternative_branch")
