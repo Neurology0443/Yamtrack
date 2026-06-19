@@ -448,8 +448,7 @@ def is_valid_payload(payload) -> bool:
         return False
     sections = payload.get("sections")
     return (
-        payload.get("schema_version")
-        == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+        payload.get("schema_version") == settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
         and _is_non_empty_string(payload.get("root_media_id"))
         and _is_non_empty_string(payload.get("display_title"))
         and _is_valid_series(payload.get("series"))
@@ -518,6 +517,39 @@ def delete_direct_payload(media_id) -> None:
     media_id = str(media_id)
     cache.delete(get_payload_key(media_id))
     cache.delete(get_meta_key(media_id))
+
+
+def delete_alias_for_media(media_id) -> None:
+    """Delete an alias and remove it from its canonical alias index."""
+    media_id = str(media_id)
+    alias_key = get_alias_key(media_id)
+    alias = _normalize_alias_record(cache.get(alias_key))
+
+    cache.delete(alias_key)
+
+    if alias is None:
+        return
+
+    canonical_media_id = alias.get("canonical_media_id")
+    if not canonical_media_id:
+        return
+
+    alias_index_key = get_alias_index_key(canonical_media_id)
+    alias_ids = cache.get(alias_index_key)
+    if not isinstance(alias_ids, list):
+        return
+
+    remaining_alias_ids = [
+        str(alias_id) for alias_id in alias_ids if str(alias_id) != media_id
+    ]
+    if remaining_alias_ids:
+        cache.set(
+            alias_index_key,
+            remaining_alias_ids,
+            timeout=get_ttl_seconds(),
+        )
+    else:
+        cache.delete(alias_index_key)
 
 
 def _delete_alias_if_owned_by(media_id, canonical_media_id) -> bool:
@@ -631,6 +663,39 @@ def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup
     )
 
 
+def load_valid_alias_payload_for_media(media_id) -> FranchisePayloadLookup | None:
+    """Load a valid alias target for media_id without reading direct payload first."""
+    requested_media_id = str(media_id)
+
+    if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
+        return None
+
+    alias = _load_alias_for_media(requested_media_id)
+    if alias is None:
+        return None
+
+    canonical_media_id = alias["canonical_media_id"]
+    if canonical_media_id == requested_media_id:
+        cache.delete(get_alias_key(requested_media_id))
+        return None
+
+    canonical_payload, canonical_meta = load_payload(canonical_media_id)
+    if canonical_payload is None or not payload_covers_media_id(
+        canonical_payload,
+        requested_media_id,
+    ):
+        cache.delete(get_alias_key(requested_media_id))
+        return None
+
+    return FranchisePayloadLookup(
+        requested_media_id=requested_media_id,
+        canonical_media_id=canonical_media_id,
+        payload=canonical_payload,
+        meta=canonical_meta,
+        alias_hit=True,
+    )
+
+
 def load_payload_for_media(media_id) -> FranchisePayloadLookup:
     """Load a complete payload for media_id, resolving canonical aliases safely."""
     requested_media_id = str(media_id)
@@ -693,6 +758,7 @@ def save_payload(
     truncation_reason="",
 ) -> dict:
     """Persist a complete franchise payload and fresh metadata."""
+    media_id = str(media_id)
     payload = dict(payload)
     payload["schema_version"] = settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
     payload["truncated"] = bool(truncated)
@@ -724,6 +790,7 @@ def save_payload(
         last_success_at=now,
     )
     ttl = get_ttl_seconds()
+    delete_alias_for_media(media_id)
     cache.set(get_payload_key(media_id), payload, timeout=ttl)
     cache.set(get_meta_key(media_id), meta, timeout=ttl)
     return meta

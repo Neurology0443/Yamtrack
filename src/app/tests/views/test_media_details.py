@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from app.models import (
+    Anime,
     Item,
     MediaTypes,
     Movie,
@@ -17,6 +18,10 @@ from app.models import (
     Status,
 )
 from app.services import anime_franchise_cache
+from events.models import (
+    AnimeReleaseDateNotificationDelivery,
+    AnimeReleaseDateScanState,
+)
 
 
 class MediaDetailsViewTests(TestCase):
@@ -67,6 +72,109 @@ class MediaDetailsViewTests(TestCase):
             allow_stale=False,
             schedule_stale_refresh=False,
         )
+
+    @patch("events.services.anime_release_date_notifications.mal.anime")
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=False)
+    def test_mal_anime_detail_initializes_release_date_state(
+        self,
+        mock_get_metadata,
+        mock_mal_anime,
+    ):
+        """MAL detail metadata silently initializes a missing global state."""
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "details": {
+                "start_date": "2027-05",
+                "status": "Upcoming",
+            },
+            "related": {},
+        }
+        item = Item.objects.create(
+            media_id="100",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Test Anime",
+            image="http://example.com/image.jpg",
+        )
+        Anime.objects.create(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        state = AnimeReleaseDateScanState.objects.get(item=item)
+        self.assertEqual(state.last_seen_start_date_text, "2027-05")
+        self.assertEqual(state.last_seen_mal_status, "Upcoming")
+        self.assertFalse(AnimeReleaseDateNotificationDelivery.objects.exists())
+        mock_get_metadata.assert_called_once()
+        mock_mal_anime.assert_not_called()
+
+    @patch(
+        "events.services.anime_release_date_notifications."
+        "AnimeReleaseDateNotificationService.initialize_from_detail_page_metadata",
+        side_effect=RuntimeError("state unavailable"),
+    )
+    @patch("app.providers.services.get_media_metadata")
+    @override_settings(ANIME_FRANCHISE_GROUPING_ENABLED=False)
+    def test_release_date_hook_failure_does_not_break_detail_page(
+        self,
+        mock_get_metadata,
+        _mock_initialize,
+    ):
+        """A release-date hook failure must not break the detail response."""
+        mock_get_metadata.return_value = {
+            "media_id": "100",
+            "title": "Test Anime",
+            "media_type": MediaTypes.ANIME.value,
+            "source": Sources.MAL.value,
+            "image": "http://example.com/image.jpg",
+            "details": {},
+            "related": {},
+        }
+        item = Item.objects.create(
+            media_id="100",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Test Anime",
+            image="http://example.com/image.jpg",
+        )
+        Anime.objects.create(
+            item=item,
+            user=self.user,
+            status=Status.PLANNING.value,
+        )
+
+        response = self.client.get(
+            reverse(
+                "media_details",
+                kwargs={
+                    "source": Sources.MAL.value,
+                    "media_type": MediaTypes.ANIME.value,
+                    "media_id": "100",
+                    "title": "test-anime",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     @patch("app.views.anime_franchise_cache.load_payload_for_media")
     @patch("app.providers.services.get_media_metadata")

@@ -27,6 +27,8 @@ class NotificationSettingsFormTests(TestCase):
                 "daily_digest_enabled",
                 "release_notifications_enabled",
                 "entry_added_notifications_enabled",
+                "franchise_discovery_notifications_enabled",
+                "anime_release_date_notifications_enabled",
             ],
         )
 
@@ -47,6 +49,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -63,6 +66,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -79,6 +83,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -93,6 +98,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -109,6 +115,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -135,6 +142,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -158,6 +166,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -176,6 +185,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -203,6 +213,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": True,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": True,
+            "franchise_discovery_notifications_enabled": True,
         }
         form = NotificationSettingsForm(data=form_data, instance=self.user)
 
@@ -218,6 +229,7 @@ class NotificationSettingsFormTests(TestCase):
             "daily_digest_enabled": False,
             "release_notifications_enabled": True,
             "entry_added_notifications_enabled": False,
+            "franchise_discovery_notifications_enabled": False,
         }
 
         with patch("apprise.Apprise.add", return_value=True):

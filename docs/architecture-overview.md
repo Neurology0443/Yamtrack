@@ -56,6 +56,7 @@ Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on to
 - complete franchise cache payloads for responsive detail pages;
 - cache warmup after import-created entries;
 - entry-added notifications for automatically imported anime;
+- opt-in MAL anime start-date notifications;
 - configurable MAL provider rate limiting.
 
 These additions are scoped to MAL anime franchise behavior. Existing Yamtrack features for other media types and providers remain upstream-compatible.
@@ -113,6 +114,22 @@ Existing user MAL anime
  -> cache warmup scheduling
 ```
 
+### MAL anime release-date notifications
+
+```text
+MAL metadata["details"]["start_date"]
+ -> opportunistic metadata refresh / franchise import / bounded scan
+ -> global AnimeReleaseDateScanState per MAL anime Item
+ -> per-user transition delivery
+ -> Apprise notification
+```
+
+This flow is deliberately independent from AniList `airingSchedule`, calendar
+events, and episode release notifications. The dedicated scan considers only
+actively tracked MAL anime with an eligible user, uses a recent MAL cache entry
+before making a provider request, and applies cooldown, deterministic batching,
+backoff, and jitter.
+
 ## UI projection
 
 The UI projection builds the anime detail-page franchise layout:
@@ -157,6 +174,8 @@ The cache projection stores a complete, user-agnostic payload for detail pages:
 
 - Celery task `Build MAL anime franchise payload` builds cache payloads.
 - Celery task `Import anime franchise` runs import automation.
+- Celery task `Scan MAL anime release dates` checks a bounded batch of due
+  start-date states.
 - Beat schedule entry `auto_import_anime_franchise` exists only when import automation is enabled.
 - `views.py` enriches cached payloads with current-user data at render time.
 - `media_details.html` renders prepared context and should not classify entries.
@@ -182,6 +201,13 @@ Documented settings currently present in `src/config/settings.py`. For setting b
 - `ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN`
 - `ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT`
 - `MAL_RATE_LIMIT_PER_MINUTE`
+- `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED`
+- `ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS`
+- `ANIME_RELEASE_DATE_SCAN_BATCH_SIZE`
+- `ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS`
+- `ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS`
+- `ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS`
+- `ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES`
 
 ## Related docs
 
@@ -189,6 +215,7 @@ Documented settings currently present in `src/config/settings.py`. For setting b
 - [Anime franchise grouping](anime-franchise-grouping.md)
 - [Anime franchise import](anime-franchise-import.md)
 - [Anime franchise cache](anime-franchise-cache.md)
+- [Anime release-date notifications](anime-release-date-notifications.md)
 
 ## Design rules
 

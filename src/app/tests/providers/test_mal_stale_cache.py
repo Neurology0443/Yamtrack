@@ -45,7 +45,11 @@ class MALAnimeStaleCacheTests(TestCase):
             "source": Sources.MAL.value,
             "media_type": MediaTypes.ANIME.value,
             "title": "Cached Anime",
-            "details": {"raw_media_type": "tv", "start_date": "2024-01-01"},
+            "details": {
+                "raw_media_type": "tv",
+                "start_date": "2024-01-01",
+                "status": "Finished",
+            },
             "related": {},
         }
 
@@ -227,7 +231,11 @@ class MALAnimeStaleCacheTests(TestCase):
             **self.payload,
             "title": "Cached Anime",
             "image": "http://example.com/anime.jpg",
-            "details": {"raw_media_type": "tv", "start_date": "2024-01-01"},
+            "details": {
+                "raw_media_type": "tv",
+                "start_date": "2024-01-01",
+                "status": "Finished",
+            },
             "related": {
                 "related_anime": [
                     {
@@ -247,6 +255,8 @@ class MALAnimeStaleCacheTests(TestCase):
         relations = mal.anime_relations(self.media_id)
 
         self.assertEqual(minimal["title"], "Cached Anime")
+        self.assertEqual(minimal["details"]["start_date"], "2024-01-01")
+        self.assertEqual(minimal["details"]["status"], "Finished")
         self.assertEqual(relations[0]["media_id"], "2")
         mock_api_request.assert_not_called()
         mock_schedule.assert_not_called()

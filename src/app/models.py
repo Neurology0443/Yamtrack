@@ -2005,3 +2005,73 @@ class BoardGame(Media):
     """Model for board games."""
 
     tracker = FieldTracker()
+
+
+class AnimeFranchiseDiscoveryState(models.Model):
+    """Per-user baseline state for MAL anime franchise discoveries."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    component_root_mal_id = models.CharField(max_length=36)
+    baseline_completed_at = models.DateTimeField(null=True, blank=True)
+    first_scanned_at = models.DateTimeField(null=True, blank=True)
+    last_scanned_at = models.DateTimeField(null=True, blank=True)
+    last_fingerprint = models.CharField(max_length=128, blank=True, default="")
+    last_seen_count = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    last_error_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "component_root_mal_id"],
+                name="app_anime_franchise_discovery_state_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "component_root_mal_id"],
+                name="app_af_disc_state_idx",
+            )
+        ]
+
+
+class AnimeFranchiseDiscoveredEntry(models.Model):
+    """A MAL anime entry discovered in a franchise tracked by a user."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    component_root_mal_id = models.CharField(max_length=36)
+    discovered_media_id = models.CharField(max_length=36)
+    title = models.TextField(blank=True, default="")
+    section_key = models.CharField(max_length=50, blank=True, default="")
+    section_label = models.CharField(max_length=100, blank=True, default="")
+    relation_type = models.CharField(max_length=50, blank=True, default="")
+    source_media_id = models.CharField(max_length=36, blank=True, default="")
+    anime_media_type = models.CharField(max_length=50, blank=True, default="")
+    root_title = models.TextField(blank=True, default="")
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    notification_queued_at = models.DateTimeField(null=True, blank=True)
+    notified_at = models.DateTimeField(null=True, blank=True)
+    notification_suppressed_reason = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "component_root_mal_id", "discovered_media_id"],
+                name="app_anime_franchise_discovery_unique",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "component_root_mal_id"],
+                name="app_af_disc_root_idx",
+            ),
+            models.Index(
+                fields=["user", "discovered_media_id"],
+                name="app_af_disc_media_idx",
+            ),
+        ]

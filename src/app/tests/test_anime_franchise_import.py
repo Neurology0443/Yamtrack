@@ -12,7 +12,9 @@ from app.services import anime_franchise_cache
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
+from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from events.models import AnimeReleaseDateScanState
 
 
 class AnimeFranchiseImportNotificationTests(TestCase):
@@ -31,6 +33,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         root_ids=None,
         selections=None,
         cache_warm_scheduler=None,
+        discovery_service=None,
     ):
         due_seeds = due_seeds or [
             SimpleNamespace(user_id=self.user.id, seed_mal_id="321")
@@ -59,12 +62,17 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         profile = Mock()
         profile.select.side_effect = selections
         profile.component_root_media_id.side_effect = root_ids
+        profile.detail_cache_warm_media_ids.return_value = set()
 
         return AnimeFranchiseImportService(
             snapshot_service=snapshot_service,
             state_service=state_service,
             cache_warm_scheduler=cache_warm_scheduler,
+            discovery_service=discovery_service,
         ), profile
+
+    def _assert_cache_warm_stats_invariant(self, stats):
+        self.assertEqual(stats.cache_warm_scheduled, len(stats.cache_warm_targets))
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")
@@ -83,6 +91,10 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         mock_anime_minimal.return_value = {
             "title": "Import Anime",
             "image": "http://example.com/image.jpg",
+            "details": {
+                "start_date": "2027-05",
+                "status": "Upcoming",
+            },
         }
 
         stats = service.run(
@@ -104,8 +116,27 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.created, 1)
         self.assertEqual(stats.created_ids, ["123"])
         self.assertEqual(stats.cache_warm_scheduled, 1)
+        self.assertEqual(
+            stats.cache_warm_targets,
+            [
+                {
+                    "media_id": "321",
+                    "kind": "root",
+                    "component_root_mal_id": "321",
+                }
+            ],
+        )
         self.assertEqual(stats.cache_warm_roots, ["321"])
         self.assertEqual(stats.cache_warm_errors, 0)
+        release_date_state = AnimeReleaseDateScanState.objects.get(
+            item=created_anime.item,
+        )
+        self.assertEqual(
+            release_date_state.last_seen_start_date_text,
+            "2027-05",
+        )
+        self.assertEqual(release_date_state.last_seen_mal_status, "Upcoming")
+        self._assert_cache_warm_stats_invariant(stats)
         cache_warm_scheduler.assert_called_once_with("321")
         mock_notify.assert_called_once_with(
             user_id=self.user.id,
@@ -156,6 +187,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.already_exists, 1)
         self.assertEqual(stats.created, 0)
         self.assertEqual(stats.cache_warm_scheduled, 0)
+        self.assertEqual(stats.cache_warm_targets, [])
         self.assertEqual(stats.cache_warm_roots, [])
         cache_warm_scheduler.assert_not_called()
         mock_notify.assert_not_called()
@@ -192,7 +224,358 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.created, 2)
         self.assertEqual(stats.cache_warm_scheduled, 1)
         self.assertEqual(stats.cache_warm_roots, ["321"])
+        self._assert_cache_warm_stats_invariant(stats)
         cache_warm_scheduler.assert_called_once_with("321")
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_satellite_creation_schedules_root_and_detail_cache_warms(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        service, profile = self._build_service(
+            {"123"}, cache_warm_scheduler=cache_warm_scheduler
+        )
+        profile.detail_cache_warm_media_ids.return_value = {"123"}
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.return_value = {
+            "title": "Satellite Anime",
+            "image": "http://example.com/123.jpg",
+        }
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(cache_warm_scheduler.call_args_list[0].args, ("321",))
+        self.assertEqual(cache_warm_scheduler.call_args_list[1].args, ("123",))
+        self.assertEqual(
+            stats.cache_warm_targets,
+            [
+                {"media_id": "321", "kind": "root", "component_root_mal_id": "321"},
+                {"media_id": "123", "kind": "detail", "component_root_mal_id": "321"},
+            ],
+        )
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self.assertEqual(stats.cache_warm_scheduled, 2)
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_continuity_profile_schedules_root_warm_only(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        service, profile = self._build_service(
+            {"123"}, cache_warm_scheduler=cache_warm_scheduler
+        )
+        profile.detail_cache_warm_media_ids.return_value = set()
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.return_value = {
+            "title": "Continuity Anime",
+            "image": "http://example.com/123.jpg",
+        }
+
+        stats = service.run(
+            profile_key="continuity",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        cache_warm_scheduler.assert_called_once_with("321")
+        self.assertEqual(
+            stats.cache_warm_targets,
+            [
+                {"media_id": "321", "kind": "root", "component_root_mal_id": "321"},
+            ],
+        )
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_complete_profile_schedules_detail_only_for_satellite_like_created_ids(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        service, profile = self._build_service(
+            {"123", "124"}, cache_warm_scheduler=cache_warm_scheduler
+        )
+        profile.detail_cache_warm_media_ids.side_effect = [set(), {"124"}]
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.side_effect = [
+            {"title": "Continuity Anime", "image": "http://example.com/123.jpg"},
+            {"title": "Satellite Anime", "image": "http://example.com/124.jpg"},
+        ]
+
+        stats = service.run(
+            profile_key="complete",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            [call.args for call in cache_warm_scheduler.call_args_list],
+            [("321",), ("124",)],
+        )
+        self.assertEqual(
+            stats.cache_warm_targets,
+            [
+                {"media_id": "321", "kind": "root", "component_root_mal_id": "321"},
+                {"media_id": "124", "kind": "detail", "component_root_mal_id": "321"},
+            ],
+        )
+        self.assertEqual(stats.cache_warm_roots, ["321"])
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_detail_cache_warm_dedup_skips_root_media_id(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        service, profile = self._build_service(
+            {"321"}, cache_warm_scheduler=cache_warm_scheduler
+        )
+        profile.detail_cache_warm_media_ids.return_value = {"321"}
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.return_value = {
+            "title": "Root Anime",
+            "image": "http://example.com/321.jpg",
+        }
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        cache_warm_scheduler.assert_called_once_with("321")
+        self.assertEqual(
+            stats.cache_warm_targets,
+            [
+                {"media_id": "321", "kind": "root", "component_root_mal_id": "321"},
+            ],
+        )
+        self.assertEqual(stats.cache_warm_scheduled, 1)
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_cache_warm_dedup_promotes_detail_target_to_root(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="100"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="500"),
+        ]
+        selections = [
+            SimpleNamespace(media_ids={"500"}, fingerprint_payload={"seed": "100"}),
+            SimpleNamespace(media_ids={"600"}, fingerprint_payload={"seed": "500"}),
+        ]
+        service, profile = self._build_service(
+            set(),
+            due_seeds=due_seeds,
+            root_ids=["100", "500"],
+            selections=selections,
+            cache_warm_scheduler=cache_warm_scheduler,
+        )
+        profile.detail_cache_warm_media_ids.side_effect = [{"500"}, set()]
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.side_effect = [
+            {"title": "Satellite 500", "image": "http://example.com/500.jpg"},
+            {"title": "Root Child 600", "image": "http://example.com/600.jpg"},
+        ]
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            [call.args for call in cache_warm_scheduler.call_args_list],
+            [("100",), ("500",)],
+        )
+        self.assertEqual(
+            [
+                target
+                for target in stats.cache_warm_targets
+                if target["media_id"] == "500"
+            ],
+            [
+                {
+                    "media_id": "500",
+                    "kind": "root",
+                    "component_root_mal_id": "500",
+                }
+            ],
+        )
+        self.assertIn("500", stats.cache_warm_roots)
+        self.assertEqual(stats.cache_warm_scheduled, 2)
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_cache_warm_dedup_keeps_root_when_detail_seen_later(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="500"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="700"),
+        ]
+        selections = [
+            SimpleNamespace(media_ids={"600"}, fingerprint_payload={"seed": "500"}),
+            SimpleNamespace(media_ids={"500"}, fingerprint_payload={"seed": "700"}),
+        ]
+        service, profile = self._build_service(
+            set(),
+            due_seeds=due_seeds,
+            root_ids=["500", "700"],
+            selections=selections,
+            cache_warm_scheduler=cache_warm_scheduler,
+        )
+        profile.detail_cache_warm_media_ids.side_effect = [set(), {"500"}]
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.side_effect = [
+            {"title": "Root Child 600", "image": "http://example.com/600.jpg"},
+            {"title": "Later Detail 500", "image": "http://example.com/500.jpg"},
+        ]
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            [call.args for call in cache_warm_scheduler.call_args_list],
+            [("500",), ("700",)],
+        )
+        self.assertEqual(
+            [
+                target
+                for target in stats.cache_warm_targets
+                if target["media_id"] == "500"
+            ],
+            [
+                {
+                    "media_id": "500",
+                    "kind": "root",
+                    "component_root_mal_id": "500",
+                }
+            ],
+        )
+        self.assertEqual(stats.cache_warm_roots.count("500"), 1)
+        self._assert_cache_warm_stats_invariant(stats)
+
+    @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_cache_warm_dedup_keeps_single_detail_target(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+        _mock_notify,
+    ):
+        cache_warm_scheduler = Mock()
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="100"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="200"),
+        ]
+        selections = [
+            SimpleNamespace(media_ids={"500"}, fingerprint_payload={"seed": "100"}),
+            SimpleNamespace(media_ids={"501"}, fingerprint_payload={"seed": "200"}),
+        ]
+        service, profile = self._build_service(
+            set(),
+            due_seeds=due_seeds,
+            root_ids=["100", "200"],
+            selections=selections,
+            cache_warm_scheduler=cache_warm_scheduler,
+        )
+        profile.detail_cache_warm_media_ids.side_effect = [{"900"}, {"900"}]
+        mock_get_profile.return_value = profile
+        mock_anime_minimal.side_effect = [
+            {"title": "Satellite 500", "image": "http://example.com/500.jpg"},
+            {"title": "Satellite 501", "image": "http://example.com/501.jpg"},
+        ]
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(
+            [call.args for call in cache_warm_scheduler.call_args_list],
+            [("100",), ("900",), ("200",)],
+        )
+        self.assertEqual(
+            [
+                target
+                for target in stats.cache_warm_targets
+                if target["media_id"] == "900"
+            ],
+            [
+                {
+                    "media_id": "900",
+                    "kind": "detail",
+                    "component_root_mal_id": "100",
+                }
+            ],
+        )
+        self.assertEqual(stats.cache_warm_scheduled, 3)
+        self._assert_cache_warm_stats_invariant(stats)
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")
@@ -317,7 +700,9 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.planned_creations, 1)
         self.assertEqual(stats.created, 0)
         self.assertEqual(stats.cache_warm_scheduled, 0)
+        self.assertEqual(stats.cache_warm_targets, [])
         self.assertEqual(stats.cache_warm_roots, [])
+        self._assert_cache_warm_stats_invariant(stats)
         self.assertFalse(
             Anime.objects.filter(user=self.user, item__media_id="123").exists()
         )
@@ -520,7 +905,249 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.created, 1)
         self.assertEqual(stats.cache_warm_errors, 1)
         self.assertEqual(stats.cache_warm_scheduled, 0)
+        self.assertEqual(stats.cache_warm_targets, [])
         self.assertEqual(stats.cache_warm_roots, [])
+        self._assert_cache_warm_stats_invariant(stats)
         self.assertTrue(
             Anime.objects.filter(user=self.user, item__media_id="123").exists()
         )
+
+
+class AnimeFranchiseImportDiscoveryHardeningTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="discovery-import-user"
+        )
+
+    def _build_service(self, *, discovery_service, media_ids=None):
+        if media_ids is None:
+            media_ids = {"123"}
+        due_seed = SimpleNamespace(user_id=self.user.id, seed_mal_id="321")
+        snapshot = SimpleNamespace(continuity_component=["component"])
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = ([due_seed], 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+
+        profile = Mock()
+        profile.select.return_value = SimpleNamespace(
+            media_ids=media_ids,
+            fingerprint_payload={"key": "value"},
+        )
+        profile.component_root_media_id.return_value = "321"
+        profile.detail_cache_warm_media_ids.return_value = set()
+
+        return (
+            AnimeFranchiseImportService(
+                snapshot_service=snapshot_service,
+                state_service=state_service,
+                cache_warm_scheduler=Mock(),
+                discovery_service=discovery_service,
+            ),
+            profile,
+            state_service,
+        )
+
+    @patch("app.services.anime_franchise_import.mal.anime_minimal")
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_dry_run_passes_planned_import_ids_to_discovery(
+        self,
+        mock_get_profile,
+        mock_anime_minimal,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = AnimeFranchiseDiscoveryStats(
+            processed_roots=1,
+            visible_candidates=1,
+            discoveries_seen=1,
+            notifications_suppressed=1,
+            suppressed_imported_in_same_run=1,
+        )
+        service, profile, _state_service = self._build_service(
+            discovery_service=discovery_service
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        mock_anime_minimal.assert_not_called()
+        self.assertFalse(Anime.objects.exists())
+        self.assertEqual(stats.planned_creations, 1)
+        discovery_service.process_snapshot.assert_called_once()
+        self.assertEqual(
+            discovery_service.process_snapshot.call_args.kwargs["imported_media_ids"],
+            {"123"},
+        )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_discovery_error_records_state_without_import_error(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = RuntimeError("boom")
+        service, profile, state_service = self._build_service(
+            discovery_service=discovery_service,
+            media_ids=set(),
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.errors, 0)
+        self.assertEqual(stats.discovery_errors, 1)
+        state_service.record_success.assert_called_once()
+        discovery_service.record_error.assert_called_once()
+        self.assertEqual(
+            discovery_service.record_error.call_args.kwargs["component_root_mal_id"],
+            "321",
+        )
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_discovery_record_error_failure_remains_best_effort(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = RuntimeError("process boom")
+        discovery_service.record_error.side_effect = RuntimeError("record boom")
+        service, profile, state_service = self._build_service(
+            discovery_service=discovery_service,
+            media_ids=set(),
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.discovery_errors, 1)
+        self.assertEqual(stats.errors, 0)
+        state_service.record_success.assert_called_once()
+        discovery_service.record_error.assert_called_once()
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_imported_media_ids_are_scoped_per_snapshot_root(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = AnimeFranchiseDiscoveryStats()
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="654"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            SimpleNamespace(continuity_component=["a"]),
+            SimpleNamespace(continuity_component=["b"]),
+        ]
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = (due_seeds, 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+        profile = Mock()
+        profile.component_root_media_id.side_effect = ["root-a", "root-b"]
+        profile.select.side_effect = [
+            SimpleNamespace(media_ids={"123"}, fingerprint_payload={}),
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+        ]
+        profile.detail_cache_warm_media_ids.return_value = set()
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="satellites",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        calls = discovery_service.process_snapshot.call_args_list
+        self.assertEqual(calls[0].kwargs["component_root_mal_id"], "root-a")
+        self.assertEqual(calls[0].kwargs["imported_media_ids"], {"123"})
+        self.assertEqual(calls[1].kwargs["component_root_mal_id"], "root-b")
+        self.assertEqual(calls[1].kwargs["imported_media_ids"], set())
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_baseline_created_in_run_forces_baseline_on_same_root_seed(
+        self,
+        mock_get_profile,
+    ):
+        discovery_service = Mock()
+        discovery_service.process_snapshot.side_effect = [
+            AnimeFranchiseDiscoveryStats(baseline_created=1),
+            AnimeFranchiseDiscoveryStats(),
+        ]
+        due_seeds = [
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="321"),
+            SimpleNamespace(user_id=self.user.id, seed_mal_id="654"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            SimpleNamespace(continuity_component=["a"]),
+            SimpleNamespace(continuity_component=["b"]),
+        ]
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = (due_seeds, 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+        profile = Mock()
+        profile.component_root_media_id.side_effect = ["root-a", "root-a"]
+        profile.select.side_effect = [
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+            SimpleNamespace(media_ids=set(), fingerprint_payload={}),
+        ]
+        profile.detail_cache_warm_media_ids.return_value = set()
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="satellites",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        calls = discovery_service.process_snapshot.call_args_list
+        self.assertFalse(calls[0].kwargs["force_baseline_suppression"])
+        self.assertTrue(calls[1].kwargs["force_baseline_suppression"])

@@ -304,6 +304,14 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
             current_instance.item, media_metadata.get("image")
         )
 
+    _initialize_anime_release_date_state_from_detail(
+        source=source,
+        media_type=media_type,
+        media_id=media_id,
+        current_instance=current_instance,
+        media_metadata=media_metadata,
+    )
+
     anime_franchise = None
     is_anime_franchise_enabled = (
         settings.ANIME_FRANCHISE_GROUPING_ENABLED
@@ -401,6 +409,47 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
         "anime_franchise": anime_franchise,
     }
     return render(request, "app/media_details.html", context)
+
+
+def _initialize_anime_release_date_state_from_detail(
+    *,
+    source,
+    media_type,
+    media_id,
+    current_instance,
+    media_metadata,
+) -> None:
+    """Initialize release-date state from metadata already loaded for a page."""
+    if source != Sources.MAL.value or media_type != MediaTypes.ANIME.value:
+        return
+
+    release_date_item = (
+        current_instance.item
+        if current_instance is not None
+        else Item.objects.filter(
+            media_id=str(media_id),
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+        ).first()
+    )
+    if release_date_item is None:
+        return
+
+    from events.services.anime_release_date_notifications import (  # noqa: PLC0415
+        AnimeReleaseDateNotificationService,
+    )
+
+    try:
+        AnimeReleaseDateNotificationService().initialize_from_detail_page_metadata(
+            item=release_date_item,
+            metadata=media_metadata,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to initialize anime release-date state from detail page "
+            "for media_id=%s",
+            media_id,
+        )
 
 
 @require_GET

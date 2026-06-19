@@ -1,3 +1,4 @@
+# ruff: noqa: D102,E501,I001,RUF001,S106
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -1160,6 +1161,7 @@ class EntryAddedNotificationTests(TestCase):
             username="entry-user",
             password="12345",
             notification_urls="https://example.com/notify1\nhttps://example.com/notify2",
+            entry_added_notifications_enabled=True,
         )
 
     @patch("events.notifications.send_user_notification")

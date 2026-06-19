@@ -60,6 +60,14 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   - Makes automatic additions easy to spot and review.
   - Helps you keep track of changes made to your library.
 
+### 📅 MAL anime release-date notifications
+
+- Optionally receive a notification when a tracked MAL anime start date is
+  announced, becomes more precise, or changes.
+- Supports MAL dates expressed as a year, a year and month, or a complete date.
+- Uses MAL metadata directly and remains separate from AniList episode-calendar
+  and release notifications.
+
 Detailed fork docs are available in `docs/`:
 
 - [Architecture overview](docs/architecture-overview.md)
@@ -69,6 +77,7 @@ Detailed fork docs are available in `docs/`:
 - [Anime franchise cache](docs/anime-franchise-cache.md)
 - [Anime franchise customization](docs/anime-franchise-customization.md)
 - [Anime franchise debugging runbook](docs/anime-franchise-debugging-runbook.md)
+- [Anime release-date notifications](docs/anime-release-date-notifications.md)
 - [Docker testing runbook](docs/docker-testing-runbook.md)
 - [Operational commands](docs/operational-commands.md)
 

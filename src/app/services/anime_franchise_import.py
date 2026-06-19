@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Literal, TypedDict
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
@@ -13,6 +14,7 @@ from app.providers import mal
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
+from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryService
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
@@ -22,6 +24,17 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
+
+
+CacheWarmKind = Literal["root", "detail"]
+
+
+class CacheWarmTarget(TypedDict):
+    """Registered cache warm target for an anime franchise import run."""
+
+    media_id: str
+    kind: CacheWarmKind
+    component_root_mal_id: str
 
 
 @dataclass
@@ -41,9 +54,11 @@ class FranchiseImportStats:
     skipped: int = 0
     errors: int = 0
     created_ids: list[str] = field(default_factory=list)
+    cache_warm_targets: list[CacheWarmTarget] = field(default_factory=list)
     cache_warm_roots: list[str] = field(default_factory=list)
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
+    discovery_errors: int = 0
 
 
 class AnimeFranchiseImportService:
@@ -55,6 +70,7 @@ class AnimeFranchiseImportService:
         snapshot_service: AnimeFranchiseSnapshotService | None = None,
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
+        discovery_service: AnimeFranchiseDiscoveryService | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -62,8 +78,9 @@ class AnimeFranchiseImportService:
         self.cache_warm_scheduler = (
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
+        self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
 
-    def run(  # noqa: C901, PLR0915
+    def run(  # noqa: C901, PLR0912, PLR0915
         self,
         *,
         profile_key: str,
@@ -89,41 +106,92 @@ class AnimeFranchiseImportService:
         stats.users_considered = len({seed.user_id for seed in due_seeds})
         stats.distinct_seeds = len({seed.seed_mal_id for seed in due_seeds})
 
-        scheduled_warm_roots: set[str] = set()
-        created_ids_by_root: dict[str, list[str]] = {}
+        users_by_id = get_user_model().objects.in_bulk(
+            {seed.user_id for seed in due_seeds}
+        )
 
-        def schedule_cache_warm_once(root_media_id: str) -> None:
-            if root_media_id in scheduled_warm_roots:
+        baseline_roots_created_this_run: set[tuple[int, str]] = set()
+        scheduled_warm_targets_by_media_id: dict[str, CacheWarmTarget] = {}
+
+        def schedule_cache_warm_once(
+            media_id: str,
+            *,
+            kind: CacheWarmKind,
+            component_root_mal_id: str,
+        ) -> None:
+            media_id = str(media_id)
+            component_root_mal_id = str(component_root_mal_id)
+
+            if kind not in {"root", "detail"}:
+                msg = f"Unsupported cache warm kind: {kind}"
+                raise ValueError(msg)
+
+            existing_target = scheduled_warm_targets_by_media_id.get(media_id)
+            if existing_target is not None:
+                if existing_target["kind"] == "detail" and kind == "root":
+                    existing_target["kind"] = "root"
+                    existing_target["component_root_mal_id"] = component_root_mal_id
+
+                    if media_id not in stats.cache_warm_roots:
+                        stats.cache_warm_roots.append(media_id)
+
+                    logger.info(
+                        "Anime franchise import promoted cache warm target to root "
+                        "for media_id=%s component_root_mal_id=%s",
+                        media_id,
+                        component_root_mal_id,
+                    )
                 return
 
-            created_ids = sorted(
-                set(created_ids_by_root.get(root_media_id, [])),
-                key=int,
-            )
             try:
-                self.cache_warm_scheduler(root_media_id)
+                # The existing warm scheduler is intentionally reused with non-root
+                # media IDs so the build task can decide whether to create an alias,
+                # a canonical local payload, or a scoped payload.
+                self.cache_warm_scheduler(media_id)
             except Exception:
                 stats.cache_warm_errors += 1
                 logger.exception(
-                    "Anime franchise import failed to register cache warm build "
-                    "for component_root_mal_id=%s created_ids=%s",
-                    root_media_id,
-                    created_ids,
+                    "Anime franchise import failed to register %s cache warm build "
+                    "for media_id=%s component_root_mal_id=%s",
+                    kind,
+                    media_id,
+                    component_root_mal_id,
                 )
                 return
 
-            scheduled_warm_roots.add(root_media_id)
-            stats.cache_warm_roots.append(root_media_id)
+            target: CacheWarmTarget = {
+                "media_id": media_id,
+                "kind": kind,
+                "component_root_mal_id": component_root_mal_id,
+            }
+            scheduled_warm_targets_by_media_id[media_id] = target
+            stats.cache_warm_targets.append(target)
             stats.cache_warm_scheduled += 1
+
+            if kind == "root":
+                stats.cache_warm_roots.append(media_id)
+
             logger.info(
-                "Anime franchise import registered cache warm build "
-                "for component_root_mal_id=%s created_ids=%s",
-                root_media_id,
-                created_ids,
+                "Anime franchise import registered %s cache warm build "
+                "for media_id=%s component_root_mal_id=%s",
+                kind,
+                media_id,
+                component_root_mal_id,
             )
 
         for due_seed in due_seeds:
             stats.scanned += 1
+            user = users_by_id.get(due_seed.user_id)
+            if user is None:
+                stats.skipped += 1
+                logger.warning(
+                    (
+                        "Skipping MAL anime franchise import because user %s "
+                        "does not exist"
+                    ),
+                    due_seed.user_id,
+                )
+                continue
             try:
                 snapshot = self.snapshot_service.build(
                     due_seed.seed_mal_id,
@@ -135,6 +203,7 @@ class AnimeFranchiseImportService:
                     profile_key,
                     selection.fingerprint_payload,
                 )
+                imported_media_ids_for_snapshot: set[str] = set()
                 for raw_media_id in sorted(selection.media_ids, key=int):
                     media_id = str(raw_media_id)
                     exists = Anime.objects.filter(
@@ -149,6 +218,9 @@ class AnimeFranchiseImportService:
 
                     stats.planned_creations += 1
                     if dry_run:
+                        # In dry-run, treat planned imports as imported for discovery
+                        # suppression so notification stats match a real run.
+                        imported_media_ids_for_snapshot.add(media_id)
                         continue
 
                     metadata = mal.anime_minimal(
@@ -160,13 +232,80 @@ class AnimeFranchiseImportService:
                         media_id=media_id,
                         title=metadata["title"],
                         image=metadata["image"],
+                        release_date_metadata=metadata,
                     )
                     stats.created += 1
                     stats.created_ids.append(media_id)
-                    created_ids_by_root.setdefault(component_root_mal_id, []).append(
-                        media_id
+                    imported_media_ids_for_snapshot.add(media_id)
+                    schedule_cache_warm_once(
+                        component_root_mal_id,
+                        kind="root",
+                        component_root_mal_id=component_root_mal_id,
                     )
-                    schedule_cache_warm_once(component_root_mal_id)
+
+                    detail_warm_ids = profile.detail_cache_warm_media_ids(
+                        snapshot,
+                        {media_id},
+                    )
+                    for raw_detail_media_id in sorted(detail_warm_ids, key=int):
+                        detail_media_id = str(raw_detail_media_id)
+                        if detail_media_id == component_root_mal_id:
+                            continue
+                        schedule_cache_warm_once(
+                            detail_media_id,
+                            kind="detail",
+                            component_root_mal_id=component_root_mal_id,
+                        )
+
+                root_key = (user.id, component_root_mal_id)
+                force_baseline_suppression = root_key in baseline_roots_created_this_run
+                try:
+                    discovery_stats = self.discovery_service.process_snapshot(
+                        user=user,
+                        snapshot=snapshot,
+                        component_root_mal_id=component_root_mal_id,
+                        profile_key=profile_key,
+                        imported_media_ids=imported_media_ids_for_snapshot,
+                        dry_run=dry_run,
+                        force_baseline_suppression=force_baseline_suppression,
+                    )
+                    if discovery_stats.baseline_created:
+                        baseline_roots_created_this_run.add(root_key)
+                    logger.info(
+                        "Processed MAL anime franchise discoveries",
+                        extra={
+                            "user_id": due_seed.user_id,
+                            "component_root_mal_id": component_root_mal_id,
+                            "seed_media_id": due_seed.seed_mal_id,
+                            "discovery_stats": asdict(discovery_stats),
+                        },
+                    )
+                except Exception as exc:
+                    stats.discovery_errors += 1
+                    logger.exception(
+                        "Failed to process MAL anime franchise discoveries",
+                        extra={
+                            "user_id": due_seed.user_id,
+                            "component_root_mal_id": component_root_mal_id,
+                            "seed_media_id": due_seed.seed_mal_id,
+                        },
+                    )
+                    if not dry_run:
+                        try:
+                            self.discovery_service.record_error(
+                                user=user,
+                                component_root_mal_id=component_root_mal_id,
+                                error=exc,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to record MAL anime franchise discovery error",
+                                extra={
+                                    "user_id": due_seed.user_id,
+                                    "component_root_mal_id": component_root_mal_id,
+                                    "seed_media_id": due_seed.seed_mal_id,
+                                },
+                            )
 
                 if dry_run:
                     continue
@@ -201,7 +340,13 @@ class AnimeFranchiseImportService:
 
     @transaction.atomic
     def _create_anime_entry(
-        self, *, user_id: int, media_id: str, title: str, image: str
+        self,
+        *,
+        user_id: int,
+        media_id: str,
+        title: str,
+        image: str,
+        release_date_metadata: dict | None = None,
     ) -> None:
         item, _ = Item.objects.get_or_create(
             media_id=str(media_id),
@@ -219,6 +364,21 @@ class AnimeFranchiseImportService:
         )
         anime._skip_hot_priority = True
         anime.save()
+        from events.services.anime_release_date_notifications import (  # noqa: PLC0415
+            AnimeReleaseDateNotificationService,
+        )
+
+        try:
+            release_date_service = AnimeReleaseDateNotificationService()
+            release_date_service.initialize_or_prioritize_imported_item(
+                item=item,
+                metadata=release_date_metadata or {},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to initialize anime release-date state for media_id=%s",
+                media_id,
+            )
         notify_entry_added_after_commit(
             user_id=user_id,
             media_label=str(anime),

@@ -88,6 +88,8 @@ class NotificationSettingsForm(forms.ModelForm):
             "daily_digest_enabled",
             "release_notifications_enabled",
             "entry_added_notifications_enabled",
+            "franchise_discovery_notifications_enabled",
+            "anime_release_date_notifications_enabled",
         ]
         widgets = {
             "notification_urls": forms.Textarea(
