@@ -11,30 +11,10 @@
                src="{{ IMG_NONE }}">
         </a>
 
-        <div class="absolute top-2 left-2 bg-gray-900/90 text-white text-xs px-2 py-1 rounded-md shadow-md">
-          {% if group.group_kind == "alternative_branch" %}
-            Alternative
-          {% elif group.group_kind == "spin_off_branch" %}
-            Spin-off
-          {% elif group.group_kind == "side_story_branch" %}
-            Side-story
-          {% elif group.group_kind == "singleton" %}
-            Single
-          {% else %}
-            Main continuity
-          {% endif %}
-        </div>
-
-        {% if group.best_score is not None %}
+        {% if group.user_score is not None %}
           <div class="absolute top-2 right-2 bg-gray-900/90 text-white text-xs px-2 py-1 rounded-md flex items-center shadow-md">
             {% include "app/icons/star.svg" with classes="w-4 h-4 text-yellow-400 mr-1 fill-current" %}
-            <span class="text-sm text-white">{{ group.best_score }}</span>
-          </div>
-        {% endif %}
-
-        {% if group.tracked_count > 1 %}
-          <div class="absolute bottom-2 left-2 bg-gray-900/90 text-white text-xs px-2 py-1 rounded-md shadow-md">
-            {{ group.tracked_count }} entries
+            <span class="text-sm text-white">{{ group.user_score }}</span>
           </div>
         {% endif %}
 
@@ -47,6 +27,10 @@
         <a href="{{ group.detail_item|media_url }}"
            class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
            title="{{ group.display_title }}">{{ group.display_title }}</a>
+        {% if group.subtitle %}
+          <p class="mt-1 text-xs text-gray-400 line-clamp-1"
+             title="{{ group.subtitle }}">{{ group.subtitle }}</p>
+        {% endif %}
       </div>
     </article>
   </div>

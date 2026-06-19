@@ -172,16 +172,21 @@ class MediaListViewTests(TestCase):
                 detail_item=item,
                 display_title=title,
                 display_image=item.image,
-                group_kind=kind,
-                tracked_count=2,
-                best_score=None,
+                subtitle=subtitle,
+                user_score=score,
             )
-            for kind, title in [
-                ("main_continuity", "Main Series"),
-                ("alternative_branch", "Alternative Series"),
-                ("spin_off_branch", "Spin-off Series"),
-                ("side_story_branch", "Side-story Series"),
-                ("singleton", "Single Series"),
+            for title, subtitle, score in [
+                ("Main Series", "", 8),
+                (
+                    "Alternative Series",
+                    "Alternative continuity · Parent Series",
+                    None,
+                ),
+                (
+                    "Spin-off Series",
+                    "Spin-off continuity · Parent Series",
+                    None,
+                ),
             ]
         ]
 
@@ -192,18 +197,14 @@ class MediaListViewTests(TestCase):
         content = response.content.decode()
 
         self.assertContains(response, 'class="anime-series-list media-grid"')
-        for label in (
-            "Main continuity",
-            "Alternative",
-            "Spin-off",
-            "Side-story",
-            "Single",
-        ):
-            self.assertContains(response, label)
+        self.assertContains(response, "Alternative continuity · Parent Series")
+        self.assertContains(response, "Spin-off continuity · Parent Series")
+        self.assertContains(response, ">8</span>")
         self.assertNotIn("Open series", content)
-        self.assertNotIn("Alternative branch", content)
-        self.assertNotIn("Spin-off branch", content)
-        self.assertNotIn("Side-story branch", content)
+        self.assertNotIn("Main continuity", content)
+        self.assertNotIn("Side-story", content)
+        self.assertNotIn("Single", content)
+        self.assertNotIn("entries", content)
 
     def test_series_layout_is_not_valid_for_non_anime_preferences(self):
         """Series remains invalid for every non-anime preference field."""

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -52,7 +52,6 @@ SEPARATE_RELATION_KINDS = {
     "alternative_setting": "alternative_branch",
     "spin_off": "spin_off_branch",
 }
-CONDITIONAL_BRANCH_RELATIONS = frozenset({"side_story"})
 PARENT_BY_DEFAULT_RELATIONS = frozenset(
     {
         "prequel",
@@ -62,9 +61,18 @@ PARENT_BY_DEFAULT_RELATIONS = frozenset(
         "special",
         "ova",
         "tv_special",
+        "side_story",
     },
 )
-MIN_FOLLOWED_BRANCH_ENTRIES = 2
+PARENT_TO_CHILD_RELATIONS = frozenset(
+    {
+        "side_story",
+        "special",
+        "ova",
+        "tv_special",
+        "summary",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -72,7 +80,6 @@ class BranchDecision:
     """Classifier result for one payload membership."""
 
     separate: bool
-    group_role: str
     group_kind: str
 
 
@@ -84,10 +91,6 @@ class AnimeSeriesBranchClassifier:
         *,
         section_key: str,
         relation_type: str,
-        has_followed_local_prequel_or_sequel: bool = False,
-        followed_local_branch_size: int = 1,
-        has_meaningful_local_branch_payload: bool = False,
-        is_tv_with_followed_prequel_or_sequel: bool = False,
         parent_known: bool = True,
     ) -> BranchDecision:
         """Return a deterministic display-group decision for one membership."""
@@ -99,65 +102,22 @@ class AnimeSeriesBranchClassifier:
             SEPARATE_RELATION_KINDS.get(relation_type),
         )
         if relation_type in SEPARATE_BY_DEFAULT_RELATIONS or branch_kind:
-            role = (
-                "alternative_version"
-                if branch_kind == "alternative_branch"
-                else "spin_off"
-            )
             decision = BranchDecision(
                 separate=True,
-                group_role=role,
                 group_kind=branch_kind,
-            )
-        elif relation_type in CONDITIONAL_BRANCH_RELATIONS:
-            separate = (
-                has_followed_local_prequel_or_sequel
-                or followed_local_branch_size >= MIN_FOLLOWED_BRANCH_ENTRIES
-                or has_meaningful_local_branch_payload
-                or is_tv_with_followed_prequel_or_sequel
-            )
-            decision = BranchDecision(
-                separate=separate,
-                group_role="side_story",
-                group_kind=(
-                    "side_story_branch" if separate else "main_continuity"
-                ),
-            )
-        elif section_key in {"series", "series_line"}:
-            decision = BranchDecision(
-                separate=False,
-                group_role="series",
-                group_kind="main_continuity",
-            )
-        elif section_key in {
-            "continuity_extras",
-            "main_story_extra",
-            "main_story_extras",
-        }:
-            decision = BranchDecision(
-                separate=False,
-                group_role="continuity_extra",
-                group_kind="main_continuity",
             )
         elif (
             section_key in PARENT_BY_DEFAULT_SECTION_KEYS
             or relation_type in PARENT_BY_DEFAULT_RELATIONS
+            or parent_known
         ):
             decision = BranchDecision(
                 separate=False,
-                group_role="special",
-                group_kind="main_continuity",
-            )
-        elif parent_known:
-            decision = BranchDecision(
-                separate=False,
-                group_role="unknown",
                 group_kind="main_continuity",
             )
         else:
             decision = BranchDecision(
                 separate=True,
-                group_role="singleton",
                 group_kind="singleton",
             )
         return decision
@@ -167,19 +127,13 @@ class AnimeSeriesBranchClassifier:
 class AnimeSeriesEntry:
     """One tracked anime shown inside a continuity group."""
 
-    media: Anime
     media_id: str
     title: str
-    image: str
-    status: str
     score: Decimal | None
     progress: int
     max_progress: int | None
     start_date: datetime | None
     end_date: datetime | None
-    section_key: str = ""
-    relation_type: str = ""
-    group_role: str = ""
 
     @property
     def progress_ratio(self) -> float:
@@ -196,16 +150,11 @@ class AnimeSeriesGroup:
     group_key: str
     display_title: str
     display_image: str
-    representative_media: Anime
     detail_item: Item
     entries: list[AnimeSeriesEntry]
-    tracked_count: int
-    statuses: dict[str, int]
-    sections: list[dict]
-    has_payload: bool
-    alias_hit: bool
-    truncated: bool
     group_kind: str
+    subtitle: str = ""
+    user_score: Decimal | None = None
     best_score: Decimal | None = None
     best_progress_ratio: float = 0
     earliest_start_date: datetime | None = None
@@ -218,19 +167,25 @@ class _PayloadMembership:
     section_key: str
     relation_type: str
     payload: dict
-    alias_hit: bool
-    truncated: bool
     entry_data: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class BranchContext:
+    """External relation that gives an Alternative or Spin-off UX context."""
+
+    kind: str
+    parent_title: str
 
 
 @dataclass(frozen=True)
 class _ResolvedEntry:
     media: Anime
     group_key: str
-    group_role: str
     group_kind: str
     membership: _PayloadMembership | None
     lookup: anime_franchise_cache.FranchisePayloadLookup
+    branch_context: BranchContext | None = None
 
 
 class AnimeSeriesListService:
@@ -272,14 +227,14 @@ class AnimeSeriesListService:
             )
             for anime in anime_list
         ]
+        resolved = self._collapse_group_keys(resolved)
 
         grouped: dict[str, list[_ResolvedEntry]] = defaultdict(list)
         for entry in resolved:
             grouped[entry.group_key].append(entry)
 
-        tracked_ids = set(media_ids)
         groups = [
-            self._build_group(group_key, entries, tracked_ids)
+            self._build_group(group_key, entries)
             for group_key, entries in grouped.items()
         ]
         return self._sort_groups(groups, sort_filter)
@@ -325,10 +280,6 @@ class AnimeSeriesListService:
             if payload_identity in seen_payloads:
                 continue
             seen_payloads.add(payload_identity)
-            truncated = bool(
-                payload.get("truncated") or lookup.meta.get("truncated")
-            )
-
             series = payload.get("series", {})
             series_key = str(series.get("key") or "series")
             for entry in series.get("entries", []):
@@ -338,8 +289,6 @@ class AnimeSeriesListService:
                     parent_key=parent_key,
                     section_key=series_key,
                     payload=payload,
-                    alias_hit=lookup.alias_hit,
-                    truncated=truncated,
                 )
             for section in payload.get("sections", []):
                 section_key = str(section.get("key") or "")
@@ -350,8 +299,6 @@ class AnimeSeriesListService:
                         parent_key=parent_key,
                         section_key=section_key,
                         payload=payload,
-                        alias_hit=lookup.alias_hit,
-                        truncated=truncated,
                     )
         return index
 
@@ -363,8 +310,6 @@ class AnimeSeriesListService:
         parent_key,
         section_key,
         payload,
-        alias_hit,
-        truncated,
     ) -> None:
         if not isinstance(entry, dict) or entry.get("media_id") in (None, ""):
             return
@@ -375,8 +320,6 @@ class AnimeSeriesListService:
                 section_key=section_key,
                 relation_type=str(entry.get("relation_type") or ""),
                 payload=payload,
-                alias_hit=alias_hit,
-                truncated=truncated,
                 entry_data=entry,
             ),
         )
@@ -391,75 +334,44 @@ class AnimeSeriesListService:
         tracked_media_ids,
     ) -> _ResolvedEntry:
         media_id = str(anime.item.media_id)
-        direct_local_payload = (
-            lookup.payload is not None
-            and not lookup.alias_hit
-            and str(
-                lookup.payload.get("canonical_root_media_id")
-                or lookup.payload.get("root_media_id")
-                or ""
-            )
-            == media_id
-        )
-        preferred_membership = self._preferred_membership(
+        branch_context = self._branch_context(
             memberships,
-            state_root=state_root,
             current_media_id=media_id,
+            tracked_media_ids=tracked_media_ids,
         )
-
-        if preferred_membership is not None:
-            has_followed_local_relation = self._has_followed_local_relation(
-                media_id=media_id,
-                parent_media_id=preferred_membership.parent_key,
-                lookup=lookup,
-                tracked_media_ids=tracked_media_ids,
-            )
-            followed_local_branch_size = self._followed_local_branch_size(
-                media_id=media_id,
-                parent_media_id=preferred_membership.parent_key,
-                lookup=lookup,
-                tracked_media_ids=tracked_media_ids,
-            )
-            has_meaningful_local_payload = (
-                followed_local_branch_size >= MIN_FOLLOWED_BRANCH_ENTRIES
-            )
-            anime_media_type = str(
-                preferred_membership.entry_data.get("anime_media_type") or ""
-            ).lower()
-            decision = self.classifier.classify(
-                section_key=preferred_membership.section_key,
-                relation_type=preferred_membership.relation_type,
-                has_followed_local_prequel_or_sequel=has_followed_local_relation,
-                followed_local_branch_size=followed_local_branch_size,
-                has_meaningful_local_branch_payload=has_meaningful_local_payload,
-                is_tv_with_followed_prequel_or_sequel=(
-                    anime_media_type == "tv" and has_followed_local_relation
-                ),
-            )
-            if not decision.separate:
-                return _ResolvedEntry(
-                    media=anime,
-                    group_key=preferred_membership.parent_key,
-                    group_role=decision.group_role,
-                    group_kind=decision.group_kind,
-                    membership=preferred_membership,
-                    lookup=lookup,
-                )
-            group_key = state_root or media_id
-            return _ResolvedEntry(
-                media=anime,
-                group_key=group_key,
-                group_role=decision.group_role,
-                group_kind=decision.group_kind,
-                membership=preferred_membership,
-                lookup=lookup,
-            )
-
-        if direct_local_payload:
+        if branch_context is not None:
             return _ResolvedEntry(
                 media=anime,
                 group_key=media_id,
-                group_role="series",
+                group_kind=branch_context.kind,
+                membership=None,
+                lookup=lookup,
+                branch_context=branch_context,
+            )
+
+        affiliation = self._affiliation_membership(
+            memberships,
+            state_root=state_root,
+            current_media_id=media_id,
+            tracked_media_ids=tracked_media_ids,
+        )
+        if affiliation is not None:
+            decision = self.classifier.classify(
+                section_key=affiliation.section_key,
+                relation_type=affiliation.relation_type,
+            )
+            return _ResolvedEntry(
+                media=anime,
+                group_key=affiliation.parent_key,
+                group_kind=decision.group_kind,
+                membership=affiliation,
+                lookup=lookup,
+            )
+
+        if self._is_direct_local_payload(lookup, media_id):
+            return _ResolvedEntry(
+                media=anime,
+                group_key=media_id,
                 group_kind="main_continuity",
                 membership=None,
                 lookup=lookup,
@@ -468,7 +380,6 @@ class AnimeSeriesListService:
             return _ResolvedEntry(
                 media=anime,
                 group_key=state_root,
-                group_role="series",
                 group_kind="main_continuity",
                 membership=None,
                 lookup=lookup,
@@ -476,150 +387,178 @@ class AnimeSeriesListService:
         return _ResolvedEntry(
             media=anime,
             group_key=media_id,
-            group_role="singleton",
             group_kind="singleton",
             membership=None,
             lookup=lookup,
         )
 
-    def _has_followed_local_relation(
+    def _branch_context(
         self,
+        memberships: list[_PayloadMembership],
         *,
-        media_id: str,
-        parent_media_id: str,
-        lookup: anime_franchise_cache.FranchisePayloadLookup,
+        current_media_id: str,
         tracked_media_ids: set[str],
-    ) -> bool:
-        payload = lookup.payload
-        if not isinstance(payload, dict):
-            return False
-        payload_root = str(
-            payload.get("canonical_root_media_id")
-            or payload.get("root_media_id")
-            or ""
-        )
-        if payload_root != media_id:
-            return False
+    ) -> BranchContext | None:
+        candidates = []
+        for membership in memberships:
+            if membership.parent_key == current_media_id:
+                continue
+            branch_kind = SEPARATE_SECTION_KINDS.get(
+                membership.section_key.lower(),
+                SEPARATE_RELATION_KINDS.get(membership.relation_type.lower()),
+            )
+            if branch_kind is None or self._local_payload_links_to(
+                memberships,
+                current_media_id=current_media_id,
+                target_media_id=membership.parent_key,
+                relation_types=SEPARATE_BY_DEFAULT_RELATIONS,
+                section_keys=frozenset(SEPARATE_SECTION_KINDS),
+            ):
+                continue
+            candidates.append((membership, branch_kind))
 
-        blocks = [payload.get("series", {}), *payload.get("sections", [])]
-        for block in blocks:
-            for entry in block.get("entries", []):
-                entry_media_id = str(entry.get("media_id") or "")
-                relation_type = str(entry.get("relation_type") or "").lower()
-                if (
-                    entry_media_id in tracked_media_ids
-                    and entry_media_id not in (media_id, parent_media_id)
-                    and relation_type in {"prequel", "sequel"}
-                ):
-                    return True
+        if not candidates:
+            return None
+
+        membership, branch_kind = min(
+            candidates,
+            key=lambda candidate: (
+                0 if candidate[0].parent_key in tracked_media_ids else 1,
+                candidate[0].parent_key,
+            ),
+        )
+        return BranchContext(
+            kind=branch_kind,
+            parent_title=self._payload_parent_title(membership),
+        )
+
+    def _local_payload_links_to(
+        self,
+        memberships: list[_PayloadMembership],
+        *,
+        current_media_id: str,
+        target_media_id: str,
+        relation_types: frozenset[str],
+        section_keys: frozenset[str] = frozenset(),
+    ) -> bool:
+        for membership in memberships:
+            if membership.parent_key != current_media_id:
+                continue
+            for block in [
+                membership.payload.get("series", {}),
+                *membership.payload.get("sections", []),
+            ]:
+                for entry in block.get("entries", []):
+                    if str(entry.get("media_id") or "") != target_media_id:
+                        continue
+                    relation_type = str(entry.get("relation_type") or "").lower()
+                    section_key = str(block.get("key") or "").lower()
+                    if relation_type in relation_types or section_key in section_keys:
+                        return True
         return False
 
-    def _followed_local_branch_size(
-        self,
-        *,
-        media_id: str,
-        parent_media_id: str,
-        lookup: anime_franchise_cache.FranchisePayloadLookup,
-        tracked_media_ids: set[str],
-    ) -> int:
-        """Count followed entries proven to belong to the local payload branch."""
-        payload = lookup.payload
-        if not isinstance(payload, dict) or lookup.alias_hit:
-            return 1
-
-        payload_root = str(
-            payload.get("canonical_root_media_id")
-            or payload.get("root_media_id")
-            or ""
-        )
-        if payload_root != media_id:
-            return 1
-
-        followed_branch_ids = {media_id}
-        series = payload.get("series", {})
-        for entry in series.get("entries", []):
-            entry_media_id = str(entry.get("media_id") or "")
-            if (
-                entry_media_id in tracked_media_ids
-                and entry_media_id != parent_media_id
-            ):
-                followed_branch_ids.add(entry_media_id)
-
-        for section in payload.get("sections", []):
-            for entry in section.get("entries", []):
-                entry_media_id = str(entry.get("media_id") or "")
-                relation_type = str(entry.get("relation_type") or "").lower()
-                if (
-                    entry_media_id not in tracked_media_ids
-                    or entry_media_id == parent_media_id
-                ):
-                    continue
-                if (
-                    relation_type in {"prequel", "sequel"}
-                    or relation_type not in SEPARATE_BY_DEFAULT_RELATIONS
-                ):
-                    followed_branch_ids.add(entry_media_id)
-
-        return len(followed_branch_ids)
-
-    def _preferred_membership(
+    def _affiliation_membership(
         self,
         memberships: list[_PayloadMembership],
         *,
         state_root: str,
         current_media_id: str,
+        tracked_media_ids: set[str],
     ) -> _PayloadMembership | None:
-        if not memberships:
+        candidates = []
+        for membership in memberships:
+            if (
+                membership.parent_key != current_media_id
+                and self._local_payload_links_to(
+                    memberships,
+                    current_media_id=current_media_id,
+                    target_media_id=membership.parent_key,
+                    relation_types=PARENT_TO_CHILD_RELATIONS,
+                )
+            ):
+                continue
+            decision = self.classifier.classify(
+                section_key=membership.section_key,
+                relation_type=membership.relation_type,
+            )
+            if decision.separate:
+                continue
+            candidates.append(membership)
+        if not candidates:
             return None
 
         def priority(membership):
             section_key = membership.section_key.lower()
-            relation_type = membership.relation_type.lower()
-            current_media_root = membership.parent_key == current_media_id
-            state_component_root = bool(
-                state_root and membership.parent_key == state_root
-            )
+            external_parent = membership.parent_key != current_media_id
             parent_section = section_key in PARENT_BY_DEFAULT_SECTION_KEYS
-            separate_section = (
-                section_key in SEPARATE_SECTION_KINDS
-                or relation_type in SEPARATE_RELATION_KINDS
-            )
             return (
-                0 if current_media_root else 1,
-                0 if state_component_root else 1,
-                0 if separate_section else 1,
+                0 if external_parent else 1,
+                0 if state_root and membership.parent_key == state_root else 1,
+                0 if membership.parent_key in tracked_media_ids else 1,
                 0 if parent_section else 1,
                 membership.parent_key,
             )
 
-        return min(memberships, key=priority)
+        return min(candidates, key=priority)
+
+    def _collapse_group_keys(
+        self,
+        resolved_entries: list[_ResolvedEntry],
+    ) -> list[_ResolvedEntry]:
+        by_media_id = {
+            str(entry.media.item.media_id): entry for entry in resolved_entries
+        }
+        collapsed = []
+        for entry in resolved_entries:
+            group_key = entry.group_key
+            seen = {str(entry.media.item.media_id)}
+            while group_key in by_media_id and group_key not in seen:
+                seen.add(group_key)
+                next_key = by_media_id[group_key].group_key
+                if next_key == group_key:
+                    break
+                group_key = next_key
+            collapsed.append(replace(entry, group_key=group_key))
+        return collapsed
+
+    def _is_direct_local_payload(self, lookup, media_id: str) -> bool:
+        payload = lookup.payload
+        return (
+            isinstance(payload, dict)
+            and not lookup.alias_hit
+            and str(
+                payload.get("canonical_root_media_id")
+                or payload.get("root_media_id")
+                or ""
+            )
+            == media_id
+        )
+
+    def _payload_parent_title(self, membership: _PayloadMembership) -> str:
+        payload = membership.payload
+        display_title = str(payload.get("display_title") or "").strip()
+        if display_title:
+            return display_title
+        for entry in payload.get("series", {}).get("entries", []):
+            if str(entry.get("media_id") or "") == membership.parent_key:
+                return str(entry.get("title") or "").strip()
+        return ""
 
     def _build_group(
         self,
         group_key: str,
         resolved_entries: list[_ResolvedEntry],
-        tracked_ids: set[str],
     ) -> AnimeSeriesGroup:
         representative = self._choose_representative(group_key, resolved_entries)
         entries = [
             AnimeSeriesEntry(
-                media=resolved.media,
                 media_id=str(resolved.media.item.media_id),
                 title=resolved.media.item.title,
-                image=resolved.media.item.image,
-                status=resolved.media.status,
                 score=resolved.media.score,
                 progress=resolved.media.progress,
                 max_progress=getattr(resolved.media, "max_progress", None),
                 start_date=resolved.media.start_date,
                 end_date=resolved.media.end_date,
-                section_key=(
-                    resolved.membership.section_key if resolved.membership else ""
-                ),
-                relation_type=(
-                    resolved.membership.relation_type if resolved.membership else ""
-                ),
-                group_role=resolved.group_role,
             )
             for resolved in resolved_entries
         ]
@@ -633,6 +572,14 @@ class AnimeSeriesListService:
         )
 
         payload = self._group_payload(group_key, resolved_entries)
+        branch_context = next(
+            (
+                entry.branch_context
+                for entry in resolved_entries
+                if entry.branch_context is not None
+            ),
+            None,
+        )
         scores = [entry.score for entry in entries if entry.score is not None]
         starts = [entry.start_date for entry in entries if entry.start_date is not None]
         ends = [entry.end_date for entry in entries if entry.end_date is not None]
@@ -642,27 +589,21 @@ class AnimeSeriesListService:
             if payload and str(payload.get("display_title") or "").strip()
             else representative_media.item.title
         )
-        kinds = Counter(entry.group_kind for entry in resolved_entries)
-        group_kind = kinds.most_common(1)[0][0]
+        group_kind = (
+            branch_context.kind
+            if branch_context is not None
+            else representative.group_kind
+        )
 
         return AnimeSeriesGroup(
             group_key=group_key,
             display_title=str(display_title),
             display_image=representative_media.item.image,
-            representative_media=representative_media,
             detail_item=representative_media.item,
             entries=entries,
-            tracked_count=len(entries),
-            statuses=dict(Counter(entry.status for entry in entries)),
-            sections=self._summarize_sections(payload, tracked_ids, entries),
-            has_payload=payload is not None,
-            alias_hit=any(entry.lookup.alias_hit for entry in resolved_entries),
-            truncated=any(
-                bool(entry.lookup.meta.get("truncated"))
-                or bool(entry.lookup.payload and entry.lookup.payload.get("truncated"))
-                for entry in resolved_entries
-            ),
             group_kind=group_kind,
+            subtitle=self._subtitle(branch_context),
+            user_score=representative_media.score,
             best_score=max(scores) if scores else None,
             best_progress_ratio=max(
                 (entry.progress_ratio for entry in entries),
@@ -671,6 +612,16 @@ class AnimeSeriesListService:
             earliest_start_date=min(starts) if starts else None,
             latest_end_date=max(ends) if ends else None,
         )
+
+    def _subtitle(self, context: BranchContext | None) -> str:
+        if context is None:
+            return ""
+        prefix = (
+            "Alternative continuity"
+            if context.kind == "alternative_branch"
+            else "Spin-off continuity"
+        )
+        return f"{prefix} · {context.parent_title}" if context.parent_title else prefix
 
     def _choose_representative(
         self,
@@ -721,40 +672,6 @@ class AnimeSeriesListService:
             if payload_root == group_key:
                 return payload
         return None
-
-    def _summarize_sections(
-        self,
-        payload: dict | None,
-        tracked_ids: set[str],
-        group_entries: list[AnimeSeriesEntry],
-    ) -> list[dict]:
-        if payload is None:
-            return []
-
-        group_ids = {entry.media_id for entry in group_entries}
-        summaries = []
-        blocks = [payload.get("series", {}), *payload.get("sections", [])]
-        for block in blocks:
-            entries = block.get("entries", [])
-            if not entries:
-                continue
-            section_ids = {
-                str(entry.get("media_id"))
-                for entry in entries
-                if entry.get("media_id") not in (None, "")
-            }
-            tracked_in_group = len(section_ids & group_ids)
-            tracked_branches = len((section_ids & tracked_ids) - group_ids)
-            summaries.append(
-                {
-                    "key": str(block.get("key") or ""),
-                    "title": str(block.get("title") or "Related"),
-                    "tracked_count": tracked_in_group,
-                    "tracked_branch_count": tracked_branches,
-                    "total_count": len(section_ids),
-                },
-            )
-        return summaries
 
     def _sort_groups(
         self,

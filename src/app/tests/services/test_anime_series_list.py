@@ -16,67 +16,49 @@ class AnimeSeriesBranchClassifierTests(SimpleTestCase):
     def setUp(self):
         self.classifier = AnimeSeriesBranchClassifier()
 
-    def assert_separate(self, relation_type, **signals):
-        decision = self.classifier.classify(
-            section_key="related_series",
-            relation_type=relation_type,
-            **signals,
-        )
-        self.assertTrue(decision.separate)
-
-    def assert_parent(self, relation_type, section_key="related_series"):
-        decision = self.classifier.classify(
-            section_key=section_key,
-            relation_type=relation_type,
-        )
-        self.assertFalse(decision.separate)
-
-    def test_alternative_version_is_separate(self):
-        self.assert_separate("alternative_version")
-
-    def test_alternative_setting_is_separate(self):
-        self.assert_separate("alternative_setting")
-
-    def test_spin_off_is_separate(self):
-        self.assert_separate("spin_off")
-
-    def test_isolated_side_story_stays_with_parent(self):
-        self.assert_parent("side_story")
-
-    def test_side_story_with_followed_sequel_is_separate(self):
-        self.assert_separate(
-            "side_story",
-            has_followed_local_prequel_or_sequel=True,
-        )
-
-    def test_side_story_with_followed_prequel_is_separate(self):
-        self.assert_separate(
-            "side_story",
-            has_followed_local_prequel_or_sequel=True,
-        )
-
-    def test_side_story_with_meaningful_local_payload_is_separate(self):
-        self.assert_separate(
-            "side_story",
-            has_meaningful_local_branch_payload=True,
-        )
-
-    def test_side_story_with_multiple_followed_local_entries_is_separate(self):
-        self.assert_separate(
-            "side_story",
-            followed_local_branch_size=2,
-        )
-
-    def test_parent_relations_and_sections_remain_with_parent(self):
-        for relation_type in ("prequel", "sequel", "full_story", "summary"):
+    def test_only_alternative_and_spin_off_relations_separate(self):
+        expected_kinds = {
+            "alternative_version": "alternative_branch",
+            "alternative_setting": "alternative_branch",
+            "spin_off": "spin_off_branch",
+        }
+        for relation_type, expected_kind in expected_kinds.items():
             with self.subTest(relation_type=relation_type):
-                self.assert_parent(relation_type)
-        for section_key in ("specials", "ova", "ovas", "tv_specials"):
-            with self.subTest(section_key=section_key):
-                self.assert_parent("", section_key=section_key)
+                decision = self.classifier.classify(
+                    section_key="related_series",
+                    relation_type=relation_type,
+                )
+                self.assertTrue(decision.separate)
+                self.assertEqual(decision.group_kind, expected_kind)
 
-    def test_unknown_relation_uses_conservative_parent_fallback(self):
-        self.assert_parent("unknown_relation")
+    def test_parent_affiliated_relations_never_separate(self):
+        for relation_type in (
+            "prequel",
+            "sequel",
+            "full_story",
+            "summary",
+            "special",
+            "ova",
+            "tv_special",
+            "side_story",
+        ):
+            with self.subTest(relation_type=relation_type):
+                decision = self.classifier.classify(
+                    section_key="related_series",
+                    relation_type=relation_type,
+                )
+                self.assertFalse(decision.separate)
+                self.assertEqual(decision.group_kind, "main_continuity")
+
+    def test_unknown_without_parent_uses_singleton_fallback(self):
+        decision = self.classifier.classify(
+            section_key="unknown",
+            relation_type="unknown",
+            parent_known=False,
+        )
+
+        self.assertTrue(decision.separate)
+        self.assertEqual(decision.group_kind, "singleton")
 
 
 class AnimeSeriesListServiceTests(SimpleTestCase):
@@ -84,7 +66,7 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         self.service = AnimeSeriesListService()
         self.user = SimpleNamespace(id=1)
 
-    def anime(self, media_id, title):
+    def anime(self, media_id, title, *, score=None):
         return SimpleNamespace(
             item=SimpleNamespace(
                 media_id=str(media_id),
@@ -92,7 +74,7 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                 image=f"https://example.com/{media_id}.jpg",
             ),
             status="Planning",
-            score=None,
+            score=score,
             progress=0,
             max_progress=None,
             start_date=None,
@@ -135,40 +117,236 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
             "relation_type": relation_type,
         }
 
-    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_sao_branches_are_grouped_deterministically(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        sao = self.anime("1", "Sword Art Online")
-        progressive_1 = self.anime("2", "Sword Art Online Progressive")
-        progressive_2 = self.anime("3", "Sword Art Online Progressive 2")
-        gun_gale = self.anime("4", "Sword Art Online Alternative: Gun Gale Online")
+    def build_groups(self, anime_list, lookups, *, state_roots=None, sort="title"):
+        with (
+            patch.object(
+                AnimeSeriesListService,
+                "_load_state_roots",
+                return_value=state_roots or {},
+            ),
+            patch(
+                "app.services.anime_series_list."
+                "anime_franchise_cache.load_payload_for_media",
+                side_effect=lambda media_id, **_kwargs: lookups[str(media_id)],
+            ),
+        ):
+            return self.service.build_groups(
+                target_user=self.user,
+                anime_queryset=anime_list,
+                sort_filter=sort,
+            )
+
+    def test_singleton_has_no_subtitle(self):
+        anime = self.anime("1", "Standalone")
+
+        groups = self.build_groups([anime], {"1": self.lookup("1")})
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_kind, "singleton")
+        self.assertEqual(groups[0].subtitle, "")
+
+    def test_isolated_side_story_stays_in_parent(self):
+        parent = self.anime("10", "Parent")
+        side_story = self.anime("11", "OVA")
         parent_payload = self.payload(
-            "1",
+            "10",
+            "Parent",
+            series=[self.entry("10", "Parent", anime_media_type="tv")],
+            sections=[
+                {
+                    "key": "specials",
+                    "title": "Specials",
+                    "entries": [self.entry("11", "OVA", "side_story")],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, side_story],
+            {
+                "10": self.lookup("10", parent_payload),
+                "11": self.lookup("11"),
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "10")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"10", "11"},
+        )
+
+    def test_side_story_local_continuity_collapses_into_parent(self):
+        parent = self.anime("20", "Overlord")
+        chibi_1 = self.anime("21", "Ple Ple Pleiades")
+        chibi_2 = self.anime("22", "Ple Ple Pleiades 2")
+        parent_payload = self.payload(
+            "20",
+            "Overlord",
+            series=[self.entry("20", "Overlord", anime_media_type="tv")],
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry("21", "Ple Ple Pleiades", "side_story"),
+                    ],
+                },
+            ],
+        )
+        chibi_payload = self.payload(
+            "21",
+            "Ple Ple Pleiades",
+            series=[self.entry("21", "Ple Ple Pleiades")],
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry("22", "Ple Ple Pleiades 2", "sequel"),
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, chibi_1, chibi_2],
+            {
+                "20": self.lookup("20", parent_payload),
+                "21": self.lookup("21", chibi_payload),
+                "22": self.lookup("22"),
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "20")
+        self.assertEqual(groups[0].group_kind, "main_continuity")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"20", "21", "22"},
+        )
+
+    def test_side_story_navigation_payload_does_not_create_affiliation_loop(self):
+        parent = self.anime("25", "Parent")
+        side_story = self.anime("26", "Side Story")
+        parent_payload = self.payload(
+            "25",
+            "Parent",
+            series=[self.entry("25", "Parent")],
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry("26", "Side Story", "side_story"),
+                    ],
+                },
+            ],
+        )
+        navigation_payload = self.payload(
+            "26",
+            "Side Story",
+            series=[self.entry("26", "Side Story")],
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry("25", "Parent", "full_story"),
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, side_story],
+            {
+                "25": self.lookup("25", parent_payload),
+                "26": self.lookup("26", navigation_payload),
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "25")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            {"25", "26"},
+        )
+
+    def test_alternative_local_continuity_keeps_parent_context(self):
+        parent = self.anime("30", "Sword Art Online")
+        alternative_1 = self.anime("31", "SAO Progressive")
+        alternative_2 = self.anime("32", "SAO Progressive 2")
+        parent_payload = self.payload(
+            "30",
             "Sword Art Online",
-            series=[self.entry("1", "Sword Art Online", anime_media_type="tv")],
+            series=[self.entry("30", "Sword Art Online", anime_media_type="tv")],
             sections=[
                 {
                     "key": "alternatives",
                     "title": "Alternatives",
                     "entries": [
                         self.entry(
-                            "2",
-                            "Sword Art Online Progressive",
+                            "31",
+                            "SAO Progressive",
                             "alternative_version",
                         ),
                     ],
                 },
+            ],
+        )
+        alternative_payload = self.payload(
+            "31",
+            "SAO Progressive",
+            series=[self.entry("31", "SAO Progressive")],
+            sections=[
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "entries": [
+                        self.entry("32", "SAO Progressive 2", "sequel"),
+                    ],
+                },
+            ],
+        )
+
+        groups = self.build_groups(
+            [parent, alternative_1, alternative_2],
+            {
+                "30": self.lookup("30", parent_payload),
+                "31": self.lookup("31", alternative_payload),
+                "32": self.lookup("32"),
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            {entry.media_id for entry in groups_by_key["31"].entries},
+            {"31", "32"},
+        )
+        self.assertEqual(groups_by_key["31"].group_kind, "alternative_branch")
+        self.assertEqual(
+            groups_by_key["31"].subtitle,
+            "Alternative continuity · Sword Art Online",
+        )
+        self.assertEqual(groups_by_key["30"].subtitle, "")
+
+    def test_spin_off_local_continuity_keeps_parent_context(self):
+        parent = self.anime("40", "A Certain Magical Index")
+        spin_off_1 = self.anime("41", "A Certain Scientific Railgun")
+        spin_off_2 = self.anime("42", "A Certain Scientific Railgun S")
+        parent_payload = self.payload(
+            "40",
+            "A Certain Magical Index",
+            series=[self.entry("40", "A Certain Magical Index")],
+            sections=[
                 {
                     "key": "spin_offs",
                     "title": "Spin Offs",
                     "entries": [
                         self.entry(
-                            "4",
-                            "Sword Art Online Alternative: Gun Gale Online",
+                            "41",
+                            "A Certain Scientific Railgun",
                             "spin_off",
                             anime_media_type="tv",
                         ),
@@ -176,339 +354,105 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
                 },
             ],
         )
-        progressive_payload = self.payload(
-            "2",
-            "Sword Art Online Progressive",
-            sections=[
-                {
-                    "key": "related_series",
-                    "title": "Related Series",
-                    "entries": [
-                        self.entry(
-                            "3",
-                            "Sword Art Online Progressive 2",
-                            "sequel",
-                        ),
-                    ],
-                },
-            ],
-        )
-        lookups = {
-            "1": self.lookup("1", parent_payload),
-            "2": self.lookup("2", progressive_payload),
-            "3": self.lookup("3"),
-            "4": self.lookup("4"),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[sao, progressive_1, progressive_2, gun_gale],
-            sort_filter="title",
-        )
-
-        self.assertEqual([group.group_key for group in groups], ["1", "4", "2"])
-        entries_by_group = {
-            group.group_key: {entry.media_id for entry in group.entries}
-            for group in groups
-        }
-        self.assertEqual(entries_by_group["1"], {"1"})
-        self.assertEqual(entries_by_group["2"], {"2", "3"})
-        self.assertEqual(entries_by_group["4"], {"4"})
-        self.assertTrue(
-            all(call.kwargs == {"touch": False} for call in load_payload.mock_calls)
-        )
-
-    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_isolated_side_story_stays_in_parent(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        parent = self.anime("10", "Re:Zero")
-        side_story = self.anime("11", "Memory Snow")
-        payload = self.payload(
-            "10",
-            "Re:Zero",
-            series=[self.entry("10", "Re:Zero", anime_media_type="tv")],
-            sections=[
-                {
-                    "key": "specials",
-                    "title": "Specials",
-                    "entries": [
-                        self.entry("11", "Memory Snow", "side_story"),
-                    ],
-                },
-            ],
-        )
-        lookups = {
-            "10": self.lookup("10", payload),
-            "11": self.lookup("11"),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[parent, side_story],
-            sort_filter="title",
-        )
-
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(
-            {entry.media_id for entry in groups[0].entries},
-            {"10", "11"},
-        )
-
-    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_side_story_with_direct_followed_sequel_is_separate(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        parent = self.anime("20", "Parent")
-        side_story = self.anime("21", "Side Story")
-        sequel = self.anime("22", "Side Story 2")
-        parent_payload = self.payload(
-            "20",
-            "Parent",
-            series=[self.entry("20", "Parent", anime_media_type="tv")],
-            sections=[
-                {
-                    "key": "related_series",
-                    "title": "Related Series",
-                    "entries": [
-                        self.entry(
-                            "21",
-                            "Side Story",
-                            "side_story",
-                            anime_media_type="tv",
-                        ),
-                    ],
-                },
-            ],
-        )
-        branch_payload = self.payload(
-            "21",
-            "Side Story",
-            sections=[
-                {
-                    "key": "related_series",
-                    "title": "Related Series",
-                    "entries": [
-                        self.entry("22", "Side Story 2", "sequel"),
-                    ],
-                },
-            ],
-        )
-        lookups = {
-            "20": self.lookup("20", parent_payload),
-            "21": self.lookup("21", branch_payload),
-            "22": self.lookup("22"),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[parent, side_story, sequel],
-            sort_filter="title",
-        )
-
-        entries_by_group = {
-            group.group_key: {entry.media_id for entry in group.entries}
-            for group in groups
-        }
-        self.assertEqual(entries_by_group["20"], {"20"})
-        self.assertEqual(entries_by_group["21"], {"21", "22"})
-
-    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_side_story_with_navigation_payload_stays_in_parent(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        parent = self.anime("30", "Parent Series")
-        side_story = self.anime("31", "Isolated OVA")
-        parent_payload = self.payload(
-            "30",
-            "Parent Series",
-            series=[self.entry("30", "Parent Series", anime_media_type="tv")],
-            sections=[
-                {
-                    "key": "specials",
-                    "title": "Specials",
-                    "entries": [
-                        self.entry("31", "Isolated OVA", "side_story"),
-                    ],
-                },
-            ],
-        )
-        navigation_payload = self.payload(
-            "31",
-            "Isolated OVA",
-            sections=[
-                {
-                    "key": "related_series",
-                    "title": "Related Series",
-                    "entries": [
-                        self.entry(
-                            "30",
-                            "Parent Series",
-                            "full_story",
-                            anime_media_type="tv",
-                        ),
-                    ],
-                },
-            ],
-        )
-        lookups = {
-            "30": self.lookup("30", parent_payload),
-            "31": self.lookup("31", navigation_payload),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[parent, side_story],
-            sort_filter="title",
-        )
-
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0].group_key, "30")
-        self.assertEqual(
-            {entry.media_id for entry in groups[0].entries},
-            {"30", "31"},
-        )
-
-    @patch.object(AnimeSeriesListService, "_load_state_roots", return_value={})
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_alternative_return_link_does_not_reclassify_parent(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        parent = self.anime("40", "Sword Art Online")
-        progressive = self.anime("41", "Sword Art Online Progressive")
-        parent_payload = self.payload(
-            "40",
-            "Sword Art Online",
-            series=[self.entry("40", "Sword Art Online", anime_media_type="tv")],
-            sections=[
-                {
-                    "key": "alternatives",
-                    "title": "Alternative Versions",
-                    "entries": [
-                        self.entry(
-                            "41",
-                            "Sword Art Online Progressive",
-                            "alternative_version",
-                        ),
-                    ],
-                },
-            ],
-        )
-        progressive_payload = self.payload(
+        spin_off_payload = self.payload(
             "41",
-            "Sword Art Online Progressive",
+            "A Certain Scientific Railgun",
+            series=[self.entry("41", "A Certain Scientific Railgun")],
             sections=[
                 {
-                    "key": "alternatives",
-                    "title": "Alternative Versions",
+                    "key": "related_series",
+                    "title": "Related Series",
                     "entries": [
-                        self.entry(
-                            "40",
-                            "Sword Art Online",
-                            "alternative_version",
-                            anime_media_type="tv",
-                        ),
+                        self.entry("42", "A Certain Scientific Railgun S", "sequel"),
                     ],
                 },
             ],
         )
-        lookups = {
-            "40": self.lookup("40", parent_payload),
-            "41": self.lookup("41", progressive_payload),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
 
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[parent, progressive],
-            sort_filter="title",
+        groups = self.build_groups(
+            [parent, spin_off_1, spin_off_2],
+            {
+                "40": self.lookup("40", parent_payload),
+                "41": self.lookup("41", spin_off_payload),
+                "42": self.lookup("42"),
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(
+            {entry.media_id for entry in groups_by_key["41"].entries},
+            {"41", "42"},
+        )
+        self.assertEqual(groups_by_key["41"].group_kind, "spin_off_branch")
+        self.assertEqual(
+            groups_by_key["41"].subtitle,
+            "Spin-off continuity · A Certain Magical Index",
         )
 
-        groups_by_key = {group.group_key: group for group in groups}
-        self.assertEqual(groups_by_key["40"].group_kind, "main_continuity")
-        self.assertEqual(groups_by_key["41"].group_kind, "alternative_branch")
-
-    @patch.object(
-        AnimeSeriesListService,
-        "_load_state_roots",
-        return_value={"50": "50", "51": "50"},
-    )
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_shared_import_component_does_not_separate_isolated_side_story(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        parent = self.anime("50", "Parent Series")
-        side_story = self.anime("51", "Isolated OVA")
+    def test_return_relation_does_not_reclassify_parent(self):
+        parent = self.anime("50", "Main adaptation")
+        alternative = self.anime("51", "Alternative adaptation")
         parent_payload = self.payload(
             "50",
-            "Parent Series",
-            series=[self.entry("50", "Parent Series", anime_media_type="tv")],
+            "Main adaptation",
+            series=[self.entry("50", "Main adaptation")],
             sections=[
                 {
-                    "key": "specials",
-                    "title": "Specials",
+                    "key": "alternatives",
+                    "title": "Alternatives",
                     "entries": [
-                        self.entry("51", "Isolated OVA", "side_story"),
+                        self.entry(
+                            "51",
+                            "Alternative adaptation",
+                            "alternative_version",
+                        ),
                     ],
                 },
             ],
         )
-        lookups = {
-            "50": self.lookup("50", parent_payload),
-            "51": self.lookup("51"),
-        }
-        load_payload.side_effect = lambda media_id, **_kwargs: lookups[str(media_id)]
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[parent, side_story],
-            sort_filter="title",
+        alternative_payload = self.payload(
+            "51",
+            "Alternative adaptation",
+            series=[self.entry("51", "Alternative adaptation")],
+            sections=[
+                {
+                    "key": "alternatives",
+                    "title": "Alternatives",
+                    "entries": [
+                        self.entry("50", "Main adaptation", "alternative_version"),
+                    ],
+                },
+            ],
         )
 
-        self.assertEqual(len(groups), 1)
-        self.assertEqual(groups[0].group_key, "50")
-        self.assertEqual(
-            {entry.media_id for entry in groups[0].entries},
-            {"50", "51"},
+        groups = self.build_groups(
+            [parent, alternative],
+            {
+                "50": self.lookup("50", parent_payload),
+                "51": self.lookup("51", alternative_payload),
+            },
+        )
+        groups_by_key = {group.group_key: group for group in groups}
+
+        self.assertEqual(groups_by_key["50"].group_kind, "main_continuity")
+        self.assertEqual(groups_by_key["50"].subtitle, "")
+
+    def test_state_root_remains_cache_cold_group_key_fallback(self):
+        anime = self.anime("60", "Cache-cold sequel")
+
+        groups = self.build_groups(
+            [anime],
+            {"60": self.lookup("60")},
+            state_roots={"60": "59"},
         )
 
-    @patch.object(
-        AnimeSeriesListService,
-        "_load_state_roots",
-        return_value={"60": "59"},
-    )
-    @patch("app.services.anime_series_list.anime_franchise_cache.load_payload_for_media")
-    def test_state_root_remains_group_key_fallback_without_payload(
-        self,
-        load_payload,
-        _load_state_roots,
-    ):
-        orphan = self.anime("60", "Cache-cold sequel")
-        load_payload.return_value = self.lookup("60")
-
-        groups = self.service.build_groups(
-            target_user=self.user,
-            anime_queryset=[orphan],
-            sort_filter="title",
-        )
-
-        self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0].group_key, "59")
-        self.assertEqual(groups[0].group_kind, "main_continuity")
+        self.assertEqual(groups[0].subtitle, "")
+
+    def test_card_score_comes_from_representative_user_score(self):
+        anime = self.anime("70", "Scored anime", score=4)
+
+        groups = self.build_groups([anime], {"70": self.lookup("70")})
+
+        self.assertEqual(groups[0].user_score, 4)
+        self.assertEqual(groups[0].best_score, 4)
