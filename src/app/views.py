@@ -274,7 +274,7 @@ def _paginate_media_list(
         user_id=target_user.id,
     )
     media_page = Paginator(anime_series_groups, items_per_page).get_page(page)
-    hydrate_anime_series_groups(
+    media_page.object_list = hydrate_anime_series_groups(
         groups=media_page.object_list,
         media_queryset=media_queryset,
     )

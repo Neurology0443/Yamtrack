@@ -165,7 +165,7 @@
       </div>
     {% elif current_layout == "grid" %}
       <div class="media-grid">{% include "app/components/media_grid_items.html" %}</div>
-    {% elif current_layout == "series" %}
+    {% elif current_layout == "series" and media_type == MediaTypes.ANIME.value %}
       <div class="anime-series-groups space-y-6">
         {% include "app/components/anime_series_groups.html" %}
       </div>

@@ -6,20 +6,10 @@
     <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
       <div>
         <h2 class="text-xl font-semibold text-white">{{ group.title }}</h2>
-        {% if group.context_relation_label %}
-          <p class="text-sm text-gray-400 mt-1">
-            {{ group.context_relation_label }}
-            {% if group.context_parent_title %}
-              · {{ group.context_parent_title }}
-            {% elif group.context_parent_media_id %}
-              · MAL {{ group.context_parent_media_id }}
-            {% endif %}
-          </p>
+        {% if group.context_label %}
+          <p class="text-sm text-gray-400 mt-1">{{ group.context_label }}</p>
         {% endif %}
       </div>
-      {% if group.member_media_ids|length > 1 %}
-        <span class="text-xs text-gray-400">{{ group.member_media_ids|length }} entries</span>
-      {% endif %}
     </div>
 
     <div class="anime-series-card max-w-52">

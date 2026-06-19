@@ -201,8 +201,10 @@ class MediaListViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Alternative Version")
-        self.assertContains(response, parent.item.title)
+        self.assertContains(
+            response,
+            f"Version alternative de {parent.item.title}",
+        )
         self.assertContains(response, branch.item.title)
         mock_load_payload.assert_not_called()
         mock_get_metadata.assert_not_called()
@@ -316,7 +318,37 @@ class MediaListViewTests(TestCase):
             [group.title for group in groups],
             [main.item.title, spin_off.item.title],
         )
+        self.assertEqual(groups[1].context_label, "Spin-off de KonoSuba")
         self.assertContains(response, 'class="anime-series-card', count=2)
+
+    @patch("app.views.hydrate_anime_series_groups", return_value=[])
+    def test_anime_series_layout_ignores_empty_hydrated_group(
+        self,
+        _mock_hydrate,
+    ):
+        """A concurrently stale group is omitted instead of causing a 500."""
+        self._create_anime("10", "Stale anime")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="10",
+            root_media_id="10",
+            group_kind="singleton",
+            component_size=1,
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+            resolver_version="v1",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["anime_series_groups"].object_list,
+            [],
+        )
+        self.assertNotContains(response, 'class="anime-series-card')
 
     def test_anime_series_layout_second_page_contains_next_group(self):
         """Series pagination advances one page of groups at a time."""

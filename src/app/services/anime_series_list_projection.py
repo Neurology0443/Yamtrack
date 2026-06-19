@@ -22,7 +22,7 @@ class AnimeSeriesListGroup:
     context_parent_media_id: str = ""
     context_parent_title: str = ""
     context_relation_type: str = ""
-    context_relation_label: str = ""
+    context_label: str = ""
 
     @property
     def title(self) -> str:
@@ -97,9 +97,6 @@ def project_anime_series_groups(
                     membership.context_parent_media_id or ""
                 ),
                 context_relation_type=membership.context_relation_type or "",
-                context_relation_label=_relation_label(
-                    membership.context_relation_type
-                ),
             )
 
         resolved_group = groups_by_key.setdefault(group_key, group)
@@ -127,11 +124,20 @@ def project_anime_series_groups(
             group.context_parent_media_id,
             "",
         )
+        group.context_label = _context_label(
+            group.context_relation_type,
+            group.context_parent_title,
+            group.context_parent_media_id,
+        )
     return groups
 
 
-def hydrate_anime_series_groups(*, groups, media_queryset) -> None:
-    """Load only media objects belonging to the current page of groups."""
+def hydrate_anime_series_groups(
+    *,
+    groups,
+    media_queryset,
+) -> list[AnimeSeriesListGroup]:
+    """Load current-page media objects and omit groups that became empty."""
     page_media_ids = [
         media_id
         for group in groups
@@ -149,9 +155,24 @@ def hydrate_anime_series_groups(*, groups, media_queryset) -> None:
             for media_id in group.member_media_ids
             if media_id in entries_by_media_id
         ]
+    return [group for group in groups if group.entries]
 
 
-def _relation_label(relation_type: str | None) -> str:
-    if not relation_type:
+def _context_label(
+    relation_type: str,
+    parent_title: str,
+    parent_media_id: str,
+) -> str:
+    if not relation_type or not (parent_title or parent_media_id):
         return ""
-    return str(relation_type).replace("_", " ").title()
+
+    parent = parent_title or f"MAL {parent_media_id}"
+    templates = {
+        "spin_off": "Spin-off de {parent}",
+        "alternative_version": "Version alternative de {parent}",
+        "alternative_setting": "Univers alternatif de {parent}",
+    }
+    template = templates.get(relation_type)
+    if template is None:
+        return ""
+    return template.format(parent=parent)
