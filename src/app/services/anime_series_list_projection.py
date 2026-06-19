@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.models import AnimeLocalSeriesMembership, Item, MediaTypes, Sources
+from app.services.anime_local_series_constants import (
+    LOCAL_SERIES_VIEW_PROFILE_KEY,
+)
 
 
 @dataclass
@@ -13,7 +16,9 @@ class AnimeSeriesListGroup:
 
     root_media_id: str
     group_kind: str
+    member_media_ids: list[str] = field(default_factory=list)
     entries: list = field(default_factory=list)
+    root_title: str = ""
     context_parent_media_id: str = ""
     context_parent_title: str = ""
     context_relation_type: str = ""
@@ -30,31 +35,52 @@ class AnimeSeriesListGroup:
             ),
             None,
         )
-        return (root_entry or self.entries[0]).item.title
+        if root_entry is not None:
+            return root_entry.item.title
+        if self.root_title:
+            return self.root_title
+        return self.entries[0].item.title
+
+    @property
+    def representative_entry(self):
+        """Return the single media entry rendered for this group."""
+        return next(
+            (
+                entry
+                for entry in self.entries
+                if str(entry.item.media_id) == self.root_media_id
+            ),
+            self.entries[0],
+        )
 
 
 def project_anime_series_groups(
     *,
-    media_entries,
+    media_queryset,
     user_id,
 ) -> list[AnimeSeriesListGroup]:
-    """Group filtered anime entries from persisted memberships only."""
-    entries = list(media_entries)
-    if not entries:
+    """Build ordered logical groups without loading full media objects."""
+    media_ids_in_order = [
+        str(media_id)
+        for media_id in media_queryset.values_list(
+            "item__media_id",
+            flat=True,
+        )
+    ]
+    if not media_ids_in_order:
         return []
 
-    media_ids = [str(entry.item.media_id) for entry in entries]
     memberships_by_media_id = {}
     memberships = AnimeLocalSeriesMembership.objects.filter(
         user_id=user_id,
-        media_id__in=media_ids,
+        source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+        media_id__in=media_ids_in_order,
     ).order_by("-updated_at", "-id")
     for membership in memberships:
         memberships_by_media_id.setdefault(membership.media_id, membership)
 
     groups_by_key = {}
-    for entry in entries:
-        media_id = str(entry.item.media_id)
+    for media_id in media_ids_in_order:
         membership = memberships_by_media_id.get(media_id)
         if membership is None:
             group_key = ("singleton", media_id)
@@ -77,38 +103,52 @@ def project_anime_series_groups(
             )
 
         resolved_group = groups_by_key.setdefault(group_key, group)
-        resolved_group.entries.append(entry)
+        resolved_group.member_media_ids.append(media_id)
 
     groups = list(groups_by_key.values())
-    media_order = {
-        media_id: index for index, media_id in enumerate(media_ids)
-    }
-    for group in groups:
-        group.entries.sort(
-            key=lambda entry: (
-                str(entry.item.media_id) != group.root_media_id,
-                media_order[str(entry.item.media_id)],
-            )
-        )
-
     context_parent_ids = {
         group.context_parent_media_id
         for group in groups
         if group.context_parent_media_id
     }
-    context_titles = dict(
+    title_media_ids = context_parent_ids | {
+        group.root_media_id for group in groups
+    }
+    titles_by_media_id = dict(
         Item.objects.filter(
-            media_id__in=context_parent_ids,
+            media_id__in=title_media_ids,
             source=Sources.MAL.value,
             media_type=MediaTypes.ANIME.value,
         ).values_list("media_id", "title")
     )
     for group in groups:
-        group.context_parent_title = context_titles.get(
+        group.root_title = titles_by_media_id.get(group.root_media_id, "")
+        group.context_parent_title = titles_by_media_id.get(
             group.context_parent_media_id,
             "",
         )
     return groups
+
+
+def hydrate_anime_series_groups(*, groups, media_queryset) -> None:
+    """Load only media objects belonging to the current page of groups."""
+    page_media_ids = [
+        media_id
+        for group in groups
+        for media_id in group.member_media_ids
+    ]
+    entries_by_media_id = {
+        str(entry.item.media_id): entry
+        for entry in media_queryset.filter(
+            item__media_id__in=page_media_ids,
+        )
+    }
+    for group in groups:
+        group.entries = [
+            entries_by_media_id[media_id]
+            for media_id in group.member_media_ids
+            if media_id in entries_by_media_id
+        ]
 
 
 def _relation_label(relation_type: str | None) -> str:

@@ -17,15 +17,15 @@
           </p>
         {% endif %}
       </div>
-      {% if group.entries|length > 1 %}
-        <span class="text-xs text-gray-400">{{ group.entries|length }} entries</span>
+      {% if group.member_media_ids|length > 1 %}
+        <span class="text-xs text-gray-400">{{ group.member_media_ids|length }} entries</span>
       {% endif %}
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-      {% for media in group.entries %}
-        {% include "app/components/media_card.html" with media=media item=media.item title=media.item from_grid=True %}
-      {% endfor %}
+    <div class="anime-series-card max-w-52">
+      {% with media=group.representative_entry %}
+        {% include "app/components/media_card.html" with media=media item=media.item title=group.title from_grid=True %}
+      {% endwith %}
     </div>
   </section>
 {% endfor %}

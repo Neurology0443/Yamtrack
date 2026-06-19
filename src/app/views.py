@@ -38,6 +38,7 @@ from app.services.anime_franchise_context import (
     prepare_anime_franchise_context,
 )
 from app.services.anime_series_list_projection import (
+    hydrate_anime_series_groups,
     project_anime_series_groups,
 )
 from app.templatetags import app_tags
@@ -269,10 +270,14 @@ def _paginate_media_list(
         return media_page, False
 
     anime_series_groups = project_anime_series_groups(
-        media_entries=media_queryset,
+        media_queryset=media_queryset,
         user_id=target_user.id,
     )
     media_page = Paginator(anime_series_groups, items_per_page).get_page(page)
+    hydrate_anime_series_groups(
+        groups=media_page.object_list,
+        media_queryset=media_queryset,
+    )
     series_media_entries = [
         media
         for group in media_page.object_list

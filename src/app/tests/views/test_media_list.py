@@ -13,6 +13,9 @@ from app.models import (
     Sources,
     Status,
 )
+from app.services.anime_local_series_constants import (
+    LOCAL_SERIES_VIEW_PROFILE_KEY,
+)
 from app.templatetags import app_tags
 from users.forms import UserUpdateForm
 
@@ -137,7 +140,7 @@ class MediaListViewTests(TestCase):
                     root_media_id="10",
                     group_kind="main_continuity",
                     component_size=2,
-                    source_profile_key="complete:10",
+                    source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
                     resolver_version="v1",
                 )
                 for media_id in ("10", "20")
@@ -158,13 +161,24 @@ class MediaListViewTests(TestCase):
         self.assertEqual(projected_group.entries, [root, sequel])
         self.assertEqual(singleton_group.entries, [alternative])
         self.assertEqual(singleton_group.group_kind, "singleton")
+        self.assertContains(response, 'class="anime-series-card', count=2)
 
+    @patch(
+        "app.services.anime_franchise_snapshot."
+        "AnimeFranchiseSnapshotService.build"
+    )
+    @patch(
+        "app.services.anime_local_series_resolver."
+        "AnimeLocalSeriesResolver.resolve"
+    )
     @patch("app.views.services.get_media_metadata")
     @patch("app.views.anime_franchise_cache.load_payload_for_media")
     def test_anime_series_layout_renders_branch_context_without_mal_call(
         self,
         mock_load_payload,
         mock_get_metadata,
+        mock_resolve,
+        mock_build_snapshot,
     ):
         """Series layout renders DB context without MAL or cache reads."""
         parent = self._create_anime("10", "Main")
@@ -177,7 +191,7 @@ class MediaListViewTests(TestCase):
             context_parent_media_id="10",
             context_relation_type="alternative_version",
             component_size=1,
-            source_profile_key="complete:10",
+            source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
             resolver_version="v1",
         )
 
@@ -192,6 +206,8 @@ class MediaListViewTests(TestCase):
         self.assertContains(response, branch.item.title)
         mock_load_payload.assert_not_called()
         mock_get_metadata.assert_not_called()
+        mock_resolve.assert_not_called()
+        mock_build_snapshot.assert_not_called()
 
     def test_anime_series_layout_paginates_groups_not_entries(self):
         """Series pagination counts groups rather than member entries."""
@@ -208,7 +224,7 @@ class MediaListViewTests(TestCase):
                     root_media_id="100",
                     group_kind="main_continuity",
                     component_size=len(anime_entries),
-                    source_profile_key="complete:100",
+                    source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
                     resolver_version="v1",
                 )
                 for anime in anime_entries
@@ -224,6 +240,83 @@ class MediaListViewTests(TestCase):
         self.assertEqual(groups.paginator.count, 1)
         self.assertEqual(len(groups.object_list[0].entries), 35)
         self.assertFalse(groups.has_next())
+        self.assertContains(response, 'class="anime-series-card', count=1)
+
+    def test_anime_series_layout_reads_only_series_view_projection(self):
+        """A newer import-profile membership cannot override the UI projection."""
+        main = self._create_anime("10", "KonoSuba")
+        sequel = self._create_anime("20", "KonoSuba Season 2")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="20",
+            root_media_id="20",
+            group_kind="singleton",
+            component_size=1,
+            source_profile_key="complete",
+            resolver_version="v1",
+        )
+        for media_id in ("10", "20"):
+            AnimeLocalSeriesMembership.objects.create(
+                user=self.user,
+                media_id=media_id,
+                root_media_id="10",
+                group_kind="main_continuity",
+                component_size=2,
+                source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+                resolver_version="v1",
+            )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series&sort=title",
+        )
+
+        groups = list(response.context["anime_series_groups"])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].entries, [main, sequel])
+        self.assertEqual(groups[0].title, "KonoSuba")
+        self.assertContains(response, 'class="anime-series-card', count=1)
+
+    def test_anime_series_layout_renders_spin_off_as_separate_card(self):
+        """A persisted spin-off branch appears as its own visible card."""
+        main = self._create_anime("10", "KonoSuba")
+        spin_off = self._create_anime("20", "KonoSuba: Explosion")
+        AnimeLocalSeriesMembership.objects.bulk_create(
+            [
+                AnimeLocalSeriesMembership(
+                    user=self.user,
+                    media_id="10",
+                    root_media_id="10",
+                    group_kind="main_continuity",
+                    component_size=1,
+                    source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+                    resolver_version="v1",
+                ),
+                AnimeLocalSeriesMembership(
+                    user=self.user,
+                    media_id="20",
+                    root_media_id="20",
+                    group_kind="spin_off_branch",
+                    context_parent_media_id="10",
+                    context_relation_type="spin_off",
+                    component_size=1,
+                    source_profile_key=LOCAL_SERIES_VIEW_PROFILE_KEY,
+                    resolver_version="v1",
+                ),
+            ]
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value])
+            + "?layout=series&sort=title",
+        )
+
+        groups = list(response.context["anime_series_groups"])
+        self.assertEqual(
+            [group.title for group in groups],
+            [main.item.title, spin_off.item.title],
+        )
+        self.assertContains(response, 'class="anime-series-card', count=2)
 
     def test_anime_series_layout_second_page_contains_next_group(self):
         """Series pagination advances one page of groups at a time."""
