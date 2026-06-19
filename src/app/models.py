@@ -819,6 +819,41 @@ class AnimeImportScanState(models.Model):
         ]
 
 
+class AnimeImportComponentMembership(models.Model):
+    """Stable per-user membership in a discovered anime continuity component."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    media_id = models.CharField(max_length=36)
+    component_root_mal_id = models.CharField(max_length=36)
+    component_size = models.PositiveIntegerField(default=0)
+    source_profile_key = models.CharField(max_length=20, choices=AnimeImportProfile)
+    discovered_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        """Return the tracked media-to-component mapping."""
+        return (
+            f"{self.user_id}:{self.media_id}"
+            f" -> {self.component_root_mal_id}"
+        )
+
+    class Meta:
+        """Meta options for stable component membership."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "media_id"],
+                name="app_anicmpmem_user_media_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "component_root_mal_id"],
+                name="app_anicmpmem_user_root_idx",
+            ),
+        ]
+
+
 class UserMessageLevel(models.TextChoices):
     """Choices for persistent user messages."""
 

@@ -11,6 +11,9 @@ from django.db import transaction
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
 from app.providers import mal
+from app.services.anime_component_membership import (
+    AnimeImportComponentMembershipService,
+)
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
@@ -59,6 +62,7 @@ class FranchiseImportStats:
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
     discovery_errors: int = 0
+    component_memberships_recorded: int = 0
 
 
 class AnimeFranchiseImportService:
@@ -71,6 +75,9 @@ class AnimeFranchiseImportService:
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
         discovery_service: AnimeFranchiseDiscoveryService | None = None,
+        component_membership_service: (
+            AnimeImportComponentMembershipService | None
+        ) = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -79,6 +86,10 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
+        self.component_membership_service = (
+            component_membership_service
+            or AnimeImportComponentMembershipService()
+        )
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -259,6 +270,16 @@ class AnimeFranchiseImportService:
 
                 root_key = (user.id, component_root_mal_id)
                 force_baseline_suppression = root_key in baseline_roots_created_this_run
+                if not dry_run:
+                    stats.component_memberships_recorded += (
+                        self.component_membership_service.record_tracked_component(
+                            user_id=due_seed.user_id,
+                            media_ids=self._continuity_media_ids(snapshot),
+                            component_root_mal_id=component_root_mal_id,
+                            component_size=len(snapshot.continuity_component),
+                            source_profile_key=profile_key,
+                        )
+                    )
                 try:
                     discovery_stats = self.discovery_service.process_snapshot(
                         user=user,
@@ -337,6 +358,14 @@ class AnimeFranchiseImportService:
                         stats.state_rows_updated += 1
 
         return stats
+
+    def _continuity_media_ids(self, snapshot) -> set[str]:
+        """Return normalized media IDs from a canonical continuity component."""
+        return {
+            str(getattr(node, "media_id", node))
+            for node in snapshot.continuity_component
+            if getattr(node, "media_id", node) not in (None, "")
+        }
 
     @transaction.atomic
     def _create_anime_entry(

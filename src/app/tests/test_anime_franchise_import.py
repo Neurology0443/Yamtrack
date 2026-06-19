@@ -7,13 +7,22 @@ from django.core.cache import cache
 from django.db import transaction
 from django.test import TestCase
 
-from app.models import Anime, Item, MediaTypes, Sources, Status
+from app.models import (
+    Anime,
+    AnimeImportComponentMembership,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services import anime_franchise_cache
+from app.services.anime_franchise_cache import FranchisePayloadLookup
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_series_list import AnimeSeriesListService
 from events.models import AnimeReleaseDateScanState
 
 
@@ -73,6 +82,70 @@ class AnimeFranchiseImportNotificationTests(TestCase):
 
     def _assert_cache_warm_stats_invariant(self, stats):
         self.assertEqual(stats.cache_warm_scheduled, len(stats.cache_warm_targets))
+
+    def _run_component_membership_import(self, *, media_ids, root_media_id):
+        for media_id in media_ids:
+            item = Item.objects.create(
+                media_id=media_id,
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title=f"Anime {media_id}",
+                image=f"https://example.com/{media_id}.jpg",
+            )
+            anime = Anime(
+                user=self.user,
+                item=item,
+                status=Status.PLANNING.value,
+            )
+            anime._skip_hot_priority = True
+            anime.save()
+
+        due_seed = SimpleNamespace(
+            user_id=self.user.id,
+            seed_mal_id=root_media_id,
+        )
+        snapshot = SimpleNamespace(
+            continuity_component=[
+                SimpleNamespace(media_id=media_id)
+                for media_id in [*media_ids, "9999"]
+            ],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = ([due_seed], 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        state_service.record_success.return_value = (None, True, None)
+        state_service.record_error.return_value = (None, True)
+        profile = Mock()
+        profile.component_root_media_id.return_value = root_media_id
+        profile.select.return_value = SimpleNamespace(
+            media_ids=set(),
+            fingerprint_payload={},
+        )
+        profile.detail_cache_warm_media_ids.return_value = set()
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = (
+            AnimeFranchiseDiscoveryStats()
+        )
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+        with patch(
+            "app.services.anime_franchise_import.get_import_profile",
+            return_value=profile,
+        ):
+            return service.run(
+                profile_key="continuity",
+                dry_run=False,
+                full_rescan=False,
+                limit=None,
+                refresh_cache=False,
+                user_ids=[self.user.id],
+            )
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")
@@ -192,6 +265,142 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         cache_warm_scheduler.assert_not_called()
         mock_notify.assert_not_called()
         mock_anime_minimal.assert_not_called()
+
+    def test_import_persists_component_root_for_every_tracked_member(
+        self,
+    ):
+        media_ids = ["2966", "5341", "6007"]
+        stats = self._run_component_membership_import(
+            media_ids=media_ids,
+            root_media_id="2966",
+        )
+
+        mappings = dict(
+            AnimeImportComponentMembership.objects.filter(
+                user=self.user,
+            ).values_list("media_id", "component_root_mal_id"),
+        )
+        self.assertEqual(
+            mappings,
+            {
+                "2966": "2966",
+                "5341": "2966",
+                "6007": "2966",
+            },
+        )
+        self.assertEqual(stats.component_memberships_recorded, 3)
+        self.assertFalse(
+            AnimeImportComponentMembership.objects.filter(
+                user=self.user,
+                media_id="9999",
+            ).exists(),
+        )
+        empty_lookup = lambda media_id, **_kwargs: FranchisePayloadLookup(  # noqa: E731
+            requested_media_id=str(media_id),
+            canonical_media_id=str(media_id),
+            payload=None,
+            meta={},
+            alias_hit=False,
+        )
+        with patch(
+            "app.services.anime_series_list."
+            "anime_franchise_cache.load_payload_for_media",
+            side_effect=empty_lookup,
+        ):
+            groups = AnimeSeriesListService().build_groups(
+                target_user=self.user,
+                anime_queryset=Anime.objects.filter(
+                    user=self.user,
+                ).select_related("item"),
+                sort_filter="title",
+            )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "2966")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            set(media_ids),
+        )
+
+    def test_import_persists_dragon_ball_component_for_all_tracked_members(self):
+        media_ids = ["502", "891", "892", "893"]
+
+        stats = self._run_component_membership_import(
+            media_ids=media_ids,
+            root_media_id="502",
+        )
+
+        mappings = dict(
+            AnimeImportComponentMembership.objects.filter(
+                user=self.user,
+            ).values_list("media_id", "component_root_mal_id"),
+        )
+        self.assertEqual(
+            mappings,
+            dict.fromkeys(media_ids, "502"),
+        )
+        self.assertEqual(stats.component_memberships_recorded, 4)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_dry_run_does_not_persist_component_memberships(
+        self,
+        mock_get_profile,
+    ):
+        item = Item.objects.create(
+            media_id="2966",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Tracked",
+            image="https://example.com/2966.jpg",
+        )
+        anime = Anime(
+            user=self.user,
+            item=item,
+            status=Status.PLANNING.value,
+        )
+        anime._skip_hot_priority = True
+        anime.save()
+        due_seed = SimpleNamespace(
+            user_id=self.user.id,
+            seed_mal_id="2966",
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = SimpleNamespace(
+            continuity_component=[SimpleNamespace(media_id="2966")],
+        )
+        state_service = Mock()
+        state_service.select_due_seeds.return_value = ([due_seed], 0)
+        state_service.build_fingerprint.return_value = "fingerprint"
+        profile = Mock()
+        profile.component_root_media_id.return_value = "2966"
+        profile.select.return_value = SimpleNamespace(
+            media_ids=set(),
+            fingerprint_payload={},
+        )
+        profile.detail_cache_warm_media_ids.return_value = set()
+        mock_get_profile.return_value = profile
+        discovery_service = Mock()
+        discovery_service.process_snapshot.return_value = (
+            AnimeFranchiseDiscoveryStats()
+        )
+        service = AnimeFranchiseImportService(
+            snapshot_service=snapshot_service,
+            state_service=state_service,
+            cache_warm_scheduler=Mock(),
+            discovery_service=discovery_service,
+        )
+
+        stats = service.run(
+            profile_key="continuity",
+            dry_run=True,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        self.assertEqual(stats.component_memberships_recorded, 0)
+        self.assertFalse(AnimeImportComponentMembership.objects.exists())
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")

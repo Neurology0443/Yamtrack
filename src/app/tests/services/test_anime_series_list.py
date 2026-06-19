@@ -4,8 +4,19 @@ from itertools import pairwise
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
+from app.models import (
+    Anime,
+    AnimeImportComponentMembership,
+    AnimeImportScanState,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services.anime_franchise_cache import FranchisePayloadLookup
 from app.services.anime_series_list import (
     AnimeSeriesBranchClassifier,
@@ -951,3 +962,180 @@ class AnimeSeriesListServiceTests(SimpleTestCase):
         delete_alias.assert_not_called()
         get_media_metadata.assert_not_called()
         rebuild_payload.assert_not_called()
+
+
+class AnimeSeriesListDatabaseTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="series-db")
+        self.service = AnimeSeriesListService()
+
+    def create_anime(self, media_id, title):
+        item = Item.objects.create(
+            media_id=str(media_id),
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title=title,
+            image=f"https://example.com/{media_id}.jpg",
+        )
+        anime = Anime(
+            user=self.user,
+            item=item,
+            status=Status.PLANNING.value,
+        )
+        anime._skip_hot_priority = True
+        anime.save()
+        return anime
+
+    def lookup(self, media_id, payload=None):
+        return FranchisePayloadLookup(
+            requested_media_id=str(media_id),
+            canonical_media_id=str(media_id),
+            payload=payload,
+            meta={"truncated": False},
+            alias_hit=False,
+        )
+
+    def payload(self, root_id, title, *, series):
+        return {
+            "root_media_id": str(root_id),
+            "canonical_root_media_id": str(root_id),
+            "display_title": title,
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": series,
+            },
+            "sections": [],
+        }
+
+    def entry(self, media_id, title, relation_type=""):
+        return {
+            "media_id": str(media_id),
+            "source": "mal",
+            "media_type": "anime",
+            "anime_media_type": "movie",
+            "title": title,
+            "relation_type": relation_type,
+        }
+
+    def build_groups(self, lookups):
+        with patch(
+            "app.services.anime_series_list."
+            "anime_franchise_cache.load_payload_for_media",
+            side_effect=lambda media_id, **_kwargs: lookups[str(media_id)],
+        ):
+            return self.service.build_groups(
+                target_user=self.user,
+                anime_queryset=Anime.objects.filter(user=self.user).select_related(
+                    "item",
+                ),
+                sort_filter="title",
+            )
+
+    def test_component_memberships_group_cache_cold_without_scan_rows(self):
+        media_ids = ["2966", "5341", "6007"]
+        for media_id in media_ids:
+            self.create_anime(media_id, f"Anime {media_id}")
+            AnimeImportComponentMembership.objects.create(
+                user=self.user,
+                media_id=media_id,
+                component_root_mal_id="2966",
+                component_size=3,
+                source_profile_key="continuity",
+            )
+
+        groups = self.build_groups(
+            {
+                media_id: self.lookup(media_id)
+                for media_id in media_ids
+            },
+        )
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].group_key, "2966")
+        self.assertEqual(
+            {entry.media_id for entry in groups[0].entries},
+            set(media_ids),
+        )
+        self.assertFalse(
+            AnimeImportScanState.objects.filter(user=self.user).exists(),
+        )
+
+    def test_component_memberships_keep_group_identity_cache_cold_and_warm(self):
+        media_ids = ["502", "891", "892", "893"]
+        anime_by_id = {
+            media_id: self.create_anime(media_id, f"Movie {media_id}")
+            for media_id in media_ids
+        }
+        for media_id in media_ids:
+            AnimeImportComponentMembership.objects.create(
+                user=self.user,
+                media_id=media_id,
+                component_root_mal_id="502",
+                component_size=4,
+                source_profile_key="continuity",
+            )
+
+        cold_groups = self.build_groups(
+            {
+                media_id: self.lookup(media_id)
+                for media_id in media_ids
+            },
+        )
+        warm_payload = self.payload(
+            "502",
+            "Dragon Ball Movies",
+            series=[
+                self.entry(
+                    media_id,
+                    anime_by_id[media_id].item.title,
+                    "sequel" if media_id != "502" else "",
+                )
+                for media_id in media_ids
+            ],
+        )
+        warm_groups = self.build_groups(
+            {
+                "502": self.lookup("502", warm_payload),
+                **{
+                    media_id: self.lookup(media_id)
+                    for media_id in media_ids
+                    if media_id != "502"
+                },
+            },
+        )
+
+        cold_identity = [
+            (group.group_key, {entry.media_id for entry in group.entries})
+            for group in cold_groups
+        ]
+        warm_identity = [
+            (group.group_key, {entry.media_id for entry in group.entries})
+            for group in warm_groups
+        ]
+        self.assertEqual(cold_identity, warm_identity)
+        self.assertEqual(
+            cold_identity,
+            [("502", {"502", "891", "892", "893"})],
+        )
+
+    def test_component_membership_precedes_scan_state_fallback(self):
+        self.create_anime("700", "Mapped anime")
+        AnimeImportComponentMembership.objects.create(
+            user=self.user,
+            media_id="700",
+            component_root_mal_id="701",
+            component_size=2,
+            source_profile_key="continuity",
+        )
+        AnimeImportScanState.objects.create(
+            user=self.user,
+            seed_mal_id="700",
+            profile_key="continuity",
+            component_root_mal_id="999",
+            next_scan_at=timezone.now(),
+        )
+
+        groups = self.build_groups({"700": self.lookup("700")})
+
+        self.assertEqual(groups[0].group_key, "701")

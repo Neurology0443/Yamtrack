@@ -175,6 +175,7 @@ def import_anime_franchise(
             "cache_warm_roots": stats.cache_warm_roots,
             "cache_warm_errors": stats.cache_warm_errors,
             "discovery_errors": stats.discovery_errors,
+            "component_memberships_recorded": stats.component_memberships_recorded,
         }
 
         logger.info("Anime franchise import completed: %s", result)

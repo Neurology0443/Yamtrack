@@ -114,6 +114,7 @@ class ImportAnimeFranchiseTaskTests(TestCase):
             cache_warm_roots=["100", "200"],
             cache_warm_errors=0,
             discovery_errors=2,
+            component_memberships_recorded=4,
         )
 
         result = import_anime_franchise(
@@ -157,6 +158,7 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                 "cache_warm_roots": ["100", "200"],
                 "cache_warm_errors": 0,
                 "discovery_errors": 2,
+                "component_memberships_recorded": 4,
             },
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")

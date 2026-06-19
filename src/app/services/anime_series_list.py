@@ -8,7 +8,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from app.models import AnimeImportScanState
+from app.models import (
+    AnimeImportComponentMembership,
+    AnimeImportScanState,
+)
 from app.services import anime_franchise_cache
 
 if TYPE_CHECKING:
@@ -272,15 +275,24 @@ class AnimeSeriesListService:
         user_id: int,
         media_ids: list[str],
     ) -> dict[str, str]:
+        roots = dict(
+            AnimeImportComponentMembership.objects.filter(
+                user_id=user_id,
+                media_id__in=media_ids,
+            ).values_list("media_id", "component_root_mal_id"),
+        )
+        unresolved_media_ids = set(media_ids) - roots.keys()
+        if not unresolved_media_ids:
+            return roots
+
         states = (
             AnimeImportScanState.objects.filter(
                 user_id=user_id,
-                seed_mal_id__in=media_ids,
+                seed_mal_id__in=unresolved_media_ids,
             )
             .exclude(component_root_mal_id="")
             .order_by("seed_mal_id", "-last_success_at", "profile_key")
         )
-        roots: dict[str, str] = {}
         for state in states:
             roots.setdefault(
                 str(state.seed_mal_id),

@@ -7,6 +7,7 @@ from django.contrib.admin.sites import AlreadyRegistered
 from app.models import (
     AnimeFranchiseDiscoveredEntry,
     AnimeFranchiseDiscoveryState,
+    AnimeImportComponentMembership,
     AnimeImportScanState,
     Episode,
     Item,
@@ -95,6 +96,22 @@ class AnimeImportScanStateAdmin(admin.ModelAdmin):
     list_filter = ["profile_key"]
 
 
+@admin.register(AnimeImportComponentMembership)
+class AnimeImportComponentMembershipAdmin(admin.ModelAdmin):
+    """Admin config for stable tracked anime component memberships."""
+
+    search_fields = ["user__username", "media_id", "component_root_mal_id"]
+    list_display = [
+        "user",
+        "media_id",
+        "component_root_mal_id",
+        "component_size",
+        "source_profile_key",
+        "updated_at",
+    ]
+    list_filter = ["source_profile_key"]
+
+
 class MediaAdmin(admin.ModelAdmin):
     """Custom admin for regular media model with search and filter options."""
 
@@ -114,6 +131,7 @@ SpecialModels = [
     "BasicMedia",
     "UserMessage",
     "AnimeImportScanState",
+    "AnimeImportComponentMembership",
     "AnimeFranchiseDiscoveryState",
     "AnimeFranchiseDiscoveredEntry",
 ]
