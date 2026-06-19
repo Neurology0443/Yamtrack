@@ -342,6 +342,24 @@ class AnimeReleaseDateNotificationServiceTests(TestCase):
             AnimeReleaseDateNotificationDelivery.objects.exists(),
         )
 
+    @patch("events.services.anime_release_date_notifications.mal.anime")
+    def test_scan_disables_complete_date_once_it_has_passed(self, mock_anime):
+        AnimeReleaseDateScanState.objects.create(
+            item=self.item,
+            initialized_at=timezone.now() - timedelta(days=30),
+            last_seen_start_date_text="2020-01-01",
+            last_seen_start_date_precision=AnimeStartDatePrecision.DAY,
+            last_seen_start_date=timezone.localdate() - timedelta(days=1),
+            next_scan_at=timezone.now() - timedelta(hours=1),
+        )
+
+        result = self.service.scan_due_items()
+
+        state = AnimeReleaseDateScanState.objects.get(item=self.item)
+        self.assertTrue(state.disabled)
+        self.assertEqual(result["scanned"], 0)
+        mock_anime.assert_not_called()
+
     @patch.object(AnimeReleaseDateNotificationService, "_jitter", return_value=0)
     def test_import_initializes_state_without_eligible_user(self, _mock_jitter):
         self.user.anime_release_date_notifications_enabled = False

@@ -188,6 +188,11 @@ class AnimeReleaseDateNotificationService:
                 eligible_item_ids,
                 now=now,
             )
+            today = timezone.localdate()
+            AnimeReleaseDateScanState.objects.filter(
+                disabled=False,
+                last_seen_start_date__lt=today,
+            ).update(disabled=True)
             cutoff = now - timedelta(
                 hours=settings.ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS,
             )
@@ -203,7 +208,7 @@ class AnimeReleaseDateNotificationService:
                 )
                 .filter(
                     Q(last_seen_start_date__isnull=True)
-                    | Q(last_seen_start_date__gte=timezone.localdate()),
+                    | Q(last_seen_start_date__gte=today),
                 )
                 .select_related("item")
                 .order_by("next_scan_at", "id")[

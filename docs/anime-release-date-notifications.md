@@ -45,6 +45,43 @@ There are three ways to observe the MAL value:
 
 The dedicated scan is a safety net for anime whose detail page is never opened.
 
+## Dedicated scan eligibility
+
+An item is considered for the dedicated scan only when all of these conditions
+are true:
+
+- the item source is MAL;
+- the item media type is anime;
+- at least one user tracks it as `Planning` or `In progress`;
+- that user enabled anime release-date notifications;
+- that user has at least one non-empty Apprise notification URL;
+- that user did not exclude the item from notifications;
+- the global scan state is enabled and its `next_scan_at` is due;
+- the minimum refresh cooldown has elapsed.
+
+`Completed`, `Paused`, and `Dropped` tracking entries do not make an anime
+eligible. Multiple eligible users tracking the same anime still produce only
+one global cache lookup or MAL refresh.
+
+The known start date then controls how long the item remains scannable:
+
+- no valid date: keep scanning with progressive backoff;
+- a current or future `YYYY` date: keep scanning because MAL may add a month or
+  day, or change the year;
+- a current or future `YYYY-MM` date: keep scanning because MAL may add a day or
+  change the month;
+- a complete date today or in the future: keep scanning because MAL may still
+  move the date;
+- a complete date before today: disable the scan state;
+- a partial year older than the current year: disable the scan state;
+- a partial month older than the current month: disable the scan state;
+- MAL status `Finished`: disable the scan state.
+
+Known partial or complete future dates use the long backoff and normally return
+after seven days plus jitter. Therefore, having a precise future date does not
+cause frequent MAL requests, but still allows a later postponement to be
+detected.
+
 ## Persistence and deduplication
 
 `AnimeReleaseDateScanState` stores one global state per MAL anime `Item`. One
