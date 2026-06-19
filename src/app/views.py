@@ -37,6 +37,9 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
+from app.services.anime_series_list_projection import (
+    project_anime_series_groups,
+)
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
@@ -197,14 +200,12 @@ def media_list(request, username, media_type):
         search=search_query,
     )
 
-    # Paginate results
-    items_per_page = 32
-    paginator = Paginator(media_queryset, items_per_page)
-    media_page = paginator.get_page(page)
-
-    BasicMedia.objects.annotate_max_progress(
-        media_page.object_list,
-        media_type,
+    media_page, is_anime_series_layout = _paginate_media_list(
+        media_queryset=media_queryset,
+        page=page,
+        media_type=media_type,
+        layout=layout,
+        target_user=target_user,
     )
 
     context = {
@@ -212,12 +213,16 @@ def media_list(request, username, media_type):
         "media_type_plural": app_tags.media_type_readable_plural(media_type).lower(),
         "media_list": media_page,
         "current_layout": layout,
-        "layout_class": ".media-grid" if layout == "grid" else "tbody",
+        "layout_class": {
+            "grid": ".media-grid",
+            "series": ".anime-series-groups",
+        }.get(layout, "tbody"),
         "current_sort": sort_filter,
         "current_status": status_filter,
         "sort_choices": MediaSortChoices.choices,
         "status_choices": MediaStatusChoices.choices,
         "target_user": target_user,
+        "anime_series_groups": media_page if is_anime_series_layout else None,
     }
 
     # Handle HTMX requests for partial updates
@@ -232,14 +237,61 @@ def media_list(request, username, media_type):
                 "medialist", args=[target_user.username, media_type]
             )
             return response
-        if layout == "grid":
-            template_name = "app/components/media_grid_items.html"
-        else:
-            template_name = "app/components/media_table_items.html"
+        template_name = _media_list_partial_template(
+            layout=layout,
+            is_anime_series_layout=is_anime_series_layout,
+        )
     else:
         template_name = "app/media_list.html"
 
     return render(request, template_name, context)
+
+
+def _paginate_media_list(
+    *,
+    media_queryset,
+    page,
+    media_type,
+    layout,
+    target_user,
+):
+    """Paginate ordinary entries or anime series groups."""
+    items_per_page = 32
+    is_anime_series_layout = (
+        media_type == MediaTypes.ANIME.value and layout == "series"
+    )
+    if not is_anime_series_layout:
+        media_page = Paginator(media_queryset, items_per_page).get_page(page)
+        BasicMedia.objects.annotate_max_progress(
+            media_page.object_list,
+            media_type,
+        )
+        return media_page, False
+
+    anime_series_groups = project_anime_series_groups(
+        media_entries=media_queryset,
+        user_id=target_user.id,
+    )
+    media_page = Paginator(anime_series_groups, items_per_page).get_page(page)
+    series_media_entries = [
+        media
+        for group in media_page.object_list
+        for media in group.entries
+    ]
+    BasicMedia.objects.annotate_max_progress(
+        series_media_entries,
+        media_type,
+    )
+    return media_page, True
+
+
+def _media_list_partial_template(*, layout, is_anime_series_layout):
+    """Return the HTMX partial for the active list layout."""
+    if layout == "grid":
+        return "app/components/media_grid_items.html"
+    if is_anime_series_layout:
+        return "app/components/anime_series_groups.html"
+    return "app/components/media_table_items.html"
 
 
 @require_GET

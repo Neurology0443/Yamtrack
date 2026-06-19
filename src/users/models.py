@@ -58,6 +58,14 @@ class LayoutChoices(models.TextChoices):
     TABLE = "table", "Table"
 
 
+class AnimeLayoutChoices(models.TextChoices):
+    """Choices for anime list layout options."""
+
+    GRID = "grid", "Grid"
+    TABLE = "table", "Table"
+    SERIES = "series", "Series"
+
+
 class CalendarLayoutChoices(models.TextChoices):
     """Choices for calendar layout options."""
 
@@ -193,8 +201,8 @@ class User(AbstractUser):
     anime_enabled = models.BooleanField(default=True)
     anime_layout = models.CharField(
         max_length=20,
-        default=LayoutChoices.TABLE,
-        choices=LayoutChoices,
+        default=AnimeLayoutChoices.TABLE,
+        choices=AnimeLayoutChoices,
     )
     anime_sort = models.CharField(
         max_length=20,
@@ -470,7 +478,7 @@ class User(AbstractUser):
             ),
             models.CheckConstraint(
                 name="anime_layout_valid",
-                condition=models.Q(anime_layout__in=LayoutChoices.values),
+                condition=models.Q(anime_layout__in=AnimeLayoutChoices.values),
             ),
             models.CheckConstraint(
                 name="manga_layout_valid",

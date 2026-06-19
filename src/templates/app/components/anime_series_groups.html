@@ -1,0 +1,31 @@
+{% load app_tags %}
+
+{% for group in anime_series_groups %}
+  <section class="bg-[#2a2f35] rounded-lg p-4"
+           {% if forloop.last and anime_series_groups.has_next %} hx-get="{% url 'medialist' target_user.username media_type %}?page={{ anime_series_groups.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
+    <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+      <div>
+        <h2 class="text-xl font-semibold text-white">{{ group.title }}</h2>
+        {% if group.context_relation_label %}
+          <p class="text-sm text-gray-400 mt-1">
+            {{ group.context_relation_label }}
+            {% if group.context_parent_title %}
+              · {{ group.context_parent_title }}
+            {% elif group.context_parent_media_id %}
+              · MAL {{ group.context_parent_media_id }}
+            {% endif %}
+          </p>
+        {% endif %}
+      </div>
+      {% if group.entries|length > 1 %}
+        <span class="text-xs text-gray-400">{{ group.entries|length }} entries</span>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+      {% for media in group.entries %}
+        {% include "app/components/media_card.html" with media=media item=media.item title=media.item from_grid=True %}
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}
