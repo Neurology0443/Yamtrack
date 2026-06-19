@@ -92,6 +92,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             user=self.user,
             resolution=resolution,
             source_profile_key="complete",
+            scope_media_ids={"10", "20"},
         )
 
         memberships = list(
@@ -147,6 +148,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             user=self.user,
             resolution=resolution,
             source_profile_key="continuity",
+            scope_media_ids={"10", "20"},
         )
 
         membership = AnimeLocalSeriesMembership.objects.get()
@@ -184,6 +186,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             user=self.user,
             resolution=resolution,
             source_profile_key="complete",
+            scope_media_ids={"10"},
         )
 
         membership.refresh_from_db()
@@ -200,12 +203,14 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             user=self.user,
             resolution=self._resolution(self._group("10", ["10", "20"])),
             source_profile_key="complete",
+            scope_media_ids={"10", "20"},
         )
 
         stats = self.service.persist(
             user=self.user,
             resolution=self._resolution(self._group("10", ["10"])),
             source_profile_key="complete",
+            scope_media_ids={"10", "20"},
         )
 
         self.assertEqual(stats.memberships_deleted, 1)
@@ -238,6 +243,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
                 version="v1",
             ),
             source_profile_key="complete",
+            scope_media_ids={"10"},
         )
 
         self.assertEqual(stats.memberships_deleted, 1)
@@ -260,6 +266,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             user=self.user,
             resolution=self._resolution(self._group("10", ["10"])),
             source_profile_key="complete",
+            scope_media_ids={"10"},
         )
 
         self.assertEqual(
@@ -280,6 +287,7 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
                 user=self.user,
                 resolution=self._resolution(self._group("10", ["10"])),
                 source_profile_key=" ",
+                scope_media_ids={"10"},
             )
 
         with self.assertRaisesRegex(ValueError, "resolver_version"):
@@ -290,4 +298,45 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
                     version="",
                 ),
                 source_profile_key="complete",
+                scope_media_ids={"10"},
+            )
+
+    def test_projection_scope_preserves_other_franchises(self):
+        self._track("10", "20")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="20",
+            root_media_id="20",
+            group_kind="singleton",
+            component_size=1,
+            source_profile_key="complete",
+            resolver_version="v1",
+        )
+
+        self.service.persist(
+            user=self.user,
+            resolution=self._resolution(self._group("10", ["10"])),
+            source_profile_key="complete",
+            scope_media_ids={"10"},
+        )
+
+        self.assertEqual(
+            set(
+                AnimeLocalSeriesMembership.objects.values_list(
+                    "media_id",
+                    flat=True,
+                )
+            ),
+            {"10", "20"},
+        )
+
+    def test_rejects_resolution_outside_projection_scope(self):
+        self._track("10")
+
+        with self.assertRaisesRegex(ValueError, "outside projection scope"):
+            self.service.persist(
+                user=self.user,
+                resolution=self._resolution(self._group("10", ["10"])),
+                source_profile_key="complete",
+                scope_media_ids={"20"},
             )

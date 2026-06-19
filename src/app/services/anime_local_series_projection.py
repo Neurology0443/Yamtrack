@@ -30,6 +30,7 @@ class AnimeLocalSeriesProjectionService:
         user,
         resolution,
         source_profile_key: str,
+        scope_media_ids,
     ) -> AnimeLocalSeriesProjectionStats:
         """Upsert memberships that still correspond to tracked MAL anime."""
         source_profile_key = str(source_profile_key).strip()
@@ -42,11 +43,20 @@ class AnimeLocalSeriesProjectionService:
             message = "resolver_version is required"
             raise ValueError(message)
 
+        normalized_scope_media_ids = {
+            str(media_id).strip()
+            for media_id in scope_media_ids
+            if media_id is not None and str(media_id).strip()
+        }
         resolved_media_ids = {
             str(media_id)
             for group in resolution.groups
             for media_id in group.member_media_ids
         }
+        if not resolved_media_ids.issubset(normalized_scope_media_ids):
+            message = "resolution contains media outside projection scope"
+            raise ValueError(message)
+
         tracked_media_ids = bulk_mal_anime_tracked_ids(
             user_id=user.id,
             media_ids=resolved_media_ids,
@@ -55,6 +65,7 @@ class AnimeLocalSeriesProjectionService:
         scoped_memberships = AnimeLocalSeriesMembership.objects.filter(
             user=user,
             source_profile_key=source_profile_key,
+            media_id__in=normalized_scope_media_ids,
         )
         deleted_old_versions, _ = scoped_memberships.exclude(
             resolver_version=resolver_version,
