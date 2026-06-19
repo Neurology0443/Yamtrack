@@ -330,6 +330,46 @@ class AnimeLocalSeriesProjectionServiceTests(TestCase):
             {"10", "20"},
         )
 
+    def test_replaces_stale_singleton_with_current_continuity_group(self):
+        media_ids = {"31240", "38414", "39587", "42203", "54857", "61316"}
+        self._track(*sorted(media_ids))
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="31240",
+            root_media_id="31240",
+            group_kind="singleton",
+            component_size=1,
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+        resolution = self._resolution(
+            self._group(
+                "38414",
+                ["38414", "31240", "39587", "42203", "54857", "61316"],
+            )
+        )
+
+        stats = self.service.persist(
+            user=self.user,
+            resolution=resolution,
+            source_profile_key="series_view",
+            scope_media_ids=media_ids,
+        )
+
+        self.assertEqual(stats.memberships_recorded, 6)
+        memberships = AnimeLocalSeriesMembership.objects.filter(
+            user=self.user,
+            source_profile_key="series_view",
+        )
+        self.assertEqual(memberships.count(), 6)
+        self.assertEqual(
+            set(memberships.values_list("root_media_id", flat=True)),
+            {"38414"},
+        )
+        stale_membership = memberships.get(media_id="31240")
+        self.assertEqual(stale_membership.group_kind, "main_continuity")
+        self.assertEqual(stale_membership.component_size, 6)
+
     def test_rejects_resolution_outside_projection_scope(self):
         self._track("10")
 
