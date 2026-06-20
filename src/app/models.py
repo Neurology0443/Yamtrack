@@ -825,6 +825,7 @@ class AnimeLocalSeriesMembership(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     media_id = models.CharField(max_length=36)
     root_media_id = models.CharField(max_length=36)
+    display_media_id = models.CharField(max_length=36, blank=True, default="")
     group_kind = models.CharField(max_length=40)
     context_parent_media_id = models.CharField(max_length=36, blank=True, default="")
     context_relation_type = models.CharField(max_length=40, blank=True, default="")

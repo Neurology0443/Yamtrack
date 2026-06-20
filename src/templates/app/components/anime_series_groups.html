@@ -1,18 +1,9 @@
 {% load app_tags %}
 
 {% for group in media_list %}
-  <section class="rounded-lg bg-[#2a2f35] p-4"
-           {% if forloop.last and media_list.has_next %} hx-get="{% url 'medialist' target_user.username media_type %}?page={{ media_list.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
-    <div class="mb-3 flex items-center justify-between gap-3">
-      <h2 class="min-w-0 truncate text-lg font-semibold">{{ group.title }}</h2>
-      <span class="shrink-0 rounded-full bg-[#39404b] px-2 py-1 text-xs text-gray-300">
-        {{ group.entries|length }} title{{ group.entries|length|pluralize }}
-      </span>
-    </div>
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-4">
-      {% for media in group.entries %}
-        {% include "app/components/media_card.html" with media=media item=media.item title=media.item from_grid=True %}
-      {% endfor %}
-    </div>
-  </section>
+  <div {% if forloop.last and media_list.has_next %} hx-get="{% url 'medialist' target_user.username media_type %}?page={{ media_list.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
+    {% with media=group.display_entry %}
+      {% include "app/components/media_card.html" with media=media item=media.item title=media.item from_grid=True %}
+    {% endwith %}
+  </div>
 {% endfor %}
