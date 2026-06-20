@@ -5,6 +5,12 @@ from dataclasses import dataclass, field
 from app.models import AnimeLocalSeriesMembership
 from app.services.anime_local_series_projection import SERIES_VIEW_PROFILE_KEY
 
+BRANCH_LABELS = {
+    "spin_off": "Spin Off",
+    "alternative_version": "Alternative Version",
+    "alternative_setting": "Alternative Setting",
+}
+
 
 @dataclass
 class AnimeSeriesViewGroup:
@@ -16,6 +22,7 @@ class AnimeSeriesViewGroup:
     entries: list = field(default_factory=list)
     context_parent_media_id: str = ""
     context_relation_type: str = ""
+    context_parent_title: str = ""
 
     @property
     def display_entry(self):
@@ -43,7 +50,41 @@ class AnimeSeriesViewGroup:
     @property
     def title(self):
         """Return the representative entry title."""
+        return self.display_title
+
+    @property
+    def display_title(self):
+        """Return the representative entry title for templates."""
         return self.display_entry.item.title
+
+    @property
+    def branch_label(self):
+        """Return a readable label for supported branch relations."""
+        return BRANCH_LABELS.get(self.context_relation_type, "")
+
+    @property
+    def branch_parent_title(self):
+        """Return a locally available parent title without external lookup."""
+        parent_entry = next(
+            (
+                entry
+                for entry in self.entries
+                if str(entry.item.media_id) == self.context_parent_media_id
+            ),
+            None,
+        )
+        if parent_entry is not None:
+            return parent_entry.item.title
+        return self.context_parent_title
+
+    @property
+    def branch_subtitle(self):
+        """Return a template-ready branch label and optional parent title."""
+        if not self.branch_label:
+            return ""
+        if self.branch_parent_title:
+            return f"{self.branch_label} • {self.branch_parent_title}"
+        return self.branch_label
 
 
 def build_anime_series_view(*, media_entries, user_id):
@@ -61,6 +102,9 @@ def build_anime_series_view(*, media_entries, user_id):
 
     groups = {}
     order = []
+    titles_by_media_id = {
+        str(entry.item.media_id): entry.item.title for entry in entries
+    }
     for entry in entries:
         media_id = str(entry.item.media_id)
         membership = membership_by_media_id.get(media_id)
@@ -90,4 +134,10 @@ def build_anime_series_view(*, media_entries, user_id):
             )
             order.append(key)
         groups[key].entries.append(entry)
-    return [groups[key] for key in order]
+    resolved_groups = [groups[key] for key in order]
+    for group in resolved_groups:
+        group.context_parent_title = titles_by_media_id.get(
+            group.context_parent_media_id,
+            "",
+        )
+    return resolved_groups

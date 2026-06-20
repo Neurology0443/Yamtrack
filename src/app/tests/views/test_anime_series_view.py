@@ -86,6 +86,46 @@ class AnimeSeriesViewTests(TestCase):
         mock_resolve.assert_not_called()
         mock_refresh.assert_not_called()
 
+    def test_series_view_card_hides_grid_hover_actions(self):
+        self.track("100", "Series Card")
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, 'data-anime-series-card="true"')
+        self.assertNotContains(response, 'title="Add to tracker"')
+        self.assertNotContains(response, 'title="Add to custom lists"')
+        self.assertNotContains(response, 'title="View your activity history"')
+
+    def test_grid_view_keeps_standard_hover_actions(self):
+        self.track("100", "Grid Card")
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "grid"},
+        )
+
+        self.assertNotContains(response, 'data-anime-series-card="true"')
+        self.assertContains(response, 'title="Add to tracker"')
+        self.assertContains(response, 'title="Add to custom lists"')
+        self.assertContains(response, 'title="View your activity history"')
+
+    def test_series_card_overlay_allows_three_title_lines(self):
+        self.track(
+            "100",
+            "A deliberately long anime franchise title for the hover overlay",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, 'data-anime-series-overlay="true"')
+        self.assertContains(response, "line-clamp-3")
+
     def test_missing_membership_uses_display_only_singleton(self):
         self.track("100", "Standalone")
 
@@ -149,6 +189,86 @@ class AnimeSeriesViewTests(TestCase):
         self.assertEqual(group.display_entry.item.media_id, "100")
         self.assertContains(response, "Root Entry")
         self.assertNotContains(response, "Sequel Entry")
+
+    def test_spin_off_card_shows_local_parent_title(self):
+        parent = self.track("100", "Parent Franchise")
+        spin_off = self.track("200", "Spin-off Series")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id=parent.item.media_id,
+            root_media_id="100",
+            display_media_id="100",
+            group_kind="singleton",
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id=spin_off.item.media_id,
+            root_media_id="200",
+            display_media_id="200",
+            group_kind="spin_off",
+            context_parent_media_id="100",
+            context_relation_type="spin_off",
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, "Spin Off • Parent Franchise")
+
+    def test_alternative_cards_use_supported_labels(self):
+        alternative_version = self.track("200", "Alternative Version Entry")
+        alternative_setting = self.track("300", "Alternative Setting Entry")
+        for anime, relation_type in (
+            (alternative_version, "alternative_version"),
+            (alternative_setting, "alternative_setting"),
+        ):
+            AnimeLocalSeriesMembership.objects.create(
+                user=self.user,
+                media_id=anime.item.media_id,
+                root_media_id=anime.item.media_id,
+                display_media_id=anime.item.media_id,
+                group_kind="alternative_branch",
+                context_parent_media_id="100",
+                context_relation_type=relation_type,
+                source_profile_key="series_view",
+                resolver_version="v1",
+            )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, "Alternative Version")
+        self.assertContains(response, "Alternative Setting")
+
+    def test_main_continuity_does_not_show_prequel_or_sequel_label(self):
+        main = self.track("100", "Main Continuity")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id=main.item.media_id,
+            root_media_id="100",
+            display_media_id="100",
+            group_kind="main_continuity",
+            context_parent_media_id="99",
+            context_relation_type="prequel",
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertNotContains(response, "Prequel")
+        self.assertNotContains(response, "Sequel")
 
     @patch("app.views._refresh_anime_series_view")
     def test_delete_schedules_refresh_after_commit(self, mock_refresh):
