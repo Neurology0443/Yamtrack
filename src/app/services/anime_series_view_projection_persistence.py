@@ -78,6 +78,10 @@ class AnimeSeriesViewProjectionPersistenceService:
                     defaults={
                         "root_media_id": str(group.root_media_id),
                         "display_media_id": str(group.display_media_id),
+                        "display_title": str(group.display.title),
+                        "display_image": str(group.display.image),
+                        "display_media_type": str(group.display.media_type),
+                        "display_start_date": group.display.start_date,
                         "group_kind": str(group.group_kind),
                         "context_parent_media_id": (
                             str(group.context_parent_media_id)
@@ -88,6 +92,11 @@ class AnimeSeriesViewProjectionPersistenceService:
                             str(group.context_relation_type)
                             if group.context_relation_type
                             else None
+                        ),
+                        "context_parent_title": (
+                            str(group.context_parent_title)
+                            if group.context_parent_title
+                            else ""
                         ),
                         "component_size": component_size,
                     },

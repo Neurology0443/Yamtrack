@@ -826,6 +826,10 @@ class AnimeSeriesViewMembership(models.Model):
     media_id = models.CharField(max_length=36)
     root_media_id = models.CharField(max_length=36)
     display_media_id = models.CharField(max_length=36)
+    display_title = models.CharField(max_length=500, blank=True, default="")
+    display_image = models.URLField(max_length=1000, blank=True, default="")
+    display_media_type = models.CharField(max_length=40, blank=True, default="")
+    display_start_date = models.DateField(null=True, blank=True)
     group_kind = models.CharField(max_length=40)
     context_parent_media_id = models.CharField(
         max_length=36,
@@ -836,6 +840,11 @@ class AnimeSeriesViewMembership(models.Model):
         max_length=40,
         null=True,
         blank=True,
+    )
+    context_parent_title = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
     )
     component_size = models.PositiveIntegerField(default=1)
     projection_version = models.CharField(max_length=20)

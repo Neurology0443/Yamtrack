@@ -6,9 +6,21 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from app.models import Anime, Item, MediaTypes, Sources, Status
+from app.models import (
+    Anime,
+    AnimeSeriesViewMembership,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+from app.services.anime_series_view_projection_refresh import (
+    AnimeSeriesViewProjectionRefreshService,
+)
 
 
 class AnimeSeriesViewImportIntegrationTests(TestCase):
@@ -86,4 +98,52 @@ class AnimeSeriesViewImportIntegrationTests(TestCase):
             user=self.user,
             seed_media_id="321",
             component_root_media_id="321",
+        )
+
+        nodes = [
+            AnimeNode(
+                media_id=media_id,
+                title=f"Anime {media_id}",
+                source="mal",
+                media_type="tv",
+                image=f"https://example.com/{media_id}.jpg",
+                start_date=None,
+            )
+            for media_id in ("321", "123", "124")
+        ]
+        relations = [
+            AnimeRelation("321", "123", "sequel"),
+            AnimeRelation("123", "124", "sequel"),
+        ]
+        nodes_by_media_id = {node.media_id: node for node in nodes}
+        final_snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes_by_media_id["321"],
+            nodes_by_media_id=nodes_by_media_id,
+            all_normalized_relations=relations,
+            continuity_component=nodes,
+            series_line=nodes,
+            direct_anchors=[],
+            direct_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="321",
+            canonical_root_media_id="321",
+        )
+        final_snapshot_service = Mock()
+        final_snapshot_service.build.return_value = final_snapshot
+
+        AnimeSeriesViewProjectionRefreshService(
+            snapshot_service=final_snapshot_service
+        ).refresh_for_media_ids(
+            user=self.user,
+            media_ids={"321"},
+        )
+
+        self.assertEqual(
+            set(
+                AnimeSeriesViewMembership.objects.filter(
+                    user=self.user,
+                    media_id__in={"123", "124"},
+                ).values_list("media_id", flat=True)
+            ),
+            {"123", "124"},
         )

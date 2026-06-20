@@ -1,10 +1,13 @@
 # ruff: noqa: D101, D102, D103
 
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from app.models import AnimeSeriesViewMembership
 from app.services.anime_series_view_projection import (
+    AnimeSeriesViewDisplay,
     AnimeSeriesViewGroup,
     AnimeSeriesViewProjection,
 )
@@ -17,12 +20,31 @@ def projection(*groups):
     return AnimeSeriesViewProjection(groups=groups, projection_version="v1")
 
 
-def group(root, members, *, display=None, kind="main_continuity"):
+def group(
+    root,
+    members,
+    *,
+    display=None,
+    kind="main_continuity",
+    parent=None,
+    parent_title=None,
+):
+    display_id = display or root
     return AnimeSeriesViewGroup(
         root_media_id=root,
-        display_media_id=display or root,
+        display_media_id=display_id,
+        display=AnimeSeriesViewDisplay(
+            media_id=display_id,
+            title=f"Display {display_id}",
+            image=f"https://example.com/{display_id}.jpg",
+            media_type="tv",
+            start_date=date(2020, 1, 1),
+        ),
         group_kind=kind,
         member_media_ids=tuple(members),
+        context_parent_media_id=parent,
+        context_parent_title=parent_title,
+        context_relation_type="spin_off" if parent else None,
     )
 
 
@@ -49,7 +71,48 @@ class AnimeSeriesViewProjectionPersistenceTests(TestCase):
         self.assertEqual(updated.memberships_updated, 2)
         membership = AnimeSeriesViewMembership.objects.get(media_id="1")
         self.assertEqual(membership.display_media_id, "2")
+        self.assertEqual(membership.display_title, "Display 2")
+        self.assertEqual(
+            membership.display_image,
+            "https://example.com/2.jpg",
+        )
+        self.assertEqual(membership.display_media_type, "tv")
+        self.assertEqual(membership.display_start_date, date(2020, 1, 1))
         self.assertEqual(membership.group_kind, "singleton")
+
+    def test_persists_context_parent_title(self):
+        self.service.persist(
+            user=self.user,
+            projection=projection(
+                group(
+                    "2",
+                    ("2",),
+                    parent="1",
+                    parent_title="Main Anime",
+                )
+            ),
+            scope_media_ids={"1", "2"},
+        )
+
+        membership = AnimeSeriesViewMembership.objects.get(media_id="2")
+        self.assertEqual(membership.context_parent_title, "Main Anime")
+
+    def test_non_member_root_display_and_parent_do_not_fail_scope_validation(self):
+        stats = self.service.persist(
+            user=self.user,
+            projection=projection(
+                group(
+                    "root",
+                    ("tracked",),
+                    display="display",
+                    parent="parent",
+                    parent_title="Parent",
+                )
+            ),
+            scope_media_ids={"tracked"},
+        )
+
+        self.assertEqual(stats.memberships_created, 1)
 
     def test_delete_stale_only_inside_scope(self):
         for media_id in ("1", "2", "outside"):

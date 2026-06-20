@@ -102,6 +102,17 @@ class AnimeSeriesViewProjectionRefreshService:
                     scope_media_ids=scope,
                     dry_run=dry_run,
                 )
+                logger.debug(
+                    "Anime Series View snapshot projected",
+                    extra={
+                        "user_id": user.id,
+                        "requested_media_id": media_id,
+                        "scope_size": len(scope),
+                        "tracked_ids_count": len(tracked_ids),
+                        "groups_count": len(projection.groups),
+                        "dry_run": dry_run,
+                    },
+                )
             except Exception:
                 stats.errors += 1
                 stats.snapshots_skipped += 1

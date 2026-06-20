@@ -2,25 +2,41 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import date
 
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
-    from app.services.anime_franchise_types import AnimeRelation
 
 
+GROUPABLE_RELATIONS = frozenset(
+    {
+        "prequel",
+        "sequel",
+        "side_story",
+        "parent_story",
+        "summary",
+        "full_story",
+    }
+)
+BRANCH_BOUNDARY_RELATIONS = frozenset(
+    {"spin_off", "alternative_version", "alternative_setting"}
+)
 CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
-BRANCH_RELATIONS = frozenset(
-    {"spin_off", "alternative_version", "alternative_setting"},
-)
-AFFILIATE_RELATIONS = frozenset(
-    {"side_story", "parent_story", "summary", "full_story"},
-)
-STRONG_AFFILIATE_RELATIONS = frozenset({"parent_story", "full_story"})
+
+
+@dataclass(frozen=True)
+class AnimeSeriesViewDisplay:
+    """Snapshot metadata required to render a Series View card."""
+
+    media_id: str
+    title: str
+    image: str
+    media_type: str
+    start_date: date | None
 
 
 @dataclass(frozen=True)
@@ -37,9 +53,11 @@ class AnimeSeriesViewGroup:
 
     root_media_id: str
     display_media_id: str
+    display: AnimeSeriesViewDisplay
     group_kind: str
     member_media_ids: tuple[str, ...]
     context_parent_media_id: str | None = None
+    context_parent_title: str | None = None
     context_relation_type: str | None = None
 
 
@@ -67,7 +85,7 @@ class _DisjointSet:
 
 
 class AnimeSeriesViewProjectionBuilder:
-    """Build deterministic local groups without DB or provider access."""
+    """Split a canonical snapshot into deterministic local Series View cards."""
 
     projection_version = "v1"
 
@@ -94,87 +112,70 @@ class AnimeSeriesViewProjectionBuilder:
         branch_boundaries = {
             frozenset((relation.source_media_id, relation.target_media_id))
             for relation in relations
-            if relation.relation_type in BRANCH_RELATIONS
+            if relation.relation_type in BRANCH_BOUNDARY_RELATIONS
             and relation.source_media_id != relation.target_media_id
         }
-        components = self._continuity_components(
+        components = self._series_view_components(
             nodes=nodes,
             relations=relations,
             branch_boundaries=branch_boundaries,
         )
-        tracked_by_component = self._tracked_by_component(components, tracked_ids)
-        affiliate_parents, affiliate_contexts = self._project_affiliate_contexts(
-            relations=relations,
-            components=components,
-            tracked_by_component=tracked_by_component,
-            branch_boundaries=branch_boundaries,
-        )
+        component_members = {
+            root: frozenset(members)
+            for root, members in components.members.items()
+        }
         branch_contexts = self._project_branch_contexts(
+            snapshot=snapshot,
             relations=relations,
             components=components,
-            tracked_by_component=tracked_by_component,
+            component_members=component_members,
+            nodes=nodes,
         )
-
-        grouped_components = defaultdict(set)
-        for component_id, member_ids in tracked_by_component.items():
-            if not member_ids:
-                continue
-            grouped_components[
-                self._collapsed_component(component_id, affiliate_parents)
-            ].add(component_id)
+        series_line_ids = {
+            str(node.media_id) for node in snapshot.series_line
+        }
 
         groups = []
-        for group_component, included_components in grouped_components.items():
-            member_ids = {
-                media_id
-                for component_id in included_components
-                for media_id in tracked_by_component[component_id]
-            }
-            primary_members = tracked_by_component[group_component]
-            ordered_primary_members = self._order_members(
-                member_ids=primary_members,
-                relations=relations,
+        for component_id, component_media_ids in component_members.items():
+            member_ids = tracked_ids & component_media_ids
+            if not member_ids:
+                continue
+            representative = self._representative_node(
+                component_media_ids=component_media_ids,
+                snapshot=snapshot,
                 nodes=nodes,
             )
-            ordered_all_members = self._order_members(
-                member_ids=member_ids,
-                relations=relations,
-                nodes=nodes,
-            )
-            ordered_members = (
-                *ordered_primary_members,
-                *(
-                    media_id
-                    for media_id in ordered_all_members
-                    if media_id not in primary_members
-                ),
-            )
-            root_media_id = ordered_members[0]
-            context = self._group_context(
-                included_components=included_components,
-                branch_contexts=branch_contexts,
-                affiliate_contexts=affiliate_contexts,
-            )
-            group_kind = self._group_kind(
-                member_ids=member_ids,
-                included_components=included_components,
-                context=context,
-            )
+            context = branch_contexts.get(component_id)
             groups.append(
                 AnimeSeriesViewGroup(
-                    root_media_id=root_media_id,
-                    display_media_id=self._display_media_id(
-                        ordered_members=ordered_members,
+                    root_media_id=representative.media_id,
+                    display_media_id=representative.media_id,
+                    display=self._display(representative),
+                    group_kind=self._group_kind(
+                        component_media_ids=component_media_ids,
+                        representative_media_id=representative.media_id,
+                        series_line_ids=series_line_ids,
+                        context=context,
+                    ),
+                    member_media_ids=self._order_members(
+                        member_ids=member_ids,
+                        snapshot=snapshot,
+                        relations=relations,
                         nodes=nodes,
                     ),
-                    group_kind=group_kind,
-                    member_media_ids=ordered_members,
                     context_parent_media_id=context[0] if context else None,
-                    context_relation_type=context[1] if context else None,
+                    context_parent_title=context[1] if context else None,
+                    context_relation_type=context[2] if context else None,
                 )
             )
 
-        groups.sort(key=lambda group: _node_key(nodes[group.root_media_id]))
+        groups.sort(
+            key=lambda group: self._representative_sort_key(
+                media_id=group.root_media_id,
+                snapshot=snapshot,
+                nodes=nodes,
+            )
+        )
         return AnimeSeriesViewProjection(
             groups=tuple(groups),
             projection_version=self.projection_version,
@@ -205,182 +206,179 @@ class AnimeSeriesViewProjectionBuilder:
             )
         )
 
-    def _continuity_components(self, *, nodes, relations, branch_boundaries):
+    @staticmethod
+    def _series_view_components(*, nodes, relations, branch_boundaries):
         components = _DisjointSet(nodes)
         for relation in relations:
-            if relation.relation_type not in CONTINUITY_RELATIONS:
+            if relation.relation_type not in GROUPABLE_RELATIONS:
                 continue
             left = relation.source_media_id
             right = relation.target_media_id
+            if frozenset((left, right)) in branch_boundaries:
+                continue
             left_root = components.find(left)
             right_root = components.find(right)
             if left_root == right_root:
                 continue
-            merged = components.members[left_root] | components.members[right_root]
-            if any(boundary <= merged for boundary in branch_boundaries):
+            merged_members = (
+                components.members[left_root] | components.members[right_root]
+            )
+            if any(boundary <= merged_members for boundary in branch_boundaries):
                 continue
             components.union(left, right)
         return components
 
-    @staticmethod
-    def _tracked_by_component(components, tracked_ids):
-        tracked_by_component = defaultdict(set)
-        for media_id in tracked_ids:
-            tracked_by_component[components.find(media_id)].add(media_id)
-        return tracked_by_component
-
     def _project_branch_contexts(
         self,
         *,
+        snapshot,
         relations,
         components,
-        tracked_by_component,
+        component_members,
+        nodes,
     ):
         contexts = {}
         ambiguous = set()
-        observed = set()
         for relation in relations:
-            if relation.relation_type not in BRANCH_RELATIONS:
+            if relation.relation_type not in BRANCH_BOUNDARY_RELATIONS:
                 continue
-            source_component = components.find(relation.source_media_id)
-            target_component = components.find(relation.target_media_id)
-            if source_component == target_component:
+            left_component = components.find(relation.source_media_id)
+            right_component = components.find(relation.target_media_id)
+            if left_component == right_component:
                 continue
-            reverse_key = (
-                relation.target_media_id,
-                relation.source_media_id,
+            orientation = self._visual_parent_components(
+                left_component=left_component,
+                right_component=right_component,
+                component_members=component_members,
+                snapshot=snapshot,
+            )
+            if orientation is None:
+                continue
+            parent_component, branch_component = orientation
+            parent = self._representative_node(
+                component_media_ids=component_members[parent_component],
+                snapshot=snapshot,
+                nodes=nodes,
+            )
+            candidate = (
+                parent.media_id,
+                parent.title,
                 relation.relation_type,
             )
-            if reverse_key in observed:
-                ambiguous.update((source_component, target_component))
-            observed.add(
-                (
-                    relation.source_media_id,
-                    relation.target_media_id,
-                    relation.relation_type,
-                )
-            )
-            if not tracked_by_component.get(target_component):
-                continue
-            parent_id = min(
-                tracked_by_component.get(source_component)
-                or {relation.source_media_id},
-                key=_media_id_key,
-            )
-            candidate = (parent_id, relation.relation_type)
-            previous = contexts.get(target_component)
+            previous = contexts.get(branch_component)
             if previous is not None and previous != candidate:
-                ambiguous.add(target_component)
+                ambiguous.add(branch_component)
             else:
-                contexts[target_component] = candidate
+                contexts[branch_component] = candidate
         return {
             component_id: context
             for component_id, context in contexts.items()
             if component_id not in ambiguous
         }
 
-    def _project_affiliate_contexts(
-        self,
+    @staticmethod
+    def _visual_parent_components(
         *,
-        relations,
-        components,
-        tracked_by_component,
-        branch_boundaries,
+        left_component,
+        right_component,
+        component_members,
+        snapshot,
     ):
-        parent_by_component = {}
-        contexts = {}
-        affiliate_relations = sorted(
-            (
-                relation
-                for relation in relations
-                if relation.relation_type in AFFILIATE_RELATIONS
-            ),
-            key=lambda relation: (
-                relation.relation_type not in STRONG_AFFILIATE_RELATIONS,
-                _media_id_key(relation.source_media_id),
-                _media_id_key(relation.target_media_id),
-            ),
+        left_members = component_members[left_component]
+        right_members = component_members[right_component]
+        series_line_ids = {
+            str(node.media_id) for node in snapshot.series_line
+        }
+        anchors = (
+            series_line_ids,
+            {str(snapshot.canonical_root_media_id)},
+            {str(snapshot.root_node.media_id)},
         )
-        for relation in affiliate_relations:
-            parent_id, affiliate_id = self._affiliate_orientation(relation)
-            parent_component = components.find(parent_id)
-            affiliate_component = components.find(affiliate_id)
-            if parent_component == affiliate_component:
+        for anchor_ids in anchors:
+            left_has_anchor = bool(left_members & anchor_ids)
+            right_has_anchor = bool(right_members & anchor_ids)
+            if left_has_anchor == right_has_anchor:
                 continue
-            if frozenset((parent_id, affiliate_id)) in branch_boundaries:
-                continue
-            parent_tracked = tracked_by_component.get(parent_component, set())
-            affiliate_tracked = tracked_by_component.get(affiliate_component, set())
-            if parent_tracked and affiliate_tracked:
-                previous = parent_by_component.get(affiliate_component)
-                if previous is None:
-                    parent_by_component[affiliate_component] = parent_component
-                elif previous != parent_component:
-                    parent_by_component.pop(affiliate_component, None)
-                continue
-            if affiliate_tracked and not parent_tracked:
-                contexts.setdefault(
-                    affiliate_component,
-                    (parent_id, relation.relation_type),
-                )
-        return parent_by_component, contexts
+            if left_has_anchor:
+                return left_component, right_component
+            return right_component, left_component
+        return None
 
     @staticmethod
-    def _affiliate_orientation(relation: AnimeRelation):
-        return relation.source_media_id, relation.target_media_id
+    def _representative_node(*, component_media_ids, snapshot, nodes):
+        for series_node in snapshot.series_line:
+            media_id = str(series_node.media_id)
+            if media_id in component_media_ids:
+                return nodes[media_id]
+        tv_nodes = [
+            nodes[media_id]
+            for media_id in component_media_ids
+            if nodes[media_id].media_type.lower() in {"tv", "ona"}
+        ]
+        if tv_nodes:
+            return min(tv_nodes, key=_node_key)
+        return min(
+            (nodes[media_id] for media_id in component_media_ids),
+            key=_node_key,
+        )
 
     @staticmethod
-    def _collapsed_component(component_id, parent_by_component):
-        visited = set()
-        while component_id in parent_by_component and component_id not in visited:
-            visited.add(component_id)
-            component_id = parent_by_component[component_id]
-        return component_id
+    def _display(node):
+        return AnimeSeriesViewDisplay(
+            media_id=str(node.media_id),
+            title=str(node.title),
+            image=str(node.image),
+            media_type=str(node.media_type),
+            start_date=node.start_date,
+        )
 
     @staticmethod
-    def _group_context(
+    def _group_kind(
         *,
-        included_components,
-        branch_contexts,
-        affiliate_contexts,
+        component_media_ids,
+        representative_media_id,
+        series_line_ids,
+        context,
     ):
-        branch = {
-            branch_contexts[component_id]
-            for component_id in included_components
-            if component_id in branch_contexts
-        }
-        if len(branch) == 1:
-            return branch.pop()
-        affiliate = {
-            affiliate_contexts[component_id]
-            for component_id in included_components
-            if component_id in affiliate_contexts
-        }
-        return affiliate.pop() if len(affiliate) == 1 else None
-
-    @staticmethod
-    def _group_kind(*, member_ids, included_components, context):
-        if context and context[1] == "spin_off":
+        if context and context[2] == "spin_off":
             return "spin_off"
-        if context and context[1] in {"alternative_version", "alternative_setting"}:
+        if context and context[2] in {"alternative_version", "alternative_setting"}:
             return "alternative_branch"
-        if context and context[1] in AFFILIATE_RELATIONS:
-            return "satellite"
-        if len(member_ids) > 1 or len(included_components) > 1:
+        if (
+            len(component_media_ids) > 1
+            or representative_media_id in series_line_ids
+        ):
             return "main_continuity"
         return "singleton"
 
-    def _order_members(self, *, member_ids, relations, nodes):
-        continuity_relations = [
-            relation
-            for relation in relations
-            if relation.relation_type in CONTINUITY_RELATIONS
-            and relation.source_media_id in member_ids
-            and relation.target_media_id in member_ids
-        ]
+    def _order_members(self, *, member_ids, snapshot, relations, nodes):
+        series_order = {
+            str(node.media_id): index
+            for index, node in enumerate(snapshot.series_line)
+        }
+        series_members = sorted(
+            (media_id for media_id in member_ids if media_id in series_order),
+            key=series_order.__getitem__,
+        )
+        remaining = set(member_ids) - set(series_members)
+        continuity_order = self._continuity_order(
+            member_ids=remaining,
+            relations=relations,
+            nodes=nodes,
+        )
+        return (*series_members, *continuity_order)
+
+    @staticmethod
+    def _continuity_order(*, member_ids, relations, nodes):
         predecessors = {media_id: set() for media_id in member_ids}
         successors = {media_id: set() for media_id in member_ids}
-        for relation in continuity_relations:
+        for relation in relations:
+            if (
+                relation.relation_type not in CONTINUITY_RELATIONS
+                or relation.source_media_id not in member_ids
+                or relation.target_media_id not in member_ids
+            ):
+                continue
             if relation.relation_type == "sequel":
                 before, after = relation.source_media_id, relation.target_media_id
             else:
@@ -401,18 +399,23 @@ class AnimeSeriesViewProjectionBuilder:
                 if not predecessors[successor] and successor not in ordered:
                     ready.append(successor)
                     ready.sort(key=lambda media_id: _node_key(nodes[media_id]))
-        remaining = sorted(
-            member_ids - set(ordered),
-            key=lambda media_id: _node_key(nodes[media_id]),
+        return (
+            *ordered,
+            *sorted(
+                member_ids - set(ordered),
+                key=lambda media_id: _node_key(nodes[media_id]),
+            ),
         )
-        return (*ordered, *remaining)
 
     @staticmethod
-    def _display_media_id(*, ordered_members, nodes):
-        for media_id in ordered_members:
-            if nodes[media_id].media_type.lower() in {"tv", "ona"}:
-                return media_id
-        return ordered_members[0]
+    def _representative_sort_key(*, media_id, snapshot, nodes):
+        series_order = {
+            str(node.media_id): index
+            for index, node in enumerate(snapshot.series_line)
+        }
+        if media_id in series_order:
+            return (0, series_order[media_id], _media_id_key(media_id))
+        return (1, *_node_key(nodes[media_id]))
 
 
 def _node_key(node):

@@ -1,39 +1,37 @@
 {% load app_tags %}
 
-{% with media=group.display_entry item=group.display_entry.item %}
-  <article class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg"
-           data-anime-series-card="true">
-    <div class="relative">
-      <a href="{{ item|media_url }}">
-        <img alt="{{ group.display_title }}"
-             class="lazyload w-full aspect-2/3 bg-[#3e454d] {% if item.image != IMG_NONE %}object-cover{% endif %}"
-             data-src="{{ item.image }}"
-             src="{{ IMG_NONE }}">
-      </a>
+<article class="bg-[#2a2f35] rounded-lg overflow-hidden shadow-lg"
+         data-anime-series-card="true">
+  <div class="relative">
+    <a href="{{ group.display.details_url }}">
+      <img alt="{{ group.display.title }}"
+           class="lazyload w-full aspect-2/3 bg-[#3e454d] {% if group.display.image != IMG_NONE %}object-cover{% endif %}"
+           data-src="{{ group.display.image }}"
+           src="{{ IMG_NONE }}">
+    </a>
 
-      {% if group.branch_subtitle %}
-        <div class="absolute bottom-2 left-2 right-2 rounded bg-gray-950/90 px-2 py-1 text-xs font-medium text-indigo-100">
-          {{ group.branch_subtitle }}
-        </div>
-      {% endif %}
-    </div>
+    {% if group.branch_subtitle %}
+      <div class="absolute bottom-2 left-2 right-2 rounded bg-gray-950/90 px-2 py-1 text-xs font-medium text-indigo-100">
+        {{ group.branch_subtitle }}
+      </div>
+    {% endif %}
+  </div>
 
-    <div class="p-3">
-      <a href="{{ item|media_url }}"
-         class="text-sm font-semibold text-white hover:text-indigo-400 transition line-clamp-1"
-         title="{{ group.display_title }}">{{ group.display_title }}</a>
+  <div class="p-3">
+    <a href="{{ group.display.details_url }}"
+       class="text-sm font-semibold text-white hover:text-indigo-400 transition line-clamp-1"
+       title="{{ group.display.title }}">{{ group.display.title }}</a>
 
-      {% if group.entries|length > 1 %}
-        <ul class="mt-2 space-y-1 text-xs text-slate-400"
-            aria-label="Series members">
-          {% for entry in group.entries %}
-            <li class="line-clamp-1">
-              <a href="{{ entry.item|media_url }}"
-                 class="hover:text-slate-200">{{ entry.item.title }}</a>
-            </li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    </div>
-  </article>
-{% endwith %}
+    {% if group.entries|length > 1 or not group.display.is_tracked %}
+      <ul class="mt-2 space-y-1 text-xs text-slate-400"
+          aria-label="Series members">
+        {% for entry in group.entries %}
+          <li class="line-clamp-1">
+            <a href="{{ entry.item|media_url }}"
+               class="hover:text-slate-200">{{ entry.item.title }}</a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</article>
