@@ -130,6 +130,37 @@ class AnimeSeriesViewTests(TestCase):
             "Alternative Version • Sword Art Online",
         )
 
+    def test_branch_context_is_preserved_when_only_branch_continuation_is_filtered(
+        self,
+    ):
+        self.track("3", "Alternative Movie 2")
+        self.membership(
+            "3",
+            root="2",
+            display="2",
+            display_title="Alternative Movie 1",
+            display_image="https://example.com/alternative-movie-1.jpg",
+            relation="alternative_version",
+            parent="1",
+            parent_title="Main TV",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.root_media_id, "2")
+        self.assertEqual(group.display.media_id, "2")
+        self.assertEqual(group.display.title, "Alternative Movie 1")
+        self.assertEqual(group.branch_subtitle, "Alternative Version • Main TV")
+        self.assertEqual(
+            [entry.item.media_id for entry in group.entries],
+            ["3"],
+        )
+        self.assertContains(response, "Alternative Version • Main TV")
+
     def test_tracked_display_exposes_local_entry(self):
         self.track("1", "Season 1")
         self.membership(
