@@ -62,16 +62,11 @@
       {% endif %}
 
       <a href="{{ item|media_url }}"
-         class="absolute inset-0 bg-black/65 opacity-0 hover-tap:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3"
+         class="absolute inset-0 bg-black/65 opacity-0 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3"
          data-anime-series-overlay="true">
         <div class="text-sm font-semibold text-white line-clamp-3">{{ group.display_title }}</div>
         {% if group.branch_subtitle %}
           <div class="mt-2 text-xs font-medium text-indigo-200/90 line-clamp-2">{{ group.branch_subtitle }}</div>
-        {% endif %}
-        {% if group.entries|length > 1 %}
-          <div class="mt-2 text-[11px] text-slate-300/90">
-            {{ group.entries|length }} title{{ group.entries|length|pluralize }}
-          </div>
         {% endif %}
       </a>
     </div>

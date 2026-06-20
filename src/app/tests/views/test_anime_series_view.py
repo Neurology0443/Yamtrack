@@ -125,6 +125,28 @@ class AnimeSeriesViewTests(TestCase):
 
         self.assertContains(response, 'data-anime-series-overlay="true"')
         self.assertContains(response, "line-clamp-3")
+        self.assertContains(response, "hover:opacity-100")
+
+    def test_series_card_does_not_show_group_title_count(self):
+        first = self.track("100", "First")
+        second = self.track("101", "Second")
+        for anime in (first, second):
+            AnimeLocalSeriesMembership.objects.create(
+                user=self.user,
+                media_id=anime.item.media_id,
+                root_media_id="100",
+                display_media_id="100",
+                group_kind="main_continuity",
+                source_profile_key="series_view",
+                resolver_version="v1",
+            )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertNotContains(response, "2 titles")
 
     def test_missing_membership_uses_display_only_singleton(self):
         self.track("100", "Standalone")

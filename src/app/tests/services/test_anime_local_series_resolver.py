@@ -178,6 +178,41 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
         )
         branch = next(group for group in result.groups if group.root_media_id == "2")
         self.assertEqual(branch.group_kind, "spin_off")
+        self.assertEqual(branch.context_parent_media_id, "1")
+        self.assertEqual(branch.context_relation_type, "spin_off")
+
+    def test_konosuba_like_reverse_spin_off_edge_labels_spin_off_component(self):
+        nodes = [
+            node("30831", media_type="tv", start_date=date(2016, 1, 14)),
+            node("51958", media_type="tv", start_date=date(2023, 4, 6)),
+            node("57833", media_type="tv", start_date=date(2026, 1, 1)),
+        ]
+        relations = [
+            AnimeRelation("51958", "30831", "spin_off"),
+            AnimeRelation("51958", "57833", "sequel"),
+        ]
+
+        result = AnimeLocalSeriesResolver().resolve(
+            snapshot=snapshot(
+                root_id="51958",
+                nodes=nodes,
+                relations=relations,
+                canonical_root_id="51958",
+                series_ids=("30831",),
+            ),
+            tracked_media_ids={"30831", "51958", "57833"},
+        )
+
+        main_group = next(
+            group for group in result.groups if "30831" in group.member_media_ids
+        )
+        spin_off_group = next(
+            group for group in result.groups if "51958" in group.member_media_ids
+        )
+        self.assertIsNone(main_group.context_relation_type)
+        self.assertEqual(spin_off_group.group_kind, "spin_off")
+        self.assertEqual(spin_off_group.context_relation_type, "spin_off")
+        self.assertEqual(spin_off_group.context_parent_media_id, "30831")
 
     def test_side_story_does_not_reconnect_spin_off_branches(self):
         nodes = [
@@ -256,3 +291,41 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
             group for group in result.groups if "2" in group.member_media_ids
         )
         self.assertEqual(alternative.group_kind, "alternative_branch")
+
+    def test_alternative_context_stays_on_branch_when_canonical_root_is_alternative(
+        self,
+    ):
+        nodes = [
+            node("100", media_type="tv", start_date=date(2012, 7, 8)),
+            node("101", media_type="tv", start_date=date(2014, 7, 5)),
+            node("200", media_type="movie", start_date=date(2021, 10, 30)),
+        ]
+        relations = [
+            AnimeRelation("100", "101", "sequel"),
+            AnimeRelation("200", "100", "alternative_version"),
+        ]
+
+        result = AnimeLocalSeriesResolver().resolve(
+            snapshot=snapshot(
+                root_id="200",
+                nodes=nodes,
+                relations=relations,
+                canonical_root_id="200",
+                series_ids=("100", "101"),
+            ),
+            tracked_media_ids={"100", "101", "200"},
+        )
+
+        main_group = next(
+            group for group in result.groups if "100" in group.member_media_ids
+        )
+        alternative_group = next(
+            group for group in result.groups if "200" in group.member_media_ids
+        )
+        self.assertIsNone(main_group.context_relation_type)
+        self.assertEqual(alternative_group.group_kind, "alternative_branch")
+        self.assertEqual(
+            alternative_group.context_relation_type,
+            "alternative_version",
+        )
+        self.assertEqual(alternative_group.context_parent_media_id, "100")

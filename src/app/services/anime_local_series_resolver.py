@@ -243,8 +243,17 @@ class AnimeLocalSeriesResolver:
         return contexts
 
     def _branch_contexts(self, *, snapshot, relations, components):
-        canonical_component = components.find(
-            str(snapshot.canonical_root_media_id)
+        """Attach branch context using snapshot facts, not edge observation order.
+
+        For branch relation types, ``AnimeRelation.source_media_id`` is the MAL
+        node whose metadata exposed the relation. It does not reliably identify
+        the main-series parent. Prefer the component represented by the snapshot
+        series line, then TV/ONA continuity weight, component size, and stable
+        chronological ordering.
+        """
+        component_members = self._component_members(
+            snapshot.nodes_by_media_id,
+            components,
         )
         contexts = {}
         for relation in relations:
@@ -254,30 +263,47 @@ class AnimeLocalSeriesResolver:
             target_component = components.find(relation.target_media_id)
             if source_component == target_component:
                 continue
-            if source_component == canonical_component:
+
+            source_rank = self._branch_parent_rank(
+                snapshot=snapshot,
+                member_ids=component_members[source_component],
+            )
+            target_rank = self._branch_parent_rank(
+                snapshot=snapshot,
+                member_ids=component_members[target_component],
+            )
+            if source_rank <= target_rank:
                 child_component = target_component
                 parent_media_id = relation.source_media_id
-            elif target_component == canonical_component:
+            else:
                 child_component = source_component
                 parent_media_id = relation.target_media_id
-            else:
-                source_key = self._node_sort_key(
-                    snapshot.nodes_by_media_id[relation.source_media_id]
-                )
-                target_key = self._node_sort_key(
-                    snapshot.nodes_by_media_id[relation.target_media_id]
-                )
-                if source_key <= target_key:
-                    child_component = target_component
-                    parent_media_id = relation.source_media_id
-                else:
-                    child_component = source_component
-                    parent_media_id = relation.target_media_id
             contexts.setdefault(
                 child_component,
                 (parent_media_id, relation.relation_type),
             )
         return contexts
+
+    def _branch_parent_rank(self, *, snapshot, member_ids):
+        """Rank components by how closely they resemble the main continuity."""
+        nodes = snapshot.nodes_by_media_id
+        series_line_ids = {
+            str(node.media_id) for node in snapshot.series_line
+        }
+        series_line_count = len(member_ids & series_line_ids)
+        primary_count = sum(
+            nodes[media_id].media_type in PRIMARY_DISPLAY_MEDIA_TYPES
+            for media_id in member_ids
+        )
+        earliest_node_key = min(
+            self._node_sort_key(nodes[media_id]) for media_id in member_ids
+        )
+        return (
+            -series_line_count,
+            -primary_count,
+            -len(member_ids),
+            earliest_node_key,
+        )
 
     def _root_media_id(self, *, snapshot, relations, member_ids):
         incoming = defaultdict(set)
