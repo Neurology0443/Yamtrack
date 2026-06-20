@@ -12,10 +12,16 @@ from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
 class FakeGraphBuilder:
-    def __init__(self, nodes):
+    def __init__(self, nodes, build_media_ids=None):
         self.nodes = nodes
+        self.build_media_ids = build_media_ids
 
     def build(self, root_media_id):
+        if self.build_media_ids is not None:
+            return {
+                media_id: self.nodes[media_id]
+                for media_id in self.build_media_ids
+            }
         return self.nodes
 
     def get_direct_neighbors(self, media_id):
@@ -35,9 +41,10 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         *,
         nodes,
         root_media_id,
+        build_media_ids=None,
     ):
         return AnimeFranchiseSnapshotService(
-            graph_builder=FakeGraphBuilder(nodes)
+            graph_builder=FakeGraphBuilder(nodes, build_media_ids)
         ).build(root_media_id)
 
     def test_branch_relation_orients_progressive_edge_exposed_from_branch(self):
@@ -125,7 +132,9 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
             [AnimeBranchRelation("100", "42916", "alternative_version")],
         )
 
-    def test_branch_relation_orients_reverse_konosuba_spin_off(self):
+    def test_branch_relation_orients_reverse_konosuba_spin_off_from_branch_root(
+        self,
+    ):
         nodes = {
             "30831": AnimeNode(
                 "30831",
@@ -158,25 +167,58 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 [],
             ),
         }
-        service = AnimeFranchiseSnapshotService(
-            graph_builder=FakeGraphBuilder(nodes)
-        )
-        branch_relations = service._derive_branch_relations(
-            nodes_by_media_id=nodes,
-            all_relations=[
-                relation
-                for node in nodes.values()
-                for relation in node.relations
-            ],
-            series_line=[nodes["30831"]],
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="51958",
         )
 
         self.assertEqual(
-            branch_relations,
+            snapshot.branch_relations,
             [AnimeBranchRelation("30831", "51958", "spin_off")],
         )
 
-    def test_branch_relation_orients_alternative_setting(self):
+    def test_branch_relation_orients_konosuba_spin_off_from_main_root(self):
+        nodes = {
+            "30831": AnimeNode(
+                "30831",
+                "KonoSuba",
+                "mal",
+                "tv",
+                "img",
+                date(2016, 1, 14),
+                [AnimeRelation("30831", "51958", "spin_off")],
+            ),
+            "51958": AnimeNode(
+                "51958",
+                "Bakuen",
+                "mal",
+                "tv",
+                "img",
+                date(2023, 4, 6),
+                [AnimeRelation("51958", "57833", "sequel")],
+            ),
+            "57833": AnimeNode(
+                "57833",
+                "Bakuen 2",
+                "mal",
+                "tv",
+                "img",
+                date(2026, 1, 1),
+                [],
+            ),
+        }
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="30831",
+            build_media_ids={"30831"},
+        )
+
+        self.assertEqual(
+            snapshot.branch_relations,
+            [AnimeBranchRelation("30831", "51958", "spin_off")],
+        )
+
+    def test_branch_relation_orients_alternative_setting_from_either_root(self):
         nodes = {
             "1": AnimeNode("1", "Main", "mal", "tv", "img", None, []),
             "2": AnimeNode(
@@ -189,47 +231,25 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 [AnimeRelation("2", "1", "alternative_setting")],
             ),
         }
-        service = AnimeFranchiseSnapshotService(
-            graph_builder=FakeGraphBuilder(nodes)
+        branch_snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="2",
         )
-
-        branch_relations = service._derive_branch_relations(
-            nodes_by_media_id=nodes,
-            all_relations=nodes["2"].relations,
-            series_line=[nodes["1"]],
+        main_snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="1",
         )
 
         self.assertEqual(
-            branch_relations,
+            branch_snapshot.branch_relations,
+            [AnimeBranchRelation("1", "2", "alternative_setting")],
+        )
+        self.assertEqual(
+            main_snapshot.branch_relations,
             [AnimeBranchRelation("1", "2", "alternative_setting")],
         )
 
-    def test_branch_relations_are_empty_without_series_line(self):
-        nodes = {
-            "1": AnimeNode(
-                "1",
-                "One",
-                "mal",
-                "movie",
-                "img",
-                None,
-                [AnimeRelation("1", "2", "alternative_version")],
-            ),
-            "2": AnimeNode("2", "Two", "mal", "movie", "img", None, []),
-        }
-        service = AnimeFranchiseSnapshotService(
-            graph_builder=FakeGraphBuilder(nodes)
-        )
-
-        branch_relations = service._derive_branch_relations(
-            nodes_by_media_id=nodes,
-            all_relations=nodes["1"].relations,
-            series_line=[],
-        )
-
-        self.assertEqual(branch_relations, [])
-
-    def test_branch_relations_are_empty_when_both_components_touch_series_line(
+    def test_branch_relations_are_empty_when_both_components_are_parent_anchors(
         self,
     ):
         nodes = {
@@ -243,18 +263,76 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
                 [AnimeRelation("1", "2", "alternative_version")],
             ),
             "2": AnimeNode("2", "Two", "mal", "tv", "img", None, []),
+            "3": AnimeNode("3", "Root", "mal", "movie", "img", None, []),
         }
-        service = AnimeFranchiseSnapshotService(
-            graph_builder=FakeGraphBuilder(nodes)
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="3",
         )
 
-        branch_relations = service._derive_branch_relations(
-            nodes_by_media_id=nodes,
-            all_relations=nodes["1"].relations,
-            series_line=[nodes["1"], nodes["2"]],
+        self.assertEqual(snapshot.branch_relations, [])
+
+    def test_branch_relations_are_empty_without_parent_anchor_component(self):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "One",
+                "mal",
+                "movie",
+                "img",
+                None,
+                [AnimeRelation("1", "2", "alternative_version")],
+            ),
+            "2": AnimeNode("2", "Two", "mal", "movie", "img", None, []),
+            "3": AnimeNode("3", "Root", "mal", "movie", "img", None, []),
+        }
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="3",
         )
 
-        self.assertEqual(branch_relations, [])
+        self.assertEqual(snapshot.branch_relations, [])
+
+    def test_topological_series_order_ignores_branch_relations(self):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [AnimeRelation("1", "3", "sequel")],
+            ),
+            "2": AnimeNode(
+                "2",
+                "Spin-off",
+                "mal",
+                "tv",
+                "img",
+                date(2030, 1, 1),
+                [AnimeRelation("2", "1", "spin_off")],
+            ),
+            "3": AnimeNode(
+                "3",
+                "Main sequel",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [],
+            ),
+        }
+
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="1",
+        )
+
+        self.assertEqual(
+            [node.media_id for node in snapshot.series_line],
+            ["1", "3", "2"],
+        )
 
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
