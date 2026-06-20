@@ -27,6 +27,197 @@ class FakeGraphBuilder:
 
 
 class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
+    @staticmethod
+    def _branch_metadata_map(
+        branch_relation="alternative_version",
+        continuation_relation="sequel",
+    ):
+        def metadata(media_id, title, media_type, related):
+            return {
+                "media_id": media_id,
+                "title": title,
+                "source": "mal",
+                "details": {
+                    "raw_media_type": media_type,
+                    "start_date": "2020-01-01",
+                },
+                "image": f"img-{media_id}",
+                "related": {
+                    "related_anime": [
+                        {
+                            "media_id": target_id,
+                            "relation_type": relation_type,
+                        }
+                        for target_id, relation_type in related
+                    ]
+                },
+            }
+
+        inverse_continuation_relation = {
+            "prequel": "sequel",
+            "sequel": "prequel",
+        }.get(continuation_relation, "prequel")
+        return {
+            "1": metadata(
+                "1",
+                "Main TV",
+                "tv",
+                [("2", branch_relation)],
+            ),
+            "2": metadata(
+                "2",
+                "Alternative Movie 1",
+                "movie",
+                [
+                    ("1", branch_relation),
+                    ("3", continuation_relation),
+                ],
+            ),
+            "3": metadata(
+                "3",
+                "Alternative Movie 2",
+                "movie",
+                [("2", inverse_continuation_relation)],
+            ),
+        }
+
+    def test_default_snapshot_does_not_include_branch_continuation(self):
+        metadata_map = self._branch_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "1",
+            include_branch_continuations=False,
+        )
+
+        self.assertEqual(set(snapshot.nodes_by_media_id), {"1", "2"})
+        self.assertNotIn("3", snapshot.nodes_by_media_id)
+        self.assertEqual(
+            [node.media_id for node in snapshot.series_line],
+            ["1"],
+        )
+        self.assertEqual(snapshot.canonical_root_media_id, "1")
+
+    def test_snapshot_includes_groupable_continuation_of_direct_alternative_branch(
+        self,
+    ):
+        metadata_map = self._branch_metadata_map()
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "1",
+            include_branch_continuations=True,
+        )
+
+        self.assertEqual(set(snapshot.nodes_by_media_id), {"1", "2", "3"})
+        self.assertIn(
+            AnimeRelation("2", "3", "sequel"),
+            snapshot.all_normalized_relations,
+        )
+        self.assertIn(
+            AnimeRelation("3", "2", "prequel"),
+            snapshot.all_normalized_relations,
+        )
+        self.assertEqual(
+            [node.media_id for node in snapshot.series_line],
+            ["1"],
+        )
+        self.assertEqual(snapshot.canonical_root_media_id, "1")
+
+    def test_snapshot_includes_prequel_continuation_of_direct_branch(self):
+        metadata_map = self._branch_metadata_map(
+            continuation_relation="prequel",
+        )
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "1",
+            include_branch_continuations=True,
+        )
+
+        self.assertEqual(set(snapshot.nodes_by_media_id), {"1", "2", "3"})
+        self.assertIn(
+            AnimeRelation("2", "3", "prequel"),
+            snapshot.all_normalized_relations,
+        )
+        self.assertIn(
+            AnimeRelation("3", "2", "sequel"),
+            snapshot.all_normalized_relations,
+        )
+
+    def test_branch_continuation_does_not_cross_nested_branch_boundary(self):
+        for relation_type in (
+            "spin_off",
+            "alternative_version",
+            "alternative_setting",
+        ):
+            with self.subTest(relation_type=relation_type):
+                metadata_map = self._branch_metadata_map(
+                    continuation_relation=relation_type,
+                )
+                builder = AnimeFranchiseGraphBuilder(
+                    metadata_fetcher=(
+                        lambda media_id,
+                        refresh_cache=False,
+                        metadata_map=metadata_map: metadata_map[str(media_id)]
+                    ),
+                )
+
+                snapshot = AnimeFranchiseSnapshotService(
+                    graph_builder=builder
+                ).build(
+                    "1",
+                    include_branch_continuations=True,
+                )
+
+                self.assertEqual(set(snapshot.nodes_by_media_id), {"1", "2"})
+                self.assertNotIn("3", snapshot.nodes_by_media_id)
+
+    def test_branch_continuation_ignores_non_continuity_relations(self):
+        for relation_type in (
+            "side_story",
+            "parent_story",
+            "summary",
+            "full_story",
+            "other",
+            "character",
+            "adaptation",
+            "recommendation",
+        ):
+            with self.subTest(relation_type=relation_type):
+                metadata_map = self._branch_metadata_map(
+                    continuation_relation=relation_type,
+                )
+                builder = AnimeFranchiseGraphBuilder(
+                    metadata_fetcher=(
+                        lambda media_id,
+                        refresh_cache=False,
+                        metadata_map=metadata_map: metadata_map[str(media_id)]
+                    ),
+                )
+
+                snapshot = AnimeFranchiseSnapshotService(
+                    graph_builder=builder
+                ).build(
+                    "1",
+                    include_branch_continuations=True,
+                )
+
+                self.assertEqual(set(snapshot.nodes_by_media_id), {"1", "2"})
+                self.assertNotIn("3", snapshot.nodes_by_media_id)
+
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
             "10": AnimeNode(

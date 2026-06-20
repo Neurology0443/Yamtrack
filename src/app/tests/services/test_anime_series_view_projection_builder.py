@@ -213,6 +213,37 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(branch.context_parent_title, "Sword Art Online")
         self.assertEqual(branch.context_relation_type, "alternative_version")
 
+    def test_alternative_branch_continuation_groups_with_branch_representative(
+        self,
+    ):
+        projection = self.builder.build(
+            snapshot=snapshot(
+                [
+                    node("1", title="Main TV"),
+                    node("2", title="Alternative Movie 1", media_type="movie"),
+                    node("3", title="Alternative Movie 2", media_type="movie"),
+                ],
+                [
+                    relation("1", "2", "alternative_version"),
+                    relation("2", "1", "alternative_version"),
+                    relation("2", "3", "sequel"),
+                    relation("3", "2", "prequel"),
+                ],
+                series_line_ids=["1"],
+            ),
+            tracked_media_ids={"2", "3"},
+        )
+
+        self.assertEqual(len(projection.groups), 1)
+        branch = projection.groups[0]
+        self.assertEqual(branch.root_media_id, "2")
+        self.assertEqual(branch.display_media_id, "2")
+        self.assertEqual(branch.member_media_ids, ("2", "3"))
+        self.assertEqual(branch.group_kind, "alternative_branch")
+        self.assertEqual(branch.context_parent_media_id, "1")
+        self.assertEqual(branch.context_parent_title, "Main TV")
+        self.assertEqual(branch.context_relation_type, "alternative_version")
+
     def test_alternative_setting_is_separate(self):
         projection = self.builder.build(
             snapshot=snapshot(

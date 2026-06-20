@@ -1,19 +1,15 @@
-"""Shared relation rules for Anime Series View projection and refresh."""
+"""Compatibility imports for Anime Series View relation rules."""
 
-GROUPABLE_RELATIONS = frozenset(
-    {
-        "prequel",
-        "sequel",
-        "side_story",
-        "parent_story",
-        "summary",
-        "full_story",
-    }
+from app.services.anime_relation_rules import (
+    BRANCH_BOUNDARY_RELATIONS,
+    CONTINUITY_RELATIONS,
+    GROUPABLE_RELATIONS,
+    PROJECTION_RELEVANT_RELATIONS,
 )
-BRANCH_BOUNDARY_RELATIONS = frozenset(
-    {"spin_off", "alternative_version", "alternative_setting"}
-)
-PROJECTION_RELEVANT_RELATIONS = (
-    GROUPABLE_RELATIONS | BRANCH_BOUNDARY_RELATIONS
-)
-CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
+
+__all__ = [
+    "BRANCH_BOUNDARY_RELATIONS",
+    "CONTINUITY_RELATIONS",
+    "GROUPABLE_RELATIONS",
+    "PROJECTION_RELEVANT_RELATIONS",
+]

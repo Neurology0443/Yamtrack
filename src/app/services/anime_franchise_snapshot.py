@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_relation_rules import (
+    BRANCH_BOUNDARY_RELATIONS,
+    CONTINUITY_RELATIONS,
+)
 
 if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -58,6 +62,7 @@ class AnimeFranchiseSnapshotService:
         media_id: str,
         *,
         refresh_cache: bool = False,
+        include_branch_continuations: bool = False,
     ) -> AnimeFranchiseSnapshot:
         """Build a normalized franchise snapshot for one MAL anime ID."""
         self.graph_builder.refresh_cache = refresh_cache
@@ -100,6 +105,12 @@ class AnimeFranchiseSnapshotService:
                     nodes_by_media_id[relation.target_media_id] = target_node
                 direct_candidates.append(relation)
 
+        if include_branch_continuations:
+            self._derive_branch_continuation_candidates(
+                direct_candidates=direct_candidates,
+                nodes_by_media_id=nodes_by_media_id,
+            )
+
         promoted_continuity_candidates = self._derive_promoted_continuity_candidates(
             series_line=series_line,
             nodes_by_media_id=nodes_by_media_id,
@@ -138,6 +149,74 @@ class AnimeFranchiseSnapshotService:
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
         )
+
+    def _derive_branch_continuation_candidates(  # noqa: C901
+        self,
+        *,
+        direct_candidates: list[AnimeRelation],
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> list[AnimeRelation]:
+        branch_relations = [
+            relation
+            for relation in direct_candidates
+            if relation.relation_type in BRANCH_BOUNDARY_RELATIONS
+        ]
+        if not branch_relations:
+            return []
+
+        boundary_pairs = {
+            frozenset(
+                (str(relation.source_media_id), str(relation.target_media_id))
+            )
+            for relation in branch_relations
+        }
+        queue = deque(
+            str(relation.target_media_id) for relation in branch_relations
+        )
+        visited_nodes = set(queue)
+        candidates: list[AnimeRelation] = []
+        seen_relations: set[tuple[str, str, str]] = set()
+
+        while queue:
+            current_media_id = queue.popleft()
+            current_node = nodes_by_media_id.get(current_media_id)
+            if current_node is None:
+                current_node = self.graph_builder.ensure_node(current_media_id)
+                if current_node is None:
+                    continue
+                nodes_by_media_id[current_media_id] = current_node
+
+            for relation in self.graph_builder.get_direct_neighbors(
+                current_media_id
+            ):
+                relation_type = str(relation.relation_type)
+                source_id = str(relation.source_media_id)
+                target_id = str(relation.target_media_id)
+                if relation_type in BRANCH_BOUNDARY_RELATIONS:
+                    boundary_pairs.add(frozenset((source_id, target_id)))
+                    continue
+                if relation_type not in CONTINUITY_RELATIONS:
+                    continue
+
+                if frozenset((source_id, target_id)) in boundary_pairs:
+                    continue
+
+                relation_key = (source_id, target_id, relation_type)
+                if relation_key not in seen_relations:
+                    seen_relations.add(relation_key)
+                    candidates.append(relation)
+
+                if target_id not in nodes_by_media_id:
+                    target_node = self.graph_builder.ensure_node(target_id)
+                    if target_node is None:
+                        continue
+                    nodes_by_media_id[target_id] = target_node
+
+                if target_id not in visited_nodes:
+                    visited_nodes.add(target_id)
+                    queue.append(target_id)
+
+        return candidates
 
     def _derive_root_story_parent_candidates(
         self,

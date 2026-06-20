@@ -6,17 +6,17 @@ import logging
 from dataclasses import dataclass
 
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_relation_rules import (
+    BRANCH_BOUNDARY_RELATIONS,
+    CONTINUITY_RELATIONS,
+    GROUPABLE_RELATIONS,
+    PROJECTION_RELEVANT_RELATIONS,
+)
 from app.services.anime_series_view_projection import (
     AnimeSeriesViewProjectionBuilder,
 )
 from app.services.anime_series_view_projection_persistence import (
     AnimeSeriesViewProjectionPersistenceService,
-)
-from app.services.anime_series_view_rules import (
-    BRANCH_BOUNDARY_RELATIONS,
-    CONTINUITY_RELATIONS,
-    GROUPABLE_RELATIONS,
-    PROJECTION_RELEVANT_RELATIONS,
 )
 from app.services.anime_tracking import bulk_mal_anime_tracked_ids
 
@@ -151,6 +151,7 @@ class AnimeSeriesViewProjectionRefreshService:
         initial_snapshot = self.snapshot_service.build(
             requested_media_id,
             refresh_cache=refresh_cache,
+            include_branch_continuations=True,
         )
         initial_scope = {
             str(media_id) for media_id in initial_snapshot.nodes_by_media_id
@@ -173,6 +174,7 @@ class AnimeSeriesViewProjectionRefreshService:
                 candidate_snapshot = self.snapshot_service.build(
                     reanchor_media_id,
                     refresh_cache=refresh_cache,
+                    include_branch_continuations=True,
                 )
             except Exception:  # noqa: BLE001
                 logger.debug(

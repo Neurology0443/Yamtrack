@@ -258,3 +258,134 @@ class AnimeSeriesViewImportIntegrationTests(TestCase):
         self.assertEqual({row.root_media_id for row in memberships}, {"321"})
         self.assertEqual({row.component_size for row in memberships}, {3})
         self.assertEqual({row.projection_version for row in memberships}, {"v2"})
+
+    def test_reanchor_to_main_snapshot_persists_complete_branch_continuation(
+        self,
+    ):
+        for media_id, title in (
+            ("2", "Alternative Movie 1"),
+            ("3", "Alternative Movie 2"),
+        ):
+            item = Item.objects.create(
+                media_id=media_id,
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title=title,
+                image=f"https://example.com/{media_id}.jpg",
+            )
+            anime = Anime(
+                user=self.user,
+                item=item,
+                status=Status.PLANNING.value,
+            )
+            anime._skip_hot_priority = True
+            with patch.object(Item, "fetch_releases"):
+                anime.save()
+
+        main = AnimeNode(
+            media_id="1",
+            title="Main TV",
+            source="mal",
+            media_type="tv",
+            image="https://example.com/1.jpg",
+            start_date=None,
+        )
+        branch = AnimeNode(
+            media_id="2",
+            title="Alternative Movie 1",
+            source="mal",
+            media_type="movie",
+            image="https://example.com/2.jpg",
+            start_date=None,
+        )
+        continuation = AnimeNode(
+            media_id="3",
+            title="Alternative Movie 2",
+            source="mal",
+            media_type="movie",
+            image="https://example.com/3.jpg",
+            start_date=None,
+        )
+        mini_snapshot = AnimeFranchiseSnapshot(
+            root_node=continuation,
+            nodes_by_media_id={"2": branch, "3": continuation},
+            all_normalized_relations=[
+                AnimeRelation("3", "2", "prequel"),
+                AnimeRelation("2", "1", "alternative_version"),
+            ],
+            continuity_component=[branch, continuation],
+            series_line=[],
+            direct_anchors=[],
+            direct_candidates=[],
+            has_series_line=False,
+            fallback_anchor_media_id="3",
+            canonical_root_media_id="2",
+        )
+        complete_snapshot = AnimeFranchiseSnapshot(
+            root_node=main,
+            nodes_by_media_id={
+                "1": main,
+                "2": branch,
+                "3": continuation,
+            },
+            all_normalized_relations=[
+                AnimeRelation("1", "2", "alternative_version"),
+                AnimeRelation("2", "1", "alternative_version"),
+                AnimeRelation("2", "3", "sequel"),
+                AnimeRelation("3", "2", "prequel"),
+            ],
+            continuity_component=[main],
+            series_line=[main],
+            direct_anchors=[main],
+            direct_candidates=[
+                AnimeRelation("1", "2", "alternative_version"),
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="1",
+            canonical_root_media_id="1",
+        )
+        snapshot_service = Mock()
+
+        def build(media_id, **kwargs):
+            self.assertTrue(kwargs["include_branch_continuations"])
+            return {
+                "1": complete_snapshot,
+                "2": mini_snapshot,
+                "3": mini_snapshot,
+            }[media_id]
+
+        snapshot_service.build.side_effect = build
+
+        AnimeSeriesViewProjectionRefreshService(
+            snapshot_service=snapshot_service
+        ).refresh_for_media_ids(
+            user=self.user,
+            media_ids={"3"},
+        )
+
+        memberships = list(
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id__in={"2", "3"},
+            ).order_by("media_id")
+        )
+        self.assertEqual([row.media_id for row in memberships], ["2", "3"])
+        self.assertEqual({row.root_media_id for row in memberships}, {"2"})
+        self.assertEqual({row.display_media_id for row in memberships}, {"2"})
+        self.assertEqual(
+            {row.group_kind for row in memberships},
+            {"alternative_branch"},
+        )
+        self.assertEqual(
+            {row.context_parent_media_id for row in memberships},
+            {"1"},
+        )
+        self.assertEqual(
+            {row.context_parent_title for row in memberships},
+            {"Main TV"},
+        )
+        self.assertEqual(
+            {row.context_relation_type for row in memberships},
+            {"alternative_version"},
+        )
+        self.assertEqual({row.component_size for row in memberships}, {2})

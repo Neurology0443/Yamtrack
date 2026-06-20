@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 
-from app.services.anime_series_view_rules import (
+from app.services.anime_relation_rules import (
     BRANCH_BOUNDARY_RELATIONS,
     CONTINUITY_RELATIONS,
     GROUPABLE_RELATIONS,

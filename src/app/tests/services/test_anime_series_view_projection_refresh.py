@@ -86,6 +86,7 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
         self.snapshot_service.build.assert_called_once_with(
             "1",
             refresh_cache=False,
+            include_branch_continuations=True,
         )
         self.tracked_fetcher.assert_called_once_with(
             user_id=7,
@@ -139,8 +140,14 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
             ],
         )
 
-        def build(media_id, *, refresh_cache):
+        def build(
+            media_id,
+            *,
+            refresh_cache,
+            include_branch_continuations,
+        ):
             self.assertFalse(refresh_cache)
+            self.assertTrue(include_branch_continuations)
             if media_id == "48896":
                 return initial
             if media_id == "48895":
@@ -159,8 +166,16 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
         self.assertEqual(
             self.snapshot_service.build.call_args_list,
             [
-                call("48896", refresh_cache=False),
-                call("48895", refresh_cache=False),
+                call(
+                    "48896",
+                    refresh_cache=False,
+                    include_branch_continuations=True,
+                ),
+                call(
+                    "48895",
+                    refresh_cache=False,
+                    include_branch_continuations=True,
+                ),
             ],
         )
         self.builder.build.assert_called_once_with(
@@ -224,9 +239,21 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
 
         self.snapshot_service.build.assert_has_calls(
             [
-                call("movie", refresh_cache=False),
-                call("parent_tv", refresh_cache=False),
-                call("older_tv", refresh_cache=False),
+                call(
+                    "movie",
+                    refresh_cache=False,
+                    include_branch_continuations=True,
+                ),
+                call(
+                    "parent_tv",
+                    refresh_cache=False,
+                    include_branch_continuations=True,
+                ),
+                call(
+                    "older_tv",
+                    refresh_cache=False,
+                    include_branch_continuations=True,
+                ),
             ]
         )
         self.builder.build.assert_called_once_with(
@@ -362,8 +389,14 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
             series_line_ids=["10"],
         )
 
-        def build(media_id, *, refresh_cache):
+        def build(
+            media_id,
+            *,
+            refresh_cache,
+            include_branch_continuations,
+        ):
             self.assertFalse(refresh_cache)
+            self.assertTrue(include_branch_continuations)
             return {
                 "8": first_initial,
                 "9": second_initial,
