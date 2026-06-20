@@ -7,13 +7,26 @@ from django.core.cache import cache
 from django.db import transaction
 from django.test import TestCase
 
-from app.models import Anime, Item, MediaTypes, Sources, Status
+from app.models import (
+    Anime,
+    AnimeLocalSeriesMembership,
+    Item,
+    MediaTypes,
+    Sources,
+    Status,
+)
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_cache_warmer import (
     schedule_mal_anime_franchise_cache_warm,
 )
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryStats
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+from app.services.anime_local_series_refresh import (
+    AnimeLocalSeriesProjectionRefreshService,
+    AnimeLocalSeriesProjectionRefreshStats,
+)
 from events.models import AnimeReleaseDateScanState
 
 
@@ -34,6 +47,7 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         selections=None,
         cache_warm_scheduler=None,
         discovery_service=None,
+        series_view_refresh_service=None,
     ):
         due_seeds = due_seeds or [
             SimpleNamespace(user_id=self.user.id, seed_mal_id="321")
@@ -64,15 +78,161 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         profile.component_root_media_id.side_effect = root_ids
         profile.detail_cache_warm_media_ids.return_value = set()
 
+        if series_view_refresh_service is None:
+            series_view_refresh_service = Mock()
+            series_view_refresh_service.refresh_for_media_ids.return_value = (
+                AnimeLocalSeriesProjectionRefreshStats()
+            )
+
         return AnimeFranchiseImportService(
             snapshot_service=snapshot_service,
             state_service=state_service,
             cache_warm_scheduler=cache_warm_scheduler,
             discovery_service=discovery_service,
+            series_view_refresh_service=series_view_refresh_service,
         ), profile
 
     def _assert_cache_warm_stats_invariant(self, stats):
         self.assertEqual(stats.cache_warm_scheduled, len(stats.cache_warm_targets))
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_refreshes_series_view_once_after_user_run(self, mock_get_profile):
+        refresh_service = Mock()
+        refresh_service.refresh_for_media_ids.return_value = (
+            AnimeLocalSeriesProjectionRefreshStats(
+                canonical_roots_refreshed=1,
+            )
+        )
+        service, profile = self._build_service(
+            set(),
+            series_view_refresh_service=refresh_service,
+        )
+        mock_get_profile.return_value = profile
+
+        stats = service.run(
+            profile_key="continuity",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        refresh_service.refresh_for_media_ids.assert_called_once_with(
+            user=self.user,
+            media_ids={"321"},
+            refresh_cache=False,
+            dry_run=False,
+        )
+        self.assertEqual(stats.series_view_refreshes, 1)
+
+    @patch("app.services.anime_franchise_import.get_import_profile")
+    def test_real_import_run_repairs_complete_rezero_projection(
+        self,
+        mock_get_profile,
+    ):
+        media_ids = ["31240", "36286", "38414", "39587", "42203", "54857", "61316"]
+        for media_id in media_ids:
+            item = Item.objects.create(
+                media_id=media_id,
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title=media_id,
+                image="image",
+            )
+            anime = Anime(
+                user=self.user,
+                item=item,
+                status=Status.PLANNING.value,
+            )
+            Anime.save_base(anime)
+
+        def build_snapshot(root_id, node_ids, relations, canonical_root_id):
+            nodes = {
+                media_id: AnimeNode(
+                    media_id,
+                    media_id,
+                    "mal",
+                    "movie" if media_id == "36286" else "tv",
+                    "image",
+                    None,
+                )
+                for media_id in node_ids
+            }
+            for relation in relations:
+                nodes[relation.source_media_id].relations.append(relation)
+            return AnimeFranchiseSnapshot(
+                root_node=nodes[root_id],
+                nodes_by_media_id=nodes,
+                all_normalized_relations=relations,
+                continuity_component=list(nodes.values()),
+                series_line=list(nodes.values()),
+                direct_anchors=[nodes[root_id]],
+                direct_candidates=[],
+                has_series_line=True,
+                fallback_anchor_media_id=root_id,
+                canonical_root_media_id=canonical_root_id,
+            )
+
+        local_relations = [
+            AnimeRelation("36286", "31240", "parent_story"),
+            AnimeRelation("31240", "36286", "side_story"),
+        ]
+        canonical_relations = [
+            AnimeRelation("31240", "38414", "prequel"),
+            AnimeRelation("38414", "31240", "sequel"),
+            AnimeRelation("31240", "39587", "sequel"),
+            AnimeRelation("39587", "42203", "sequel"),
+            AnimeRelation("42203", "54857", "sequel"),
+            AnimeRelation("54857", "61316", "sequel"),
+            *local_relations,
+        ]
+        refresh_snapshot_service = Mock()
+        refresh_snapshot_service.build.side_effect = [
+            build_snapshot(
+                "36286",
+                ["36286", "31240"],
+                local_relations,
+                "36286",
+            ),
+            build_snapshot(
+                "31240",
+                media_ids,
+                canonical_relations,
+                "38414",
+            ),
+        ]
+        refresh_service = AnimeLocalSeriesProjectionRefreshService(
+            snapshot_service=refresh_snapshot_service
+        )
+        service, profile = self._build_service(
+            set(),
+            due_seeds=[
+                SimpleNamespace(
+                    user_id=self.user.id,
+                    seed_mal_id="36286",
+                )
+            ],
+            root_ids=["36286"],
+            series_view_refresh_service=refresh_service,
+        )
+        mock_get_profile.return_value = profile
+
+        service.run(
+            profile_key="continuity",
+            dry_run=False,
+            full_rescan=False,
+            limit=None,
+            refresh_cache=False,
+            user_ids=[self.user.id],
+        )
+
+        memberships = AnimeLocalSeriesMembership.objects.filter(user=self.user)
+        self.assertEqual(memberships.count(), 7)
+        self.assertEqual(
+            set(memberships.values_list("root_media_id", flat=True)),
+            {"38414"},
+        )
 
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")
     @patch("app.services.anime_franchise_import.mal.anime_minimal")

@@ -1,0 +1,83 @@
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("app", "0063_anime_franchise_discovery"),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="AnimeLocalSeriesMembership",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("media_id", models.CharField(max_length=36)),
+                ("root_media_id", models.CharField(max_length=36)),
+                ("group_kind", models.CharField(max_length=40)),
+                (
+                    "context_parent_media_id",
+                    models.CharField(blank=True, default="", max_length=36),
+                ),
+                (
+                    "context_relation_type",
+                    models.CharField(blank=True, default="", max_length=40),
+                ),
+                ("component_size", models.PositiveIntegerField(default=1)),
+                ("source_profile_key", models.CharField(max_length=40)),
+                ("resolver_version", models.CharField(max_length=20)),
+                ("discovered_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+        ),
+        migrations.AddConstraint(
+            model_name="animelocalseriesmembership",
+            constraint=models.UniqueConstraint(
+                fields=(
+                    "user",
+                    "media_id",
+                    "source_profile_key",
+                    "resolver_version",
+                ),
+                name="app_anilocseries_membership_uniq",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="animelocalseriesmembership",
+            index=models.Index(
+                fields=["user", "source_profile_key", "media_id"],
+                name="app_anilocseries_media_idx",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="animelocalseriesmembership",
+            index=models.Index(
+                fields=["user", "source_profile_key", "root_media_id"],
+                name="app_anilocseries_root_idx",
+            ),
+        ),
+        migrations.AddIndex(
+            model_name="animelocalseriesmembership",
+            index=models.Index(
+                fields=["user", "source_profile_key", "group_kind"],
+                name="app_anilocseries_kind_idx",
+            ),
+        ),
+    ]

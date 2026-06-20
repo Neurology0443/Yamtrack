@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import prefetch_related_objects
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -37,6 +37,10 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
+from app.services.anime_local_series_refresh import (
+    AnimeLocalSeriesProjectionRefreshService,
+)
+from app.services.anime_series_view import build_anime_series_view
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
@@ -48,6 +52,20 @@ from users.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _refresh_anime_series_view(*, user, media_id):
+    """Refresh the DB projection after one MAL anime library mutation."""
+    try:
+        AnimeLocalSeriesProjectionRefreshService().refresh_for_media_ids(
+            user=user,
+            media_ids=[media_id],
+        )
+    except Exception:
+        logger.exception(
+            "Failed to refresh anime series view",
+            extra={"user_id": user.id, "media_id": str(media_id)},
+        )
 
 
 @require_GET
@@ -132,7 +150,7 @@ def progress_edit(request, media_type, instance_id):
 
 @login_not_required
 @require_GET
-def media_list(request, username, media_type):
+def media_list(request, username, media_type):  # noqa: C901, PLR0912
     """Return the media list page."""
     target_user = get_object_or_404(User, username=username)
 
@@ -197,27 +215,48 @@ def media_list(request, username, media_type):
         search=search_query,
     )
 
-    # Paginate results
-    items_per_page = 32
-    paginator = Paginator(media_queryset, items_per_page)
-    media_page = paginator.get_page(page)
-
-    BasicMedia.objects.annotate_max_progress(
-        media_page.object_list,
-        media_type,
+    is_anime_series_view = (
+        media_type == MediaTypes.ANIME.value and layout == "series"
     )
+    if is_anime_series_view:
+        series_groups = build_anime_series_view(
+            media_entries=media_queryset,
+            user_id=target_user.id,
+        )
+        paginator = Paginator(series_groups, 12)
+        media_page = paginator.get_page(page)
+        page_entries = [
+            entry
+            for group in media_page.object_list
+            for entry in group.entries
+        ]
+        BasicMedia.objects.annotate_max_progress(page_entries, media_type)
+    else:
+        paginator = Paginator(media_queryset, 32)
+        media_page = paginator.get_page(page)
+        BasicMedia.objects.annotate_max_progress(
+            media_page.object_list,
+            media_type,
+        )
 
     context = {
         "media_type": media_type,
         "media_type_plural": app_tags.media_type_readable_plural(media_type).lower(),
         "media_list": media_page,
         "current_layout": layout,
-        "layout_class": ".media-grid" if layout == "grid" else "tbody",
+        "layout_class": (
+            ".anime-series-grid"
+            if is_anime_series_view
+            else ".media-grid"
+            if layout == "grid"
+            else "tbody"
+        ),
         "current_sort": sort_filter,
         "current_status": status_filter,
         "sort_choices": MediaSortChoices.choices,
         "status_choices": MediaStatusChoices.choices,
         "target_user": target_user,
+        "is_anime_series_view": is_anime_series_view,
     }
 
     # Handle HTMX requests for partial updates
@@ -232,7 +271,9 @@ def media_list(request, username, media_type):
                 "medialist", args=[target_user.username, media_type]
             )
             return response
-        if layout == "grid":
+        if is_anime_series_view:
+            template_name = "app/components/anime_series_groups.html"
+        elif layout == "grid":
             template_name = "app/components/media_grid_items.html"
         else:
             template_name = "app/components/media_table_items.html"
@@ -757,6 +798,16 @@ def media_save(request):
                 user_id=request.user.id,
                 media_label=str(form.instance),
             )
+            if (
+                media_type == MediaTypes.ANIME.value
+                and source == Sources.MAL.value
+            ):
+                transaction.on_commit(
+                    lambda: _refresh_anime_series_view(
+                        user=request.user,
+                        media_id=media_id,
+                    )
+                )
     else:
         logger.error(form.errors.as_json())
         for field, errors in form.errors.items():
@@ -775,8 +826,21 @@ def media_delete(request):
     instance_id = request.POST["instance_id"]
     media_type = request.POST["media_type"]
     media = helpers.get_owned_media_or_404(request, media_type, instance_id)
+    deleted_media_id = str(media.item.media_id)
+    deleted_source = media.item.source
+    deleted_user = media.user
     media.delete()
     logger.info("%s deleted successfully.", media)
+    if (
+        media_type == MediaTypes.ANIME.value
+        and deleted_source == Sources.MAL.value
+    ):
+        transaction.on_commit(
+            lambda: _refresh_anime_series_view(
+                user=deleted_user,
+                media_id=deleted_media_id,
+            )
+        )
 
     return helpers.redirect_back(request)
 

@@ -18,6 +18,9 @@ from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryServic
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
+from app.services.anime_local_series_refresh import (
+    AnimeLocalSeriesProjectionRefreshService,
+)
 from events.notifications import notify_entry_added_after_commit
 
 if TYPE_CHECKING:
@@ -59,6 +62,8 @@ class FranchiseImportStats:
     cache_warm_scheduled: int = 0
     cache_warm_errors: int = 0
     discovery_errors: int = 0
+    series_view_refreshes: int = 0
+    series_view_errors: int = 0
 
 
 class AnimeFranchiseImportService:
@@ -71,6 +76,8 @@ class AnimeFranchiseImportService:
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
         discovery_service: AnimeFranchiseDiscoveryService | None = None,
+        series_view_refresh_service: AnimeLocalSeriesProjectionRefreshService
+        | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -79,6 +86,9 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
+        self.series_view_refresh_service = (
+            series_view_refresh_service or AnimeLocalSeriesProjectionRefreshService()
+        )
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -112,6 +122,7 @@ class AnimeFranchiseImportService:
 
         baseline_roots_created_this_run: set[tuple[int, str]] = set()
         scheduled_warm_targets_by_media_id: dict[str, CacheWarmTarget] = {}
+        affected_media_ids_by_user: dict[int, set[str]] = {}
 
         def schedule_cache_warm_once(
             media_id: str,
@@ -199,6 +210,15 @@ class AnimeFranchiseImportService:
                 )
                 component_root_mal_id = str(profile.component_root_media_id(snapshot))
                 selection = profile.select(snapshot)
+                affected_media_ids = affected_media_ids_by_user.setdefault(
+                    user.id,
+                    set(),
+                )
+                affected_media_ids.add(str(due_seed.seed_mal_id))
+                affected_media_ids.add(component_root_mal_id)
+                affected_media_ids.update(
+                    str(media_id) for media_id in selection.media_ids
+                )
                 fingerprint = self.state_service.build_fingerprint(
                     profile_key,
                     selection.fingerprint_payload,
@@ -335,6 +355,31 @@ class AnimeFranchiseImportService:
                         stats.state_rows_created += 1
                     else:
                         stats.state_rows_updated += 1
+
+        for user_id, affected_media_ids in affected_media_ids_by_user.items():
+            user = users_by_id.get(user_id)
+            if user is None or not affected_media_ids:
+                continue
+            try:
+                refresh_stats = self.series_view_refresh_service.refresh_for_media_ids(
+                    user=user,
+                    media_ids=affected_media_ids,
+                    refresh_cache=refresh_cache,
+                    dry_run=dry_run,
+                )
+                stats.series_view_refreshes += (
+                    refresh_stats.canonical_roots_refreshed
+                )
+                stats.series_view_errors += refresh_stats.errors
+            except Exception:
+                stats.series_view_errors += 1
+                logger.exception(
+                    "Failed to refresh anime series view after franchise import",
+                    extra={
+                        "user_id": user_id,
+                        "affected_media_ids": sorted(affected_media_ids),
+                    },
+                )
 
         return stats
 

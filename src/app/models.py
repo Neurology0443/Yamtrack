@@ -819,6 +819,55 @@ class AnimeImportScanState(models.Model):
         ]
 
 
+class AnimeLocalSeriesMembership(models.Model):
+    """Persisted read model for one user's MAL anime series view."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    media_id = models.CharField(max_length=36)
+    root_media_id = models.CharField(max_length=36)
+    group_kind = models.CharField(max_length=40)
+    context_parent_media_id = models.CharField(max_length=36, blank=True, default="")
+    context_relation_type = models.CharField(max_length=40, blank=True, default="")
+    component_size = models.PositiveIntegerField(default=1)
+    source_profile_key = models.CharField(max_length=40)
+    resolver_version = models.CharField(max_length=20)
+    discovered_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Database constraints and read-path indexes."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "user",
+                    "media_id",
+                    "source_profile_key",
+                    "resolver_version",
+                ],
+                name="app_anilocseries_membership_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "source_profile_key", "media_id"],
+                name="app_anilocseries_media_idx",
+            ),
+            models.Index(
+                fields=["user", "source_profile_key", "root_media_id"],
+                name="app_anilocseries_root_idx",
+            ),
+            models.Index(
+                fields=["user", "source_profile_key", "group_kind"],
+                name="app_anilocseries_kind_idx",
+            ),
+        ]
+
+    def __str__(self):
+        """Return the projected media-to-root mapping."""
+        return f"{self.media_id} -> {self.root_media_id}"
+
+
 class UserMessageLevel(models.TextChoices):
     """Choices for persistent user messages."""
 

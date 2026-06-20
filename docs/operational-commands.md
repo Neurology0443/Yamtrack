@@ -34,6 +34,17 @@ docker compose exec yamtrack python manage.py import_anime_franchise --profile c
 docker compose exec yamtrack python manage.py import_anime_franchise --profile satellites --user-id 1 --limit 10
 ```
 
+## Rebuild the Anime Series View
+
+```bash
+docker compose exec yamtrack python manage.py rebuild_anime_series_view --user-id 1
+docker compose exec yamtrack python manage.py rebuild_anime_series_view --all-users --dry-run
+docker compose exec yamtrack python manage.py rebuild_anime_series_view --user-id 1 --media-id 36286 --refresh-cache
+```
+
+The command uses the same canonical projection refresh service as automatic
+imports, manual MAL anime additions, and deletions.
+
 ## Schedule franchise cache rebuild
 
 ```bash
