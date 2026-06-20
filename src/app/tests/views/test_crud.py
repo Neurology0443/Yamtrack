@@ -85,6 +85,43 @@ class CreateMedia(TestCase):
             media_label=str(created_anime),
         )
 
+    @patch("app.views.AnimeSeriesViewRefreshTriggerService")
+    @patch("app.views.services.get_media_metadata")
+    def test_media_save_schedules_series_view_refresh_on_mal_anime_create(
+        self,
+        get_media_metadata,
+        trigger_service,
+    ):
+        """Schedule a background Series View refresh for a new MAL anime."""
+        get_media_metadata.return_value = {
+            "title": "Series Anime",
+            "image": "http://example.com/image.jpg",
+        }
+        Item.objects.create(
+            media_id="778",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Series Anime",
+            image="http://example.com/image.jpg",
+        )
+
+        self.client.post(
+            reverse("media_save"),
+            {
+                "media_id": "778",
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "status": Status.PLANNING.value,
+                "progress": 0,
+                "repeats": 0,
+            },
+        )
+
+        trigger_service.return_value.schedule_manual_add.assert_called_once_with(
+            user=self.user,
+            media_id="778",
+        )
+
     @patch("app.views.notify_entry_added_after_commit")
     def test_media_save_invalid_submission_does_not_notify(self, mock_notify):
         Item.objects.create(

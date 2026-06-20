@@ -1,0 +1,17 @@
+{% if series_view_result.unprojected_count and media_list.number == 1 %}
+  <div class="col-span-full rounded-lg border border-indigo-400/20 bg-indigo-500/10 px-4 py-3 text-sm text-indigo-100">
+    Some anime are still being prepared for Series View. They will appear here after the background franchise refresh.
+  </div>
+{% endif %}
+
+{% if media_list.object_list %}
+  {% for group in media_list %}
+    <div {% if forloop.last and media_list.has_next %} hx-get="{% url 'medialist' target_user.username media_type %}?page={{ media_list.next_page_number }}" hx-trigger="revealed threshold:200px" hx-swap="afterend" hx-include="#filter-form" hx-indicator="#loading-indicator" {% endif %}>
+      {% include "app/components/anime_series_group_card.html" with group=group %}
+    </div>
+  {% endfor %}
+{% elif not series_view_result.unprojected_count %}
+  <div class="col-span-full rounded-lg bg-[#2a2f35] p-8 text-center text-gray-400">
+    No anime match the current filters.
+  </div>
+{% endif %}

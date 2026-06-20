@@ -56,6 +56,7 @@ class LayoutChoices(models.TextChoices):
 
     GRID = "grid", "Grid"
     TABLE = "table", "Table"
+    SERIES = "series", "Series"
 
 
 class CalendarLayoutChoices(models.TextChoices):

@@ -44,7 +44,7 @@
                x-model="search"
                hx-get="{% url 'medialist' target_user.username media_type %}"
                hx-trigger="keyup changed delay:300ms, search"
-               {% if media_list %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
+               {% if media_list or is_anime_series_view %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
                hx-include="#filter-form"
                hx-indicator="#search-indicator">
         {% include "app/icons/magnifying-glass.svg" with classes="w-6 h-6 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" %}
@@ -77,7 +77,7 @@
                x-transition:leave-end="transform opacity-0 scale-95">
             {% for value, label in status_choices %}
               <button hx-get="{% url 'medialist' target_user.username media_type %}"
-                      {% if media_list %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
+                      {% if media_list or is_anime_series_view %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
                       hx-include="#filter-form"
                       hx-indicator="#loading-indicator"
                       class="block w-full px-4 py-2 text-left text-sm transition-colors cursor-pointer"
@@ -110,7 +110,7 @@
                x-transition:leave-end="transform opacity-0 scale-95">
             {% for value, label in sort_choices %}
               <button hx-get="{% url 'medialist' target_user.username media_type %}"
-                      {% if media_list %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
+                      {% if media_list or is_anime_series_view %} hx-target="{{ layout_class }}" {% else %} hx-target="#empty_list" {% endif %}
                       hx-include="#filter-form"
                       hx-indicator="#loading-indicator"
                       class="block w-full px-4 py-2 text-left text-sm transition-colors cursor-pointer"
@@ -133,11 +133,22 @@
              :class="layout === 'table' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] hover:bg-[#454d5a]'"
              title="Table View"
              @click="layout = 'table'">{% include "app/icons/table.svg" with classes="w-5 h-5" %}</a>
+          {% if media_type == MediaTypes.ANIME.value %}
+            <a :href="`{% url 'medialist' target_user.username media_type %}?${search ? 'search=' + search + '&' : ''}${status !== 'all' ? 'status=' + status + '&' : ''}${sort !== 'score' ? 'sort=' + sort + '&' : ''}layout=series`"
+               class="p-2 cursor-pointer"
+               :class="layout === 'series' ? 'bg-indigo-600 text-white' : 'bg-[#39404b] hover:bg-[#454d5a]'"
+               title="Series View"
+               @click="layout = 'series'">{% include "app/icons/list.svg" with classes="w-5 h-5" %}</a>
+          {% endif %}
         </div>
       </div>
     </div>
 
-    {% if not media_list %}
+    {% if is_anime_series_view %}
+      <div class="anime-series-groups grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        {% include "app/components/anime_series_groups.html" %}
+      </div>
+    {% elif not media_list %}
       <div id="empty_list"
            class="flex flex-col items-center justify-center py-16 bg-[#2a2f35] rounded-lg">
         <div class="text-center max-w-md mx-auto p-6">

@@ -31,6 +31,11 @@ import events
 import users
 from app import providers
 from app.mixins import CalendarTriggerMixin
+from app.services.anime_series_view_franchise_projection import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+    PROJECTION_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2005,6 +2010,61 @@ class BoardGame(Media):
     """Model for board games."""
 
     tracker = FieldTracker()
+
+
+class AnimeSeriesViewMembership(models.Model):
+    """Persisted per-user read model for Anime Series View grouping."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    media_id = models.CharField(max_length=36)
+    root_media_id = models.CharField(max_length=36)
+    display_media_id = models.CharField(max_length=36)
+    display_title = models.CharField(max_length=500, blank=True, default="")
+    display_image = models.URLField(max_length=1000, blank=True, default="")
+    display_media_type = models.CharField(max_length=40, blank=True, default="")
+    display_start_date = models.DateField(null=True, blank=True)
+    group_kind = models.CharField(
+        max_length=40,
+        choices=[
+            (GROUP_KIND_FRANCHISE, "Franchise"),
+            (GROUP_KIND_SINGLETON, "Singleton"),
+        ],
+        default=GROUP_KIND_FRANCHISE,
+    )
+    projection_version = models.CharField(
+        max_length=30,
+        default=PROJECTION_VERSION,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Keep memberships unique and optimize the read paths."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "media_id"],
+                name="app_asv_membership_user_media_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "media_id"],
+                name="app_asv_user_media_idx",
+            ),
+            models.Index(
+                fields=["user", "root_media_id"],
+                name="app_asv_user_root_idx",
+            ),
+            models.Index(
+                fields=["user", "projection_version"],
+                name="app_asv_user_version_idx",
+            ),
+        ]
+
+    def __str__(self):
+        """Return a concise membership label."""
+        return f"{self.user}: {self.media_id} -> {self.root_media_id}"
 
 
 class AnimeFranchiseDiscoveryState(models.Model):

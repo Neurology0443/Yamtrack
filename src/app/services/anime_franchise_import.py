@@ -18,6 +18,9 @@ from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryServic
 from app.services.anime_franchise_import_profiles import get_import_profile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
+from app.services.anime_series_view_refresh_triggers import (
+    AnimeSeriesViewRefreshTriggerService,
+)
 from events.notifications import notify_entry_added_after_commit
 
 if TYPE_CHECKING:
@@ -71,6 +74,7 @@ class AnimeFranchiseImportService:
         state_service: AnimeImportStateService | None = None,
         cache_warm_scheduler: Callable[[str], None] | None = None,
         discovery_service: AnimeFranchiseDiscoveryService | None = None,
+        series_view_refresh_trigger: AnimeSeriesViewRefreshTriggerService | None = None,
     ):
         """Initialize the importer with optional testable dependencies."""
         self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
@@ -79,6 +83,9 @@ class AnimeFranchiseImportService:
             cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
+        self.series_view_refresh_trigger = (
+            series_view_refresh_trigger or AnimeSeriesViewRefreshTriggerService()
+        )
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -255,6 +262,27 @@ class AnimeFranchiseImportService:
                             detail_media_id,
                             kind="detail",
                             component_root_mal_id=component_root_mal_id,
+                        )
+
+                if imported_media_ids_for_snapshot and not dry_run:
+                    refresh_media_ids = {
+                        *imported_media_ids_for_snapshot,
+                        str(due_seed.seed_mal_id),
+                        component_root_mal_id,
+                    }
+                    try:
+                        self.series_view_refresh_trigger.schedule_import_batch(
+                            user=user,
+                            media_ids=refresh_media_ids,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to schedule Anime Series View refresh after import",
+                            extra={
+                                "user_id": user.id,
+                                "seed_media_id": due_seed.seed_mal_id,
+                                "media_ids": sorted(refresh_media_ids, key=int),
+                            },
                         )
 
                 root_key = (user.id, component_root_mal_id)
