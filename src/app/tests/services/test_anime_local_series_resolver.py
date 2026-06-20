@@ -19,7 +19,15 @@ def node(media_id, *, media_type="tv", start_date=None):
     )
 
 
-def snapshot(*, root_id, nodes, relations, canonical_root_id=None, series_ids=()):
+def snapshot(
+    *,
+    root_id,
+    nodes,
+    relations,
+    canonical_root_id=None,
+    series_ids=(),
+    direct_candidates=(),
+):
     nodes_by_id = {item.media_id: item for item in nodes}
     for relation in relations:
         nodes_by_id[relation.source_media_id].relations.append(relation)
@@ -31,7 +39,7 @@ def snapshot(*, root_id, nodes, relations, canonical_root_id=None, series_ids=()
         continuity_component=list(nodes),
         series_line=series_line,
         direct_anchors=series_line or [nodes_by_id[root_id]],
-        direct_candidates=[],
+        direct_candidates=list(direct_candidates),
         has_series_line=bool(series_line),
         fallback_anchor_media_id=root_id,
         canonical_root_media_id=canonical_root_id or root_id,
@@ -165,6 +173,7 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="1",
                 series_ids=("1",),
+                direct_candidates=(AnimeRelation("1", "2", "spin_off"),),
             ),
             tracked_media_ids={"1", "2", "3"},
         )
@@ -199,6 +208,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="51958",
                 series_ids=("30831",),
+                direct_candidates=(
+                    AnimeRelation("30831", "51958", "spin_off"),
+                ),
             ),
             tracked_media_ids={"30831", "51958", "57833"},
         )
@@ -282,6 +294,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="1",
                 series_ids=("1",),
+                direct_candidates=(
+                    AnimeRelation("1", "2", "alternative_setting"),
+                ),
             ),
             tracked_media_ids={"1", "2"},
         )
@@ -312,6 +327,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="200",
                 series_ids=("100", "101"),
+                direct_candidates=(
+                    AnimeRelation("100", "200", "alternative_version"),
+                ),
             ),
             tracked_media_ids={"100", "101", "200"},
         )

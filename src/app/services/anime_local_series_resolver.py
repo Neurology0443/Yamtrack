@@ -6,6 +6,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.services.anime_local_series_branch_context import (
+    AnimeLocalSeriesBranchContextProjector,
+)
+
 if TYPE_CHECKING:
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -67,6 +71,12 @@ class AnimeLocalSeriesResolver:
 
     resolver_version = "v1"
 
+    def __init__(self, branch_context_projector=None):
+        """Create the resolver with an optional branch-context projector."""
+        self.branch_context_projector = (
+            branch_context_projector or AnimeLocalSeriesBranchContextProjector()
+        )
+
     def resolve(
         self,
         *,
@@ -112,9 +122,10 @@ class AnimeLocalSeriesResolver:
             direct_boundaries=direct_boundaries,
         )
         component_members = self._component_members(nodes, components)
+        branch_context_facts = self.branch_context_projector.project(snapshot)
         branch_context = self._branch_contexts(
+            branch_context_facts=branch_context_facts,
             snapshot=snapshot,
-            relations=relations,
             components=components,
         )
 
@@ -242,68 +253,32 @@ class AnimeLocalSeriesResolver:
             contexts[merged_component] = (parent_media_id, relation_type)
         return contexts
 
-    def _branch_contexts(self, *, snapshot, relations, components):
-        """Attach branch context using snapshot facts, not edge observation order.
-
-        For branch relation types, ``AnimeRelation.source_media_id`` is the MAL
-        node whose metadata exposed the relation. It does not reliably identify
-        the main-series parent. Prefer the component represented by the snapshot
-        series line, then TV/ONA continuity weight, component size, and stable
-        chronological ordering.
-        """
-        component_members = self._component_members(
-            snapshot.nodes_by_media_id,
-            components,
-        )
+    def _branch_contexts(
+        self,
+        *,
+        branch_context_facts,
+        snapshot,
+        components,
+    ):
+        """Attach branch contexts already oriented by the UI projection."""
         contexts = {}
-        for relation in relations:
-            if relation.relation_type not in BRANCH_RELATIONS:
+        for context in branch_context_facts:
+            parent_media_id = str(context.parent_media_id)
+            branch_media_id = str(context.branch_media_id)
+            if parent_media_id not in snapshot.nodes_by_media_id:
                 continue
-            source_component = components.find(relation.source_media_id)
-            target_component = components.find(relation.target_media_id)
-            if source_component == target_component:
+            if branch_media_id not in snapshot.nodes_by_media_id:
                 continue
 
-            source_rank = self._branch_parent_rank(
-                snapshot=snapshot,
-                member_ids=component_members[source_component],
-            )
-            target_rank = self._branch_parent_rank(
-                snapshot=snapshot,
-                member_ids=component_members[target_component],
-            )
-            if source_rank <= target_rank:
-                child_component = target_component
-                parent_media_id = relation.source_media_id
-            else:
-                child_component = source_component
-                parent_media_id = relation.target_media_id
+            parent_component = components.find(parent_media_id)
+            branch_component = components.find(branch_media_id)
+            if parent_component == branch_component:
+                continue
             contexts.setdefault(
-                child_component,
-                (parent_media_id, relation.relation_type),
+                branch_component,
+                (parent_media_id, context.relation_type),
             )
         return contexts
-
-    def _branch_parent_rank(self, *, snapshot, member_ids):
-        """Rank components by how closely they resemble the main continuity."""
-        nodes = snapshot.nodes_by_media_id
-        series_line_ids = {
-            str(node.media_id) for node in snapshot.series_line
-        }
-        series_line_count = len(member_ids & series_line_ids)
-        primary_count = sum(
-            nodes[media_id].media_type in PRIMARY_DISPLAY_MEDIA_TYPES
-            for media_id in member_ids
-        )
-        earliest_node_key = min(
-            self._node_sort_key(nodes[media_id]) for media_id in member_ids
-        )
-        return (
-            -series_line_count,
-            -primary_count,
-            -len(member_ids),
-            earliest_node_key,
-        )
 
     def _root_media_id(self, *, snapshot, relations, member_ids):
         incoming = defaultdict(set)

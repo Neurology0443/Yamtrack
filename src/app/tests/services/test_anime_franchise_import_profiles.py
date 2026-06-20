@@ -279,6 +279,53 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
         self.assertNotIn("23", selection.media_ids)
         self.assertNotIn("24", selection.media_ids)
 
+    def test_satellites_profile_keeps_spice_and_wolf_like_alternative_version(self):
+        nodes = {
+            "10": AnimeNode(
+                "10",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                date(2008, 1, 1),
+                [],
+                24,
+                13,
+            ),
+            "20": AnimeNode(
+                "20",
+                "Alternative Version",
+                "mal",
+                "tv",
+                "img",
+                date(2024, 1, 1),
+                [],
+                24,
+                25,
+            ),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[
+                AnimeRelation("10", "20", "alternative_version")
+            ],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[
+                AnimeRelation("10", "20", "alternative_version")
+            ],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+
+        self.assertEqual(selection.media_ids, {"20"})
+
     def test_satellites_profile_excludes_runtime_below_15_minutes(self):
         nodes = {
             "10": AnimeNode("10", "Main", "mal", "tv", "img", date(2020, 1, 1), [], 24),
