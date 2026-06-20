@@ -166,7 +166,6 @@ class AnimeSeriesViewProjectionRefreshService:
         ):
             return initial_snapshot
 
-        valid_candidates = []
         for reanchor_media_id in self._projection_reanchor_candidates(
             initial_snapshot
         )[:MAX_REANCHOR_ATTEMPTS]:
@@ -191,41 +190,29 @@ class AnimeSeriesViewProjectionRefreshService:
                 requested_media_id=requested_media_id,
                 reanchor_media_id=reanchor_media_id,
             ):
-                valid_candidates.append(
-                    (reanchor_media_id, candidate_snapshot)
+                chosen_scope = {
+                    str(media_id)
+                    for media_id in candidate_snapshot.nodes_by_media_id
+                }
+                logger.debug(
+                    "Anime Series View projection snapshot reanchored",
+                    extra={
+                        "requested_media_id": requested_media_id,
+                        "original_root": initial_snapshot.root_node.media_id,
+                        "chosen_root": candidate_snapshot.root_node.media_id,
+                        "original_scope_size": len(initial_scope),
+                        "chosen_scope_size": len(chosen_scope),
+                        "original_has_series_line": bool(
+                            initial_snapshot.series_line
+                        ),
+                        "chosen_has_series_line": bool(
+                            candidate_snapshot.series_line
+                        ),
+                        "reanchor_media_id": reanchor_media_id,
+                    },
                 )
-
-        if not valid_candidates:
-            return initial_snapshot
-        if len(valid_candidates) > 1:
-            logger.warning(
-                "Multiple valid Anime Series View reanchor snapshots found",
-                extra={
-                    "requested_media_id": requested_media_id,
-                    "reanchor_media_ids": [
-                        media_id for media_id, _snapshot in valid_candidates
-                    ],
-                },
-            )
-
-        reanchor_media_id, chosen_snapshot = valid_candidates[0]
-        chosen_scope = {
-            str(media_id) for media_id in chosen_snapshot.nodes_by_media_id
-        }
-        logger.debug(
-            "Anime Series View projection snapshot reanchored",
-            extra={
-                "requested_media_id": requested_media_id,
-                "original_root": initial_snapshot.root_node.media_id,
-                "chosen_root": chosen_snapshot.root_node.media_id,
-                "original_scope_size": len(initial_scope),
-                "chosen_scope_size": len(chosen_scope),
-                "original_has_series_line": bool(initial_snapshot.series_line),
-                "chosen_has_series_line": bool(chosen_snapshot.series_line),
-                "reanchor_media_id": reanchor_media_id,
-            },
-        )
-        return chosen_snapshot
+                return candidate_snapshot
+        return initial_snapshot
 
     @staticmethod
     def _snapshot_is_sufficient(*, snapshot, requested_media_id):
@@ -322,6 +309,12 @@ class AnimeSeriesViewProjectionRefreshService:
         )
         if not has_series_anchor:
             return False
+        initial_relevant_ids = _projection_relevant_component_ids(
+            snapshot=initial_snapshot,
+            seed_media_id=requested_media_id,
+        )
+        if not initial_relevant_ids <= candidate_scope:
+            return False
         candidate_is_more_informative = (
             len(candidate_scope) > len(initial_scope)
             or not initial_snapshot.series_line
@@ -391,3 +384,30 @@ def _relevant_escaping_relation_count(snapshot):
         )
     }
     return len(escaping_relations)
+
+
+def _projection_relevant_component_ids(*, snapshot, seed_media_id):
+    inside_ids = {str(media_id) for media_id in snapshot.nodes_by_media_id}
+    seed_media_id = str(seed_media_id)
+    if seed_media_id not in inside_ids:
+        return set()
+
+    adjacency = {media_id: set() for media_id in inside_ids}
+    for relation in snapshot.all_normalized_relations:
+        if str(relation.relation_type) not in PROJECTION_RELEVANT_RELATIONS:
+            continue
+        source_id = str(relation.source_media_id)
+        target_id = str(relation.target_media_id)
+        if source_id in inside_ids and target_id in inside_ids:
+            adjacency[source_id].add(target_id)
+            adjacency[target_id].add(source_id)
+
+    seen = {seed_media_id}
+    stack = [seed_media_id]
+    while stack:
+        current = stack.pop()
+        for neighbor in adjacency[current]:
+            if neighbor not in seen:
+                seen.add(neighbor)
+                stack.append(neighbor)
+    return seen

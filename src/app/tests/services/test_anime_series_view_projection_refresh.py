@@ -149,6 +149,8 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
             raise RuntimeError(message)
 
         self.snapshot_service.build.side_effect = build
+        tracked_ids = {"29803", "35073", "37675", "48895", "48896"}
+        self.tracked_fetcher.return_value = tracked_ids
         self.service.refresh_for_media_ids(
             user=self.user,
             media_ids={"48896"},
@@ -159,12 +161,11 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
             [
                 call("48896", refresh_cache=False),
                 call("48895", refresh_cache=False),
-                call("37675", refresh_cache=False),
             ],
         )
         self.builder.build.assert_called_once_with(
             snapshot=complete,
-            tracked_media_ids={"1"},
+            tracked_media_ids=tracked_ids,
         )
         self.persistence.persist.assert_called_once_with(
             user=self.user,
@@ -173,6 +174,100 @@ class AnimeSeriesViewProjectionRefreshTests(SimpleTestCase):
                 {"29803", "35073", "37675", "48895", "48896"}
             ),
             dry_run=False,
+        )
+
+    def test_reanchor_candidate_must_cover_initial_relevant_component(self):
+        initial = fake_snapshot(
+            {"movie", "parent_tv", "side_story"},
+            root_media_id="movie",
+            series_line_ids=[],
+            media_types={
+                "movie": "movie",
+                "parent_tv": "tv",
+                "side_story": "special",
+            },
+            relations=[
+                relation("movie", "parent_tv", "parent_story"),
+                relation("movie", "side_story", "side_story"),
+                relation("parent_tv", "older_tv", "prequel"),
+            ],
+        )
+        incomplete_candidate = fake_snapshot(
+            {"movie", "parent_tv", "older_tv"},
+            root_media_id="parent_tv",
+            series_line_ids=["older_tv", "parent_tv"],
+            relations=[
+                relation("older_tv", "parent_tv", "sequel"),
+                relation("movie", "parent_tv", "parent_story"),
+            ],
+        )
+        complete_candidate = fake_snapshot(
+            {"movie", "parent_tv", "side_story", "older_tv"},
+            root_media_id="older_tv",
+            series_line_ids=["older_tv", "parent_tv"],
+            relations=[
+                relation("older_tv", "parent_tv", "sequel"),
+                relation("movie", "parent_tv", "parent_story"),
+                relation("movie", "side_story", "side_story"),
+            ],
+        )
+        self.snapshot_service.build.side_effect = [
+            initial,
+            incomplete_candidate,
+            complete_candidate,
+        ]
+
+        self.service.refresh_for_media_ids(
+            user=self.user,
+            media_ids={"movie"},
+        )
+
+        self.snapshot_service.build.assert_has_calls(
+            [
+                call("movie", refresh_cache=False),
+                call("parent_tv", refresh_cache=False),
+                call("older_tv", refresh_cache=False),
+            ]
+        )
+        self.builder.build.assert_called_once_with(
+            snapshot=complete_candidate,
+            tracked_media_ids={"1"},
+        )
+
+    def test_relevant_component_ignores_unrelated_relation_types(self):
+        initial = fake_snapshot(
+            {"movie", "parent_tv", "character"},
+            root_media_id="movie",
+            series_line_ids=[],
+            media_types={
+                "movie": "movie",
+                "parent_tv": "tv",
+                "character": "special",
+            },
+            relations=[
+                relation("movie", "parent_tv", "parent_story"),
+                relation("movie", "character", "character"),
+            ],
+        )
+        candidate = fake_snapshot(
+            {"movie", "parent_tv", "older_tv"},
+            root_media_id="parent_tv",
+            series_line_ids=["older_tv", "parent_tv"],
+            relations=[
+                relation("older_tv", "parent_tv", "sequel"),
+                relation("movie", "parent_tv", "parent_story"),
+            ],
+        )
+        self.snapshot_service.build.side_effect = [initial, candidate]
+
+        self.service.refresh_for_media_ids(
+            user=self.user,
+            media_ids={"movie"},
+        )
+
+        self.builder.build.assert_called_once_with(
+            snapshot=candidate,
+            tracked_media_ids={"1"},
         )
 
     def test_complete_snapshot_does_not_reanchor(self):
