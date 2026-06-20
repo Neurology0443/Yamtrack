@@ -274,6 +274,88 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         self.assertEqual(len(projection.groups), 2)
 
+    def test_direct_continuity_groups_when_boundary_exists_inside_component(
+        self,
+    ):
+        projection = self.builder.build(
+            snapshot=snapshot(
+                [
+                    node("502", title="Movie 1", media_type="movie"),
+                    node("891", title="Movie 2", media_type="movie"),
+                    node("892", title="Movie 3", media_type="movie"),
+                    node("893", title="Movie 4", media_type="movie"),
+                ],
+                [
+                    relation("502", "891", "sequel"),
+                    relation("891", "892", "sequel"),
+                    relation("892", "893", "sequel"),
+                    relation("893", "892", "prequel"),
+                    relation("502", "893", "alternative_version"),
+                    relation("893", "502", "alternative_version"),
+                ],
+                series_line_ids=[],
+            ),
+            tracked_media_ids={"502", "892", "893"},
+        )
+
+        self.assertEqual(len(projection.groups), 1)
+        group = projection.groups[0]
+        self.assertEqual(group.root_media_id, "502")
+        self.assertEqual(
+            set(group.member_media_ids),
+            {"502", "892", "893"},
+        )
+        self.assertEqual(group.group_kind, "main_continuity")
+        self.assertIsNone(group.context_parent_media_id)
+        self.assertIsNone(group.context_relation_type)
+
+    def test_weak_groupable_relation_cannot_cross_branch_boundary(self):
+        projection = self.builder.build(
+            snapshot=snapshot(
+                [node("1"), node("2"), node("3")],
+                [
+                    relation("1", "2", "alternative_version"),
+                    relation("2", "3", "sequel"),
+                    relation("1", "3", "side_story"),
+                ],
+                series_line_ids=["1"],
+            ),
+            tracked_media_ids={"1", "2", "3"},
+        )
+
+        member_sets = {
+            frozenset(group.member_media_ids) for group in projection.groups
+        }
+        self.assertEqual(
+            member_sets,
+            {frozenset({"1"}), frozenset({"2", "3"})},
+        )
+        branch = next(
+            group for group in projection.groups if group.root_media_id == "2"
+        )
+        self.assertEqual(branch.group_kind, "alternative_branch")
+        self.assertEqual(branch.context_parent_media_id, "1")
+
+    def test_direct_continuity_wins_when_same_pair_also_has_boundary(self):
+        projection = self.builder.build(
+            snapshot=snapshot(
+                [node("1"), node("2")],
+                [
+                    relation("1", "2", "sequel"),
+                    relation("1", "2", "alternative_version"),
+                ],
+                series_line_ids=["1"],
+            ),
+            tracked_media_ids={"1", "2"},
+        )
+
+        self.assertEqual(len(projection.groups), 1)
+        group = projection.groups[0]
+        self.assertEqual(group.member_media_ids, ("1", "2"))
+        self.assertEqual(group.group_kind, "main_continuity")
+        self.assertIsNone(group.context_parent_media_id)
+        self.assertIsNone(group.context_relation_type)
+
     def test_indirect_groupable_bridge_across_boundary_is_deterministic(self):
         projection = self.builder.build(
             snapshot=snapshot(

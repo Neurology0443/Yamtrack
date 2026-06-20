@@ -196,27 +196,82 @@ class AnimeSeriesViewProjectionBuilder:
             )
         )
 
-    @staticmethod
-    def _series_view_components(*, nodes, relations, branch_boundaries):
+    @classmethod
+    def _series_view_components(
+        cls,
+        *,
+        nodes,
+        relations,
+        branch_boundaries,
+    ):
         components = _DisjointSet(nodes)
+        cls._merge_continuity_relations(
+            components=components,
+            relations=relations,
+        )
+        cls._merge_weak_groupable_relations(
+            components=components,
+            relations=relations,
+            branch_boundaries=branch_boundaries,
+        )
+        return components
+
+    @staticmethod
+    def _merge_continuity_relations(*, components, relations):
         for relation in relations:
-            if relation.relation_type not in GROUPABLE_RELATIONS:
+            if relation.relation_type not in CONTINUITY_RELATIONS:
                 continue
             left = relation.source_media_id
             right = relation.target_media_id
+            if left == right:
+                continue
+            left_root = components.find(left)
+            right_root = components.find(right)
+            if left_root == right_root:
+                continue
+            components.union(left, right)
+
+    @classmethod
+    def _merge_weak_groupable_relations(
+        cls,
+        *,
+        components,
+        relations,
+        branch_boundaries,
+    ):
+        weak_groupable_relations = GROUPABLE_RELATIONS - CONTINUITY_RELATIONS
+        for relation in relations:
+            if relation.relation_type not in weak_groupable_relations:
+                continue
+            left = relation.source_media_id
+            right = relation.target_media_id
+            if left == right:
+                continue
             if frozenset((left, right)) in branch_boundaries:
                 continue
             left_root = components.find(left)
             right_root = components.find(right)
             if left_root == right_root:
                 continue
-            merged_members = (
-                components.members[left_root] | components.members[right_root]
-            )
-            if any(boundary <= merged_members for boundary in branch_boundaries):
+            if cls._would_cross_branch_boundary(
+                left_members=components.members[left_root],
+                right_members=components.members[right_root],
+                branch_boundaries=branch_boundaries,
+            ):
                 continue
             components.union(left, right)
-        return components
+
+    @staticmethod
+    def _would_cross_branch_boundary(
+        *,
+        left_members,
+        right_members,
+        branch_boundaries,
+    ):
+        return any(
+            bool(boundary & left_members) and bool(boundary & right_members)
+            for boundary in branch_boundaries
+        )
 
     def _project_branch_contexts(
         self,
