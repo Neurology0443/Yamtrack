@@ -81,12 +81,14 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         snapshot = self._build_branch_snapshot(
             nodes=nodes,
             root_media_id="42916",
+            build_media_ids={"42916"},
         )
 
         self.assertEqual(
             snapshot.branch_relations,
             [AnimeBranchRelation("100", "42916", "alternative_version")],
         )
+        self.assertEqual(snapshot.canonical_root_media_id, "100")
 
     def test_branch_relation_orients_progressive_edge_exposed_from_main(self):
         nodes = {
@@ -125,6 +127,7 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         snapshot = self._build_branch_snapshot(
             nodes=nodes,
             root_media_id="100",
+            build_media_ids={"100", "101"},
         )
 
         self.assertEqual(
@@ -170,12 +173,14 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         snapshot = self._build_branch_snapshot(
             nodes=nodes,
             root_media_id="51958",
+            build_media_ids={"51958", "57833"},
         )
 
         self.assertEqual(
             snapshot.branch_relations,
             [AnimeBranchRelation("30831", "51958", "spin_off")],
         )
+        self.assertEqual(snapshot.canonical_root_media_id, "30831")
 
     def test_branch_relation_orients_konosuba_spin_off_from_main_root(self):
         nodes = {
@@ -218,7 +223,7 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
             [AnimeBranchRelation("30831", "51958", "spin_off")],
         )
 
-    def test_branch_relation_orients_alternative_setting_from_either_root(self):
+    def test_branch_relation_orients_alternative_setting_from_branch_root(self):
         nodes = {
             "1": AnimeNode("1", "Main", "mal", "tv", "img", None, []),
             "2": AnimeNode(
@@ -234,61 +239,110 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
         branch_snapshot = self._build_branch_snapshot(
             nodes=nodes,
             root_media_id="2",
-        )
-        main_snapshot = self._build_branch_snapshot(
-            nodes=nodes,
-            root_media_id="1",
+            build_media_ids={"2"},
         )
 
         self.assertEqual(
             branch_snapshot.branch_relations,
             [AnimeBranchRelation("1", "2", "alternative_setting")],
         )
+
+    def test_branch_relation_orients_alternative_setting_from_main_root(self):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                None,
+                [AnimeRelation("1", "2", "alternative_setting")],
+            ),
+            "2": AnimeNode(
+                "2",
+                "Alternative",
+                "mal",
+                "movie",
+                "img",
+                None,
+                [],
+            ),
+        }
+        main_snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="1",
+            build_media_ids={"1"},
+        )
+
         self.assertEqual(
             main_snapshot.branch_relations,
             [AnimeBranchRelation("1", "2", "alternative_setting")],
         )
 
-    def test_branch_relations_are_empty_when_both_components_are_parent_anchors(
-        self,
-    ):
+    def test_branch_relation_ignores_edges_between_non_main_branches(self):
         nodes = {
             "1": AnimeNode(
                 "1",
-                "One",
+                "Main",
                 "mal",
                 "tv",
                 "img",
                 None,
-                [AnimeRelation("1", "2", "alternative_version")],
+                [
+                    AnimeRelation("1", "2", "spin_off"),
+                    AnimeRelation("1", "3", "side_story"),
+                ],
             ),
-            "2": AnimeNode("2", "Two", "mal", "tv", "img", None, []),
-            "3": AnimeNode("3", "Root", "mal", "movie", "img", None, []),
-        }
-        snapshot = self._build_branch_snapshot(
-            nodes=nodes,
-            root_media_id="3",
-        )
-
-        self.assertEqual(snapshot.branch_relations, [])
-
-    def test_branch_relations_are_empty_without_parent_anchor_component(self):
-        nodes = {
-            "1": AnimeNode(
-                "1",
-                "One",
+            "2": AnimeNode(
+                "2",
+                "Branch A",
                 "mal",
                 "movie",
                 "img",
                 None,
-                [AnimeRelation("1", "2", "alternative_version")],
+                [AnimeRelation("2", "3", "alternative_version")],
             ),
-            "2": AnimeNode("2", "Two", "mal", "movie", "img", None, []),
-            "3": AnimeNode("3", "Root", "mal", "movie", "img", None, []),
+            "3": AnimeNode(
+                "3",
+                "Branch B",
+                "mal",
+                "movie",
+                "img",
+                None,
+                [],
+            ),
         }
         snapshot = self._build_branch_snapshot(
             nodes=nodes,
-            root_media_id="3",
+            root_media_id="1",
+            build_media_ids={"1"},
+        )
+
+        self.assertEqual(
+            snapshot.branch_relations,
+            [AnimeBranchRelation("1", "2", "spin_off")],
+        )
+
+    def test_branch_relation_inside_main_component_is_ignored(self):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                None,
+                [
+                    AnimeRelation("1", "2", "sequel"),
+                    AnimeRelation("1", "2", "alternative_version"),
+                ],
+            ),
+            "2": AnimeNode("2", "Sequel", "mal", "tv", "img", None, []),
+        }
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="1",
+            build_media_ids={"1", "2"},
         )
 
         self.assertEqual(snapshot.branch_relations, [])

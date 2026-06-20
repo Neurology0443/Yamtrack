@@ -107,10 +107,6 @@ class AnimeFranchiseSnapshotService:
 
         direct_anchors = self._derive_direct_anchors(series_line, root_node)
         fallback_anchor_media_id = root_node.media_id
-        canonical_root_media_id = self._derive_canonical_root_media_id(
-            series_line,
-            continuity_component,
-        )
 
         series_line_ids = {node.media_id for node in series_line}
         direct_candidates: list[AnimeRelation] = []
@@ -158,11 +154,14 @@ class AnimeFranchiseSnapshotService:
             for node in nodes_by_media_id.values()
             for relation in node.relations
         ]
+        canonical_root_media_id = self._derive_canonical_root_media_id(
+            self._derive_series_line(nodes_by_media_id),
+            list(nodes_by_media_id.values()),
+        )
         branch_relations = self._derive_branch_relations(
             nodes_by_media_id=nodes_by_media_id,
             all_relations=all_relations,
-            direct_anchors=direct_anchors,
-            root_node=root_node,
+            canonical_root_media_id=canonical_root_media_id,
         )
 
         return AnimeFranchiseSnapshot(
@@ -187,40 +186,18 @@ class AnimeFranchiseSnapshotService:
         *,
         nodes_by_media_id: dict[str, AnimeNode],
         all_relations: list[AnimeRelation],
-        direct_anchors: list[AnimeNode],
-        root_node: AnimeNode,
+        canonical_root_media_id: str,
     ) -> list[AnimeBranchRelation]:
-        """Orient branch edges from anchored parent components."""
-        components = _BranchComponents(nodes_by_media_id)
-        for relation in all_relations:
-            if relation.relation_type not in CONTINUITY_RELATIONS:
-                continue
-            if (
-                relation.source_media_id not in nodes_by_media_id
-                or relation.target_media_id not in nodes_by_media_id
-            ):
-                continue
-            components.union(
-                relation.source_media_id,
-                relation.target_media_id,
-            )
-
-        anchor_media_ids = {
-            str(anchor.media_id)
-            for anchor in direct_anchors
-            if str(anchor.media_id) in nodes_by_media_id
-        }
-        anchor_components = {
-            components.find(media_id)
-            for media_id in anchor_media_ids
-        }
-        branch_root_components = self._branch_root_components(
-            root_node=root_node,
+        """Orient branch edges from the canonical continuity component."""
+        components = self._branch_components(
+            nodes_by_media_id=nodes_by_media_id,
             all_relations=all_relations,
-            components=components,
-            anchor_components=anchor_components,
         )
-        parent_anchor_components = anchor_components - branch_root_components
+
+        canonical_root_media_id = str(canonical_root_media_id)
+        if canonical_root_media_id not in nodes_by_media_id:
+            return []
+        main_component = components.find(canonical_root_media_id)
 
         oriented = {}
         for relation in all_relations:
@@ -237,12 +214,12 @@ class AnimeFranchiseSnapshotService:
             if source_component == target_component:
                 continue
 
-            source_is_parent_anchor = source_component in parent_anchor_components
-            target_is_parent_anchor = target_component in parent_anchor_components
-            if source_is_parent_anchor == target_is_parent_anchor:
+            source_is_main = source_component == main_component
+            target_is_main = target_component == main_component
+            if source_is_main == target_is_main:
                 continue
 
-            if source_is_parent_anchor:
+            if source_is_main:
                 parent_media_id = str(relation.source_media_id)
                 branch_media_id = str(relation.target_media_id)
             else:
@@ -272,50 +249,26 @@ class AnimeFranchiseSnapshotService:
         )
 
     @staticmethod
-    def _branch_root_components(
+    def _branch_components(
         *,
-        root_node: AnimeNode,
+        nodes_by_media_id: dict[str, AnimeNode],
         all_relations: list[AnimeRelation],
-        components: _BranchComponents,
-        anchor_components: set[str],
-    ) -> set[str]:
-        """Return an anchored root component directly branch-linked to an anchor."""
-        root_media_id = str(root_node.media_id)
-        if root_media_id not in components.parent:
-            return set()
-
-        root_component = components.find(root_media_id)
-        branch_root_components = set()
+    ) -> _BranchComponents:
+        """Build continuity-only components for branch orientation."""
+        components = _BranchComponents(nodes_by_media_id)
         for relation in all_relations:
-            if relation.relation_type not in BRANCH_RELATIONS:
-                continue
-
-            source_media_id = str(relation.source_media_id)
-            target_media_id = str(relation.target_media_id)
-            if root_media_id not in {source_media_id, target_media_id}:
+            if relation.relation_type not in CONTINUITY_RELATIONS:
                 continue
             if (
-                source_media_id not in components.parent
-                or target_media_id not in components.parent
+                relation.source_media_id not in nodes_by_media_id
+                or relation.target_media_id not in nodes_by_media_id
             ):
                 continue
-
-            source_component = components.find(source_media_id)
-            target_component = components.find(target_media_id)
-            if source_component == target_component:
-                continue
-            if root_component not in {source_component, target_component}:
-                continue
-
-            other_component = (
-                target_component
-                if source_component == root_component
-                else source_component
+            components.union(
+                relation.source_media_id,
+                relation.target_media_id,
             )
-            if other_component in anchor_components:
-                branch_root_components.add(root_component)
-
-        return branch_root_components
+        return components
 
     def _derive_root_story_parent_candidates(
         self,
