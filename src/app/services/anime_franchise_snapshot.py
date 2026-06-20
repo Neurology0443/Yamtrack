@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 
 
 ROOT_STORY_PARENT_RELATIONS = {"full_story"}
+BRANCH_RELATIONS = frozenset(
+    {"spin_off", "alternative_version", "alternative_setting"}
+)
+CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
 
 
 NO_SERIES_LINE_SECONDARY_RELATIONS = {
@@ -23,6 +27,15 @@ NO_SERIES_LINE_SECONDARY_RELATIONS = {
     "alternative_version",
     "character",
 }
+
+
+@dataclass(frozen=True)
+class AnimeBranchRelation:
+    """A branch relation oriented from main/parent component to branch component."""
+
+    parent_media_id: str
+    branch_media_id: str
+    relation_type: str
 
 
 @dataclass
@@ -44,6 +57,29 @@ class AnimeFranchiseSnapshot:
         default_factory=list
     )
     root_story_parent_candidates: list[AnimeRelation] = field(default_factory=list)
+    branch_relations: list[AnimeBranchRelation] = field(default_factory=list)
+
+
+class _BranchComponents:
+    """Continuity-only components used to orient branch relations."""
+
+    def __init__(self, media_ids):
+        self.parent = {str(media_id): str(media_id) for media_id in media_ids}
+
+    def find(self, media_id):
+        media_id = str(media_id)
+        parent = self.parent[media_id]
+        if parent != media_id:
+            self.parent[media_id] = self.find(parent)
+        return self.parent[media_id]
+
+    def union(self, left_media_id, right_media_id):
+        left_root = self.find(left_media_id)
+        right_root = self.find(right_media_id)
+        if left_root == right_root:
+            return
+        keep, merge = sorted((left_root, right_root), key=_media_id_key)
+        self.parent[merge] = keep
 
 
 class AnimeFranchiseSnapshotService:
@@ -122,6 +158,11 @@ class AnimeFranchiseSnapshotService:
             for node in nodes_by_media_id.values()
             for relation in node.relations
         ]
+        branch_relations = self._derive_branch_relations(
+            nodes_by_media_id=nodes_by_media_id,
+            all_relations=all_relations,
+            series_line=series_line,
+        )
 
         return AnimeFranchiseSnapshot(
             root_node=root_node,
@@ -137,6 +178,84 @@ class AnimeFranchiseSnapshotService:
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
+            branch_relations=branch_relations,
+        )
+
+    def _derive_branch_relations(
+        self,
+        *,
+        nodes_by_media_id: dict[str, AnimeNode],
+        all_relations: list[AnimeRelation],
+        series_line: list[AnimeNode],
+    ) -> list[AnimeBranchRelation]:
+        """Orient only branch edges proven by one main-line component."""
+        components = _BranchComponents(nodes_by_media_id)
+        for relation in all_relations:
+            if relation.relation_type not in CONTINUITY_RELATIONS:
+                continue
+            if (
+                relation.source_media_id not in nodes_by_media_id
+                or relation.target_media_id not in nodes_by_media_id
+            ):
+                continue
+            components.union(
+                relation.source_media_id,
+                relation.target_media_id,
+            )
+
+        series_line_ids = {str(node.media_id) for node in series_line}
+        main_line_components = {
+            components.find(media_id)
+            for media_id in series_line_ids
+            if media_id in nodes_by_media_id
+        }
+        oriented = {}
+        for relation in all_relations:
+            if relation.relation_type not in BRANCH_RELATIONS:
+                continue
+            if (
+                relation.source_media_id not in nodes_by_media_id
+                or relation.target_media_id not in nodes_by_media_id
+            ):
+                continue
+
+            source_component = components.find(relation.source_media_id)
+            target_component = components.find(relation.target_media_id)
+            if source_component == target_component:
+                continue
+
+            source_is_main = source_component in main_line_components
+            target_is_main = target_component in main_line_components
+            if source_is_main == target_is_main:
+                continue
+
+            if source_is_main:
+                parent_media_id = str(relation.source_media_id)
+                branch_media_id = str(relation.target_media_id)
+            else:
+                parent_media_id = str(relation.target_media_id)
+                branch_media_id = str(relation.source_media_id)
+
+            branch_relation = AnimeBranchRelation(
+                parent_media_id=parent_media_id,
+                branch_media_id=branch_media_id,
+                relation_type=relation.relation_type,
+            )
+            oriented[
+                (
+                    branch_relation.parent_media_id,
+                    branch_relation.branch_media_id,
+                    branch_relation.relation_type,
+                )
+            ] = branch_relation
+
+        return sorted(
+            oriented.values(),
+            key=lambda relation: (
+                _media_id_key(relation.branch_media_id),
+                _media_id_key(relation.parent_media_id),
+                relation.relation_type,
+            ),
         )
 
     def _derive_root_story_parent_candidates(
@@ -415,3 +534,8 @@ class AnimeFranchiseSnapshotService:
             key=self._date_sort_tuple,
         )
         return ordered_nodes[0].media_id
+
+
+def _media_id_key(media_id):
+    media_id = str(media_id)
+    return (0, int(media_id)) if media_id.isdigit() else (1, media_id)

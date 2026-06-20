@@ -4,7 +4,10 @@ from datetime import date
 from django.test import SimpleTestCase
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_franchise_snapshot import (
+    AnimeBranchRelation,
+    AnimeFranchiseSnapshotService,
+)
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
@@ -27,6 +30,232 @@ class FakeGraphBuilder:
 
 
 class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
+    def _build_branch_snapshot(
+        self,
+        *,
+        nodes,
+        root_media_id,
+    ):
+        return AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        ).build(root_media_id)
+
+    def test_branch_relation_orients_progressive_edge_exposed_from_branch(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "SAO",
+                "mal",
+                "tv",
+                "img",
+                date(2012, 7, 8),
+                [AnimeRelation("100", "101", "sequel")],
+            ),
+            "101": AnimeNode(
+                "101",
+                "SAO II",
+                "mal",
+                "tv",
+                "img",
+                date(2014, 7, 5),
+                [],
+            ),
+            "42916": AnimeNode(
+                "42916",
+                "Progressive",
+                "mal",
+                "movie",
+                "img",
+                date(2021, 10, 30),
+                [AnimeRelation("42916", "100", "alternative_version")],
+            ),
+        }
+
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="42916",
+        )
+
+        self.assertEqual(
+            snapshot.branch_relations,
+            [AnimeBranchRelation("100", "42916", "alternative_version")],
+        )
+
+    def test_branch_relation_orients_progressive_edge_exposed_from_main(self):
+        nodes = {
+            "100": AnimeNode(
+                "100",
+                "SAO",
+                "mal",
+                "tv",
+                "img",
+                date(2012, 7, 8),
+                [
+                    AnimeRelation("100", "101", "sequel"),
+                    AnimeRelation("100", "42916", "alternative_version"),
+                ],
+            ),
+            "101": AnimeNode(
+                "101",
+                "SAO II",
+                "mal",
+                "tv",
+                "img",
+                date(2014, 7, 5),
+                [],
+            ),
+            "42916": AnimeNode(
+                "42916",
+                "Progressive",
+                "mal",
+                "movie",
+                "img",
+                date(2021, 10, 30),
+                [],
+            ),
+        }
+
+        snapshot = self._build_branch_snapshot(
+            nodes=nodes,
+            root_media_id="100",
+        )
+
+        self.assertEqual(
+            snapshot.branch_relations,
+            [AnimeBranchRelation("100", "42916", "alternative_version")],
+        )
+
+    def test_branch_relation_orients_reverse_konosuba_spin_off(self):
+        nodes = {
+            "30831": AnimeNode(
+                "30831",
+                "KonoSuba",
+                "mal",
+                "tv",
+                "img",
+                date(2016, 1, 14),
+                [],
+            ),
+            "51958": AnimeNode(
+                "51958",
+                "Bakuen",
+                "mal",
+                "tv",
+                "img",
+                date(2023, 4, 6),
+                [
+                    AnimeRelation("51958", "30831", "spin_off"),
+                    AnimeRelation("51958", "57833", "sequel"),
+                ],
+            ),
+            "57833": AnimeNode(
+                "57833",
+                "Bakuen 2",
+                "mal",
+                "tv",
+                "img",
+                date(2026, 1, 1),
+                [],
+            ),
+        }
+        service = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        )
+        branch_relations = service._derive_branch_relations(
+            nodes_by_media_id=nodes,
+            all_relations=[
+                relation
+                for node in nodes.values()
+                for relation in node.relations
+            ],
+            series_line=[nodes["30831"]],
+        )
+
+        self.assertEqual(
+            branch_relations,
+            [AnimeBranchRelation("30831", "51958", "spin_off")],
+        )
+
+    def test_branch_relation_orients_alternative_setting(self):
+        nodes = {
+            "1": AnimeNode("1", "Main", "mal", "tv", "img", None, []),
+            "2": AnimeNode(
+                "2",
+                "Alternative",
+                "mal",
+                "movie",
+                "img",
+                None,
+                [AnimeRelation("2", "1", "alternative_setting")],
+            ),
+        }
+        service = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        )
+
+        branch_relations = service._derive_branch_relations(
+            nodes_by_media_id=nodes,
+            all_relations=nodes["2"].relations,
+            series_line=[nodes["1"]],
+        )
+
+        self.assertEqual(
+            branch_relations,
+            [AnimeBranchRelation("1", "2", "alternative_setting")],
+        )
+
+    def test_branch_relations_are_empty_without_series_line(self):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "One",
+                "mal",
+                "movie",
+                "img",
+                None,
+                [AnimeRelation("1", "2", "alternative_version")],
+            ),
+            "2": AnimeNode("2", "Two", "mal", "movie", "img", None, []),
+        }
+        service = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        )
+
+        branch_relations = service._derive_branch_relations(
+            nodes_by_media_id=nodes,
+            all_relations=nodes["1"].relations,
+            series_line=[],
+        )
+
+        self.assertEqual(branch_relations, [])
+
+    def test_branch_relations_are_empty_when_both_components_touch_series_line(
+        self,
+    ):
+        nodes = {
+            "1": AnimeNode(
+                "1",
+                "One",
+                "mal",
+                "tv",
+                "img",
+                None,
+                [AnimeRelation("1", "2", "alternative_version")],
+            ),
+            "2": AnimeNode("2", "Two", "mal", "tv", "img", None, []),
+        }
+        service = AnimeFranchiseSnapshotService(
+            graph_builder=FakeGraphBuilder(nodes)
+        )
+
+        branch_relations = service._derive_branch_relations(
+            nodes_by_media_id=nodes,
+            all_relations=nodes["1"].relations,
+            series_line=[nodes["1"], nodes["2"]],
+        )
+
+        self.assertEqual(branch_relations, [])
+
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
             "10": AnimeNode(

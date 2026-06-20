@@ -3,7 +3,10 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+from app.services.anime_franchise_snapshot import (
+    AnimeBranchRelation,
+    AnimeFranchiseSnapshot,
+)
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 from app.services.anime_local_series_resolver import AnimeLocalSeriesResolver
 
@@ -19,7 +22,15 @@ def node(media_id, *, media_type="tv", start_date=None):
     )
 
 
-def snapshot(*, root_id, nodes, relations, canonical_root_id=None, series_ids=()):
+def snapshot(
+    *,
+    root_id,
+    nodes,
+    relations,
+    canonical_root_id=None,
+    series_ids=(),
+    branch_relations=(),
+):
     nodes_by_id = {item.media_id: item for item in nodes}
     for relation in relations:
         nodes_by_id[relation.source_media_id].relations.append(relation)
@@ -35,6 +46,7 @@ def snapshot(*, root_id, nodes, relations, canonical_root_id=None, series_ids=()
         has_series_line=bool(series_line),
         fallback_anchor_media_id=root_id,
         canonical_root_media_id=canonical_root_id or root_id,
+        branch_relations=list(branch_relations),
     )
 
 
@@ -165,6 +177,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="1",
                 series_ids=("1",),
+                branch_relations=(
+                    AnimeBranchRelation("1", "2", "spin_off"),
+                ),
             ),
             tracked_media_ids={"1", "2", "3"},
         )
@@ -199,6 +214,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="51958",
                 series_ids=("30831",),
+                branch_relations=(
+                    AnimeBranchRelation("30831", "51958", "spin_off"),
+                ),
             ),
             tracked_media_ids={"30831", "51958", "57833"},
         )
@@ -282,6 +300,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="1",
                 series_ids=("1",),
+                branch_relations=(
+                    AnimeBranchRelation("1", "2", "alternative_setting"),
+                ),
             ),
             tracked_media_ids={"1", "2"},
         )
@@ -312,6 +333,9 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
                 relations=relations,
                 canonical_root_id="200",
                 series_ids=("100", "101"),
+                branch_relations=(
+                    AnimeBranchRelation("100", "200", "alternative_version"),
+                ),
             ),
             tracked_media_ids={"100", "101", "200"},
         )
