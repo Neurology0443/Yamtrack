@@ -227,7 +227,8 @@ class AnimeSeriesViewProjectionBuilder:
         component_members,
         nodes,
     ):
-        direct_candidates = {}
+        contexts = {}
+        ambiguous = set()
         for relation in relations:
             if relation.relation_type not in BRANCH_BOUNDARY_RELATIONS:
                 continue
@@ -254,86 +255,15 @@ class AnimeSeriesViewProjectionBuilder:
                 parent.title,
                 relation.relation_type,
             )
-            direct_candidates.setdefault(branch_component, set()).add(candidate)
-
-        ambiguous = {
-            component_id
-            for component_id, candidates in direct_candidates.items()
-            if len(candidates) > 1
-        }
-        direct_contexts = {
-            component_id: next(iter(candidates))
-            for component_id, candidates in direct_candidates.items()
-            if len(candidates) == 1
-        }
-        return self._propagate_branch_contexts(
-            direct_contexts=direct_contexts,
-            ambiguous_components=ambiguous,
-            components=components,
-            component_members=component_members,
-            relations=relations,
-        )
-
-    @staticmethod
-    def _propagate_branch_contexts(
-        *,
-        direct_contexts,
-        ambiguous_components,
-        components,
-        component_members,
-        relations,
-    ):
-        component_graph = {
-            component_id: set() for component_id in component_members
-        }
-        boundary_component_pairs = {
-            frozenset(
-                (
-                    components.find(relation.source_media_id),
-                    components.find(relation.target_media_id),
-                )
-            )
-            for relation in relations
-            if relation.relation_type in BRANCH_BOUNDARY_RELATIONS
-            and components.find(relation.source_media_id)
-            != components.find(relation.target_media_id)
-        }
-        for relation in relations:
-            if relation.relation_type not in GROUPABLE_RELATIONS:
-                continue
-            left_component = components.find(relation.source_media_id)
-            right_component = components.find(relation.target_media_id)
-            if left_component == right_component:
-                continue
-            if (
-                frozenset((left_component, right_component))
-                in boundary_component_pairs
-            ):
-                continue
-            component_graph[left_component].add(right_component)
-            component_graph[right_component].add(left_component)
-
-        inherited_candidates = {
-            component_id: set() for component_id in component_members
-        }
-        for branch_component, context in direct_contexts.items():
-            seen = {branch_component}
-            stack = [branch_component]
-            while stack:
-                current = stack.pop()
-                if current in ambiguous_components:
-                    continue
-                inherited_candidates[current].add(context)
-                for neighbor in component_graph[current]:
-                    if neighbor not in seen:
-                        seen.add(neighbor)
-                        stack.append(neighbor)
-
+            previous = contexts.get(branch_component)
+            if previous is not None and previous != candidate:
+                ambiguous.add(branch_component)
+            else:
+                contexts[branch_component] = candidate
         return {
-            component_id: next(iter(candidates))
-            for component_id, candidates in inherited_candidates.items()
-            if len(candidates) == 1
-            and component_id not in ambiguous_components
+            component_id: context
+            for component_id, context in contexts.items()
+            if component_id not in ambiguous
         }
 
     @staticmethod
