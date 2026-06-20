@@ -8,6 +8,7 @@ from app.models import (
     AnimeFranchiseDiscoveredEntry,
     AnimeFranchiseDiscoveryState,
     AnimeImportScanState,
+    AnimeSeriesViewMembership,
     Episode,
     Item,
     UserMessage,
@@ -95,6 +96,27 @@ class AnimeImportScanStateAdmin(admin.ModelAdmin):
     list_filter = ["profile_key"]
 
 
+@admin.register(AnimeSeriesViewMembership)
+class AnimeSeriesViewMembershipAdmin(admin.ModelAdmin):
+    """Admin config for the persisted Anime Series View read model."""
+
+    search_fields = [
+        "user__username",
+        "media_id",
+        "root_media_id",
+        "display_media_id",
+    ]
+    list_display = [
+        "user",
+        "media_id",
+        "root_media_id",
+        "group_kind",
+        "projection_version",
+        "updated_at",
+    ]
+    list_filter = ["group_kind", "projection_version", "source_profile_key"]
+
+
 class MediaAdmin(admin.ModelAdmin):
     """Custom admin for regular media model with search and filter options."""
 
@@ -116,6 +138,7 @@ SpecialModels = [
     "AnimeImportScanState",
     "AnimeFranchiseDiscoveryState",
     "AnimeFranchiseDiscoveredEntry",
+    "AnimeSeriesViewMembership",
 ]
 for model in app_models:
     if (

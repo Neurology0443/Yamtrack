@@ -819,6 +819,60 @@ class AnimeImportScanState(models.Model):
         ]
 
 
+class AnimeSeriesViewMembership(models.Model):
+    """Persisted read model for one user's MAL anime series view."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    media_id = models.CharField(max_length=36)
+    root_media_id = models.CharField(max_length=36)
+    display_media_id = models.CharField(max_length=36)
+    group_kind = models.CharField(max_length=40)
+    context_parent_media_id = models.CharField(
+        max_length=36,
+        null=True,
+        blank=True,
+    )
+    context_relation_type = models.CharField(
+        max_length=40,
+        null=True,
+        blank=True,
+    )
+    component_size = models.PositiveIntegerField(default=1)
+    projection_version = models.CharField(max_length=20)
+    source_profile_key = models.CharField(max_length=40)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Constrain and index the projection lookup paths."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "user",
+                    "media_id",
+                    "source_profile_key",
+                    "projection_version",
+                ],
+                name="app_aniseriesview_membership_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "source_profile_key", "media_id"],
+                name="app_asv_media_idx",
+            ),
+            models.Index(
+                fields=["user", "source_profile_key", "root_media_id"],
+                name="app_asv_root_idx",
+            ),
+            models.Index(
+                fields=["user", "source_profile_key", "group_kind"],
+                name="app_asv_kind_idx",
+            ),
+        ]
+
+
 class UserMessageLevel(models.TextChoices):
     """Choices for persistent user messages."""
 
