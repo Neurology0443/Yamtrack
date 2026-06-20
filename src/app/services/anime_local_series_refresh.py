@@ -160,7 +160,7 @@ class AnimeLocalSeriesProjectionRefreshService:
                     )
                     continue
 
-            scope = self._snapshot_scope(snapshot) | set(candidate.input_media_ids)
+            scope = self._snapshot_scope(snapshot)
             tracked_ids = bulk_mal_anime_tracked_ids(
                 user_id=user.id,
                 media_ids=scope,
@@ -268,21 +268,16 @@ class AnimeLocalSeriesProjectionRefreshService:
 
     @staticmethod
     def _snapshot_scope(snapshot):
-        scope = set(snapshot.nodes_by_media_id)
-        scope.update(node.media_id for node in snapshot.continuity_component)
-        scope.update(node.media_id for node in snapshot.series_line)
-        scope.update(node.media_id for node in snapshot.direct_anchors)
-        for field_name in (
-            "direct_candidates",
-            "promoted_continuity_candidates",
-            "no_series_line_secondary_candidates",
-            "root_story_parent_candidates",
-            "all_normalized_relations",
-        ):
-            for relation in getattr(snapshot, field_name, ()) or ():
-                scope.add(str(relation.source_media_id))
-                scope.add(str(relation.target_media_id))
-        return scope
+        """Return the DB purge scope for one resolved franchise projection.
+
+        The resolver can only emit groups for media IDs present in
+        ``snapshot.nodes_by_media_id``. Persistence must therefore only delete
+        stale memberships inside that same resolver domain.
+
+        External relation endpoints are contextual facts, not members of the
+        resolved franchise projection.
+        """
+        return {str(media_id) for media_id in snapshot.nodes_by_media_id}
 
 
 def _media_id_key(media_id):

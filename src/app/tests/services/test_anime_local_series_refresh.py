@@ -33,7 +33,9 @@ def make_node(media_id, *, media_type="tv"):
 def make_snapshot(root_id, nodes, relations, *, canonical_root_id=None):
     nodes_by_id = {item.media_id: item for item in nodes}
     for relation in relations:
-        nodes_by_id[relation.source_media_id].relations.append(relation)
+        source_node = nodes_by_id.get(relation.source_media_id)
+        if source_node is not None:
+            source_node.relations.append(relation)
     return AnimeFranchiseSnapshot(
         root_node=nodes_by_id[root_id],
         nodes_by_media_id=nodes_by_id,
@@ -321,3 +323,104 @@ class AnimeLocalSeriesProjectionRefreshTests(TestCase):
             set(memberships.values_list("root_media_id", flat=True)),
             {"38414"},
         )
+
+    def test_snapshot_scope_is_limited_to_snapshot_nodes(self):
+        snapshot = make_snapshot(
+            "29803",
+            [make_node("29803"), make_node("35073")],
+            [
+                AnimeRelation("29803", "35073", "sequel"),
+                AnimeRelation("38472", "31240", "character"),
+            ],
+        )
+
+        scope = AnimeLocalSeriesProjectionRefreshService._snapshot_scope(snapshot)
+
+        self.assertEqual(scope, {"29803", "35073"})
+        self.assertNotIn("31240", scope)
+
+    def test_refresh_does_not_delete_external_membership_from_character_relation_scope(
+        self,
+    ):
+        self.track("31240")
+        AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="31240",
+            root_media_id="38414",
+            group_kind="main_continuity",
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+
+        overlord_ids = ["29803", "35073", "37675", "48895", "48896"]
+        for media_id in overlord_ids:
+            self.track(media_id)
+        relations = [
+            AnimeRelation("29803", "35073", "sequel"),
+            AnimeRelation("35073", "37675", "sequel"),
+            AnimeRelation("37675", "48895", "sequel"),
+            AnimeRelation("48895", "48896", "sequel"),
+            AnimeRelation("38472", "31240", "character"),
+        ]
+        snapshot = make_snapshot(
+            "29803",
+            [make_node(media_id) for media_id in overlord_ids],
+            relations,
+        )
+
+        AnimeLocalSeriesProjectionRefreshService(
+            snapshot_service=Mock(build=Mock(return_value=snapshot))
+        ).refresh_for_media_ids(user=self.user, media_ids=["29803"])
+
+        self.assertTrue(
+            AnimeLocalSeriesMembership.objects.filter(
+                user=self.user,
+                media_id="31240",
+                root_media_id="38414",
+                source_profile_key="series_view",
+            ).exists()
+        )
+        self.assertEqual(
+            set(
+                AnimeLocalSeriesMembership.objects.filter(
+                    user=self.user,
+                    media_id__in=overlord_ids,
+                    source_profile_key="series_view",
+                ).values_list("media_id", flat=True)
+            ),
+            set(overlord_ids),
+        )
+
+    def test_overlord_refresh_preserves_rezero_membership_when_external_relation_exists(
+        self,
+    ):
+        self.track("31240")
+        rezero_membership = AnimeLocalSeriesMembership.objects.create(
+            user=self.user,
+            media_id="31240",
+            root_media_id="38414",
+            group_kind="main_continuity",
+            source_profile_key="series_view",
+            resolver_version="v1",
+        )
+        overlord_ids = ["29803", "35073", "37675", "48895", "48896"]
+        for media_id in overlord_ids:
+            self.track(media_id)
+        snapshot = make_snapshot(
+            "29803",
+            [make_node(media_id) for media_id in overlord_ids],
+            [
+                AnimeRelation("29803", "35073", "sequel"),
+                AnimeRelation("35073", "37675", "sequel"),
+                AnimeRelation("37675", "48895", "sequel"),
+                AnimeRelation("48895", "48896", "sequel"),
+                AnimeRelation("39988", "31240", "character"),
+            ],
+        )
+
+        AnimeLocalSeriesProjectionRefreshService(
+            snapshot_service=Mock(build=Mock(return_value=snapshot))
+        ).refresh_for_media_ids(user=self.user, media_ids=["29803"])
+
+        rezero_membership.refresh_from_db()
+        self.assertEqual(rezero_membership.root_media_id, "38414")
