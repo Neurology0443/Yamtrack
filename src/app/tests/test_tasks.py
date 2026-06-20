@@ -18,10 +18,12 @@ from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+from app.services.anime_series_view_refresh_queue import refresh_queue_lock_key
 from app.tasks import (
     build_mal_anime_franchise_payload,
     cleanup_user_messages,
     import_anime_franchise,
+    refresh_anime_series_view_projection,
     refresh_mal_anime_metadata,
 )
 
@@ -83,6 +85,89 @@ class CleanupUserMessagesTaskTests(TestCase):
         self.assertFalse(UserMessage.objects.filter(id=old_shown.id).exists())
         self.assertTrue(UserMessage.objects.filter(id=recent_shown.id).exists())
         self.assertTrue(UserMessage.objects.filter(id=unseen.id).exists())
+
+
+class RefreshAnimeSeriesViewProjectionTaskTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.user = get_user_model().objects.create_user(
+            username="series-view-task",
+        )
+
+    @patch("app.tasks.refresh_anime_series_view_best_effort")
+    def test_task_deletes_queue_lock_and_runs_best_effort_refresh(self, refresh):
+        lock_key = refresh_queue_lock_key(self.user.id, ["502"])
+        cache.set(lock_key, "1", timeout=120)
+        refresh.side_effect = lambda **_kwargs: self.assertIsNone(
+            cache.get(lock_key)
+        )
+
+        result = refresh_anime_series_view_projection.run(
+            self.user.id,
+            ["502"],
+        )
+
+        self.assertIsNone(cache.get(lock_key))
+        refresh.assert_called_once_with(
+            user=self.user,
+            media_ids=("502",),
+        )
+        self.assertEqual(
+            result,
+            {
+                "user_id": self.user.id,
+                "media_ids": ["502"],
+                "refreshed": True,
+            },
+        )
+
+    @patch("app.tasks.refresh_anime_series_view_best_effort")
+    def test_task_normalizes_media_ids(self, refresh):
+        result = refresh_anime_series_view_projection.run(
+            self.user.id,
+            ["", None, "10", "2", "2"],
+        )
+
+        refresh.assert_called_once_with(
+            user=self.user,
+            media_ids=("2", "10"),
+        )
+        self.assertEqual(result["media_ids"], ["2", "10"])
+
+    @patch("app.tasks.refresh_anime_series_view_best_effort")
+    def test_task_skips_missing_user_after_deleting_queue_lock(self, refresh):
+        missing_user_id = self.user.id + 1000
+        lock_key = refresh_queue_lock_key(missing_user_id, ["502"])
+        cache.set(lock_key, "1", timeout=120)
+
+        result = refresh_anime_series_view_projection.run(
+            missing_user_id,
+            ["502"],
+        )
+
+        self.assertIsNone(cache.get(lock_key))
+        refresh.assert_not_called()
+        self.assertEqual(result["reason"], "user_not_found")
+        self.assertTrue(result["skipped"])
+
+    @patch("app.tasks.refresh_anime_series_view_best_effort")
+    def test_task_skips_empty_media_ids(self, refresh):
+        result = refresh_anime_series_view_projection.run(
+            self.user.id,
+            [],
+        )
+
+        refresh.assert_not_called()
+        self.assertEqual(
+            result,
+            {
+                "user_id": self.user.id,
+                "media_ids": [],
+                "refreshed": False,
+                "skipped": True,
+                "reason": "empty_media_ids",
+            },
+        )
 
 
 class ImportAnimeFranchiseTaskTests(TestCase):

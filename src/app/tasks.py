@@ -5,6 +5,7 @@ from datetime import timedelta
 import requests
 from celery import shared_task
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -22,6 +23,13 @@ from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
+from app.services.anime_series_view_projection_refresh import (
+    refresh_anime_series_view_best_effort,
+)
+from app.services.anime_series_view_refresh_queue import (
+    normalize_media_ids,
+    refresh_queue_lock_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +56,67 @@ def cleanup_user_messages():
     logger.info("Deleted %s old shown user messages.", deleted_count)
 
     return deleted_count
+
+
+@shared_task(name="Refresh Anime Series View projection")
+def refresh_anime_series_view_projection(user_id, media_ids):
+    """Refresh one user's Anime Series View projection in the background."""
+    normalized_ids = normalize_media_ids(media_ids)
+    cache.delete(refresh_queue_lock_key(user_id, normalized_ids))
+    logger.info(
+        "Anime Series View refresh task started",
+        extra={
+            "user_id": user_id,
+            "media_ids": list(normalized_ids),
+        },
+    )
+
+    if not normalized_ids:
+        logger.info(
+            "Anime Series View refresh task skipped empty_media_ids",
+            extra={"user_id": user_id},
+        )
+        return {
+            "user_id": user_id,
+            "media_ids": [],
+            "refreshed": False,
+            "skipped": True,
+            "reason": "empty_media_ids",
+        }
+
+    user = get_user_model().objects.filter(pk=user_id).first()
+    if user is None:
+        logger.warning(
+            "Anime Series View refresh task skipped user_not_found",
+            extra={
+                "user_id": user_id,
+                "media_ids": list(normalized_ids),
+            },
+        )
+        return {
+            "user_id": user_id,
+            "media_ids": list(normalized_ids),
+            "refreshed": False,
+            "skipped": True,
+            "reason": "user_not_found",
+        }
+
+    refresh_anime_series_view_best_effort(
+        user=user,
+        media_ids=normalized_ids,
+    )
+    logger.info(
+        "Anime Series View refresh task completed",
+        extra={
+            "user_id": user_id,
+            "media_ids": list(normalized_ids),
+        },
+    )
+    return {
+        "user_id": user_id,
+        "media_ids": list(normalized_ids),
+        "refreshed": True,
+    }
 
 
 @shared_task(name="Refresh MAL anime metadata")
