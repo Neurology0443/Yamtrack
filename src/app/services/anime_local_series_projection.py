@@ -88,6 +88,10 @@ class AnimeLocalSeriesProjectionService:
                     resolver_version=version,
                     defaults={
                         "root_media_id": str(group.root_media_id),
+                        "display_media_id": str(
+                            getattr(group, "display_media_id", "")
+                            or group.root_media_id
+                        ),
                         "group_kind": str(group.group_kind),
                         "context_parent_media_id": (
                             str(group.context_parent_media_id)

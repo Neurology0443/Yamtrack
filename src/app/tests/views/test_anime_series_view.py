@@ -78,7 +78,10 @@ class AnimeSeriesViewTests(TestCase):
             "app/components/anime_series_groups.html",
         )
         self.assertContains(response, "Season 1")
-        self.assertContains(response, "Season 2")
+        self.assertNotContains(response, "Season 2")
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(len(group.entries), 2)
+        self.assertEqual(group.display_entry.item.media_id, "100")
         mock_snapshot_build.assert_not_called()
         mock_resolve.assert_not_called()
         mock_refresh.assert_not_called()
@@ -94,6 +97,58 @@ class AnimeSeriesViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Standalone")
         self.assertFalse(AnimeLocalSeriesMembership.objects.exists())
+
+    def test_series_view_renders_only_persisted_display_entry(self):
+        main = self.track("31240", "Re:Zero Main")
+        prequel = self.track("38414", "Re:Zero Movie")
+        for anime in (main, prequel):
+            AnimeLocalSeriesMembership.objects.create(
+                user=self.user,
+                media_id=anime.item.media_id,
+                root_media_id="38414",
+                display_media_id="31240",
+                group_kind="main_continuity",
+                component_size=2,
+                source_profile_key="series_view",
+                resolver_version="v1",
+            )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, "Re:Zero Main")
+        self.assertNotContains(response, "Re:Zero Movie")
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.root_media_id, "38414")
+        self.assertEqual(group.display_media_id, "31240")
+        self.assertEqual(group.display_entry.item.media_id, "31240")
+
+    def test_blank_display_media_falls_back_to_root_entry(self):
+        main = self.track("100", "Root Entry")
+        sequel = self.track("101", "Sequel Entry")
+        for anime in (main, sequel):
+            AnimeLocalSeriesMembership.objects.create(
+                user=self.user,
+                media_id=anime.item.media_id,
+                root_media_id="100",
+                display_media_id="",
+                group_kind="main_continuity",
+                component_size=2,
+                source_profile_key="series_view",
+                resolver_version="v1",
+            )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.display_entry.item.media_id, "100")
+        self.assertContains(response, "Root Entry")
+        self.assertNotContains(response, "Sequel Entry")
 
     @patch("app.views._refresh_anime_series_view")
     def test_delete_schedules_refresh_after_commit(self, mock_refresh):

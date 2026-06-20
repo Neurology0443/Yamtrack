@@ -73,8 +73,61 @@ class AnimeLocalSeriesResolverTests(SimpleTestCase):
 
         self.assertEqual(len(result.groups), 1)
         self.assertEqual(result.groups[0].root_media_id, "38414")
+        self.assertEqual(result.groups[0].display_media_id, "31240")
         self.assertEqual(set(result.groups[0].member_media_ids), set(media_ids))
         self.assertEqual(result.groups[0].group_kind, "main_continuity")
+
+    def test_overlord_uses_first_series_tv_as_display_media(self):
+        media_ids = ["29803", "35073", "37675", "48895", "48896"]
+        nodes = [
+            node("29803", start_date=date(2015, 7, 7)),
+            node("35073", start_date=date(2018, 1, 9)),
+            node("37675", start_date=date(2018, 7, 10)),
+            node("48895", start_date=date(2022, 7, 5)),
+            node("48896", media_type="movie", start_date=date(2024, 9, 20)),
+        ]
+        relations = [
+            AnimeRelation("29803", "35073", "sequel"),
+            AnimeRelation("35073", "37675", "sequel"),
+            AnimeRelation("37675", "48895", "sequel"),
+            AnimeRelation("48895", "48896", "sequel"),
+        ]
+
+        result = AnimeLocalSeriesResolver().resolve(
+            snapshot=snapshot(
+                root_id="29803",
+                nodes=nodes,
+                relations=relations,
+                canonical_root_id="29803",
+                series_ids=("29803", "35073", "37675", "48895", "48896"),
+            ),
+            tracked_media_ids=set(media_ids),
+        )
+
+        self.assertEqual(result.groups[0].root_media_id, "29803")
+        self.assertEqual(result.groups[0].display_media_id, "29803")
+
+    def test_display_media_falls_back_to_technical_root_without_tv_or_ona(self):
+        nodes = [
+            node("10", media_type="movie", start_date=date(2020, 1, 1)),
+            node("20", media_type="special", start_date=date(2019, 1, 1)),
+        ]
+        relations = [AnimeRelation("10", "20", "prequel")]
+
+        result = AnimeLocalSeriesResolver().resolve(
+            snapshot=snapshot(
+                root_id="10",
+                nodes=nodes,
+                relations=relations,
+                canonical_root_id="20",
+                series_ids=("20", "10"),
+            ),
+            tracked_media_ids={"10", "20"},
+        )
+
+        group = result.groups[0]
+        self.assertEqual(group.root_media_id, "20")
+        self.assertEqual(group.display_media_id, "20")
 
     def test_satellite_uses_untracked_parent_as_context(self):
         nodes = [node("29803"), node("33372", media_type="special")]

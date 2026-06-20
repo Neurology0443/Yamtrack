@@ -20,6 +20,7 @@ BRANCH_RELATIONS = frozenset(
 )
 AFFILIATE_MEDIA_TYPES = frozenset({"special", "ova", "tv_special"})
 IGNORED_RELATIONS = frozenset({"other", "character"})
+PRIMARY_DISPLAY_MEDIA_TYPES = frozenset({"tv", "ona"})
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class AnimeLocalSeriesGroup:
     root_media_id: str
     group_kind: str
     member_media_ids: tuple[str, ...]
+    display_media_id: str = ""
     context_parent_media_id: str | None = None
     context_relation_type: str | None = None
 
@@ -129,6 +131,13 @@ class AnimeLocalSeriesResolver:
                 relations=relations,
                 member_ids=member_ids,
             )
+            ordered_member_ids = tuple(
+                self._ordered_members(
+                    snapshot=snapshot,
+                    member_ids=member_ids,
+                    root_media_id=root_media_id,
+                )
+            )
             groups.append(
                 AnimeLocalSeriesGroup(
                     root_media_id=root_media_id,
@@ -136,12 +145,11 @@ class AnimeLocalSeriesResolver:
                         member_ids=member_ids,
                         context=context,
                     ),
-                    member_media_ids=tuple(
-                        self._ordered_members(
-                            snapshot=snapshot,
-                            member_ids=member_ids,
-                            root_media_id=root_media_id,
-                        )
+                    member_media_ids=ordered_member_ids,
+                    display_media_id=self._select_display_media_id(
+                        snapshot=snapshot,
+                        root_media_id=root_media_id,
+                        member_media_ids=ordered_member_ids,
                     ),
                     context_parent_media_id=context[0] if context else None,
                     context_relation_type=context[1] if context else None,
@@ -304,6 +312,38 @@ class AnimeLocalSeriesResolver:
                 ),
             ),
         ]
+
+    def _select_display_media_id(
+        self,
+        *,
+        snapshot,
+        root_media_id,
+        member_media_ids,
+    ):
+        """Choose the tracked entry that best represents a logical series."""
+        members = tuple(str(media_id) for media_id in member_media_ids)
+        nodes = snapshot.nodes_by_media_id
+        primary_candidates = [
+            media_id
+            for media_id in members
+            if media_id in nodes
+            and nodes[media_id].media_type in PRIMARY_DISPLAY_MEDIA_TYPES
+        ]
+        if primary_candidates:
+            series_order = {
+                str(node.media_id): index
+                for index, node in enumerate(snapshot.series_line)
+            }
+            return min(
+                primary_candidates,
+                key=lambda media_id: (
+                    series_order.get(media_id, 10**9),
+                    self._node_sort_key(nodes[media_id]),
+                ),
+            )
+        if str(root_media_id) in members:
+            return str(root_media_id)
+        return members[0] if members else str(root_media_id)
 
     @staticmethod
     def _relations(snapshot):

@@ -53,6 +53,7 @@ class AnimeLocalSeriesProjectionTests(TestCase):
                     root_media_id="100",
                     group_kind="main_continuity",
                     member_media_ids=("100", "101"),
+                    display_media_id="101",
                 ),
             ),
             resolver_version="v2",
@@ -78,6 +79,15 @@ class AnimeLocalSeriesProjectionTests(TestCase):
             ).count(),
             2,
         )
+        self.assertEqual(
+            set(
+                AnimeLocalSeriesMembership.objects.filter(
+                    resolver_version="v2"
+                ).values_list("display_media_id", flat=True)
+            ),
+            {"101"},
+        )
+
     def test_update_preserves_discovered_at(self):
         existing = AnimeLocalSeriesMembership.objects.create(
             user=self.user,
@@ -109,6 +119,38 @@ class AnimeLocalSeriesProjectionTests(TestCase):
 
         existing.refresh_from_db()
         self.assertEqual(existing.discovered_at, discovered_at)
+
+    def test_missing_group_display_media_falls_back_to_root(self):
+        resolution = SimpleNamespace(
+            resolver_version="v1",
+            groups=[
+                SimpleNamespace(
+                    root_media_id="100",
+                    group_kind="main_continuity",
+                    member_media_ids=("100", "101"),
+                    context_parent_media_id=None,
+                    context_relation_type=None,
+                )
+            ],
+        )
+
+        AnimeLocalSeriesProjectionService().persist(
+            user=self.user,
+            source_profile_key="series_view",
+            resolver_version="v1",
+            resolution=resolution,
+            scope_media_ids={"100", "101"},
+        )
+
+        self.assertEqual(
+            set(
+                AnimeLocalSeriesMembership.objects.values_list(
+                    "display_media_id",
+                    flat=True,
+                )
+            ),
+            {"100"},
+        )
 
     def test_never_persists_untracked_media(self):
         Anime.objects.get(user=self.user, item__media_id="101").delete()
