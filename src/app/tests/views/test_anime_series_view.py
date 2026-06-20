@@ -125,7 +125,7 @@ class AnimeSeriesViewTests(TestCase):
 
         self.assertContains(response, 'data-anime-series-overlay="true"')
         self.assertContains(response, "line-clamp-3")
-        self.assertContains(response, "hover-tap:opacity-100")
+        self.assertContains(response, "hover:opacity-100")
 
     def test_series_card_does_not_show_group_title_count(self):
         first = self.track("100", "First")
