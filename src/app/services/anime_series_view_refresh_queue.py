@@ -18,6 +18,11 @@ def media_id_key(media_id):
 
 def normalize_media_ids(media_ids):
     """Return unique, non-empty media IDs in deterministic order."""
+    if media_ids is None:
+        return ()
+    if isinstance(media_ids, str):
+        media_ids = (media_ids,)
+
     return tuple(
         sorted(
             {

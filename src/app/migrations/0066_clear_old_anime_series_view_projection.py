@@ -2,6 +2,12 @@ from django.db import migrations
 
 
 def clear_old_series_view_projection(apps, schema_editor):
+    """Clear regenerated Anime Series View read-model rows.
+
+    AnimeSeriesViewMembership is a derived projection, not primary user
+    tracking data. Rows for the Series View profile can be rebuilt from Anime
+    entries and MAL franchise snapshots.
+    """
     AnimeSeriesViewMembership = apps.get_model(
         "app",
         "AnimeSeriesViewMembership",
