@@ -11,21 +11,11 @@ if TYPE_CHECKING:
 
     from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 
-
-GROUPABLE_RELATIONS = frozenset(
-    {
-        "prequel",
-        "sequel",
-        "side_story",
-        "parent_story",
-        "summary",
-        "full_story",
-    }
+from app.services.anime_series_view_rules import (
+    BRANCH_BOUNDARY_RELATIONS,
+    CONTINUITY_RELATIONS,
+    GROUPABLE_RELATIONS,
 )
-BRANCH_BOUNDARY_RELATIONS = frozenset(
-    {"spin_off", "alternative_version", "alternative_setting"}
-)
-CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
 
 
 @dataclass(frozen=True)
@@ -87,7 +77,7 @@ class _DisjointSet:
 class AnimeSeriesViewProjectionBuilder:
     """Split a canonical snapshot into deterministic local Series View cards."""
 
-    projection_version = "v1"
+    projection_version = "v2"
 
     def build(
         self,

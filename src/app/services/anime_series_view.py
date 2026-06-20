@@ -154,14 +154,21 @@ def _membership_display(*, membership, local_entry):
             media_id=str(local_entry.item.media_id),
             title=str(local_entry.item.title),
             image=str(local_entry.item.image),
-            media_type=str(membership.display_media_type),
-            start_date=membership.display_start_date,
+            media_type=str(local_entry.item.media_type),
+            start_date=(
+                getattr(local_entry, "start_date", None)
+                or membership.display_start_date
+            ),
             is_tracked=True,
             local_entry=local_entry,
         )
+    display_media_id = str(membership.display_media_id)
     return AnimeSeriesViewDisplayEntry(
-        media_id=str(membership.display_media_id),
-        title=str(membership.display_title),
+        media_id=display_media_id,
+        title=(
+            str(membership.display_title).strip()
+            or f"MAL anime {display_media_id}"
+        ),
         image=str(membership.display_image),
         media_type=str(membership.display_media_type),
         start_date=membership.display_start_date,

@@ -17,7 +17,7 @@ from app.services.anime_series_view_projection_persistence import (
 
 
 def projection(*groups):
-    return AnimeSeriesViewProjection(groups=groups, projection_version="v1")
+    return AnimeSeriesViewProjection(groups=groups, projection_version="v2")
 
 
 def group(
@@ -123,7 +123,7 @@ class AnimeSeriesViewProjectionPersistenceTests(TestCase):
                 display_media_id=media_id,
                 group_kind="singleton",
                 component_size=1,
-                projection_version="v1",
+                projection_version="v2",
                 source_profile_key="series_view",
             )
 

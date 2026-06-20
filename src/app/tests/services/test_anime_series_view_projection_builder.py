@@ -243,6 +243,57 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         self.assertEqual(len(projection.groups), 2)
 
+    def test_indirect_groupable_bridge_across_boundary_is_deterministic(self):
+        projection = self.builder.build(
+            snapshot=snapshot(
+                [node("1"), node("2"), node("3")],
+                [
+                    relation("3", "2", "side_story"),
+                    relation("1", "2", "alternative_version"),
+                    relation("1", "3", "side_story"),
+                ],
+                series_line_ids=["1"],
+            ),
+            tracked_media_ids={"1", "2", "3"},
+        )
+
+        member_sets = {
+            frozenset(group.member_media_ids) for group in projection.groups
+        }
+        self.assertEqual(
+            member_sets,
+            {frozenset({"1", "3"}), frozenset({"2"})},
+        )
+
+    def test_branch_tv_uses_canonical_root_when_both_are_in_series_line(self):
+        for relation_type, expected_kind in (
+            ("spin_off", "spin_off"),
+            ("alternative_version", "alternative_branch"),
+        ):
+            with self.subTest(relation_type=relation_type):
+                projection = self.builder.build(
+                    snapshot=snapshot(
+                        [
+                            node("1", title="Main TV"),
+                            node("2", title="Branch TV"),
+                        ],
+                        [relation("1", "2", relation_type)],
+                        series_line_ids=["1", "2"],
+                        root_media_id="1",
+                        canonical_root_media_id="1",
+                    ),
+                    tracked_media_ids={"1", "2"},
+                )
+
+                branch = next(
+                    group
+                    for group in projection.groups
+                    if group.root_media_id == "2"
+                )
+                self.assertEqual(branch.group_kind, expected_kind)
+                self.assertEqual(branch.context_parent_media_id, "1")
+                self.assertEqual(branch.context_parent_title, "Main TV")
+
     def test_ignored_relations_do_not_group_components(self):
         projection = self.builder.build(
             snapshot=snapshot(
@@ -329,4 +380,4 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         )
 
         self.assertEqual(projection.groups, ())
-        self.assertEqual(projection.projection_version, "v1")
+        self.assertEqual(projection.projection_version, "v2")

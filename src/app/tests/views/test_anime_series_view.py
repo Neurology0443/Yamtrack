@@ -47,6 +47,7 @@ class AnimeSeriesViewTests(TestCase):
         display="1",
         display_title="",
         display_image="",
+        display_media_type="tv",
         relation=None,
         parent=None,
         parent_title="",
@@ -58,13 +59,13 @@ class AnimeSeriesViewTests(TestCase):
             display_media_id=str(display),
             display_title=display_title,
             display_image=display_image,
-            display_media_type="tv",
+            display_media_type=display_media_type,
             group_kind="alternative_branch" if relation else "main_continuity",
             context_parent_media_id=parent,
             context_parent_title=parent_title,
             context_relation_type=relation,
             component_size=2,
-            projection_version="v1",
+            projection_version="v2",
             source_profile_key="series_view",
         )
 
@@ -135,6 +136,7 @@ class AnimeSeriesViewTests(TestCase):
             "1",
             display_title="Season 1",
             display_image="https://example.com/season-1.jpg",
+            display_media_type="wrong",
         )
 
         response = self.client.get(
@@ -145,6 +147,7 @@ class AnimeSeriesViewTests(TestCase):
         group = response.context["media_list"].object_list[0]
         self.assertTrue(group.display.is_tracked)
         self.assertIsNotNone(group.display.local_entry)
+        self.assertEqual(group.display.media_type, MediaTypes.ANIME.value)
 
     @patch(
         "app.services.anime_franchise_snapshot.AnimeFranchiseSnapshotService.build"
@@ -181,6 +184,47 @@ class AnimeSeriesViewTests(TestCase):
         self.assertContains(response, "https://example.com/season-1.jpg")
         snapshot_build.assert_not_called()
         mal_anime.assert_not_called()
+
+    def test_untracked_display_with_empty_metadata_uses_safe_fallbacks(self):
+        self.track("2", "Season 2")
+        self.membership(
+            "2",
+            root="1",
+            display="1",
+            display_title="",
+            display_image="",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.display.title, "MAL anime 1")
+        self.assertEqual(group.display.image, "")
+        self.assertContains(response, "MAL anime 1")
+        self.assertNotContains(response, 'data-src=""')
+
+    def test_old_v1_membership_is_ignored(self):
+        self.track("1", "Season 1")
+        membership = self.membership(
+            "1",
+            root="old-root",
+            display="old-display",
+            display_title="Old display",
+        )
+        membership.projection_version = "v1"
+        membership.save(update_fields=["projection_version"])
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, "anime"]),
+            {"layout": "series"},
+        )
+
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.root_media_id, "1")
+        self.assertEqual(group.display.title, "Season 1")
 
     def test_prequel_and_sequel_are_not_rendered_as_branch_labels(self):
         self.track("1", "Season 1")

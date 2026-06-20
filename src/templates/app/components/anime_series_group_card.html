@@ -6,7 +6,7 @@
     <a href="{{ group.display.details_url }}">
       <img alt="{{ group.display.title }}"
            class="lazyload w-full aspect-2/3 bg-[#3e454d] {% if group.display.image != IMG_NONE %}object-cover{% endif %}"
-           data-src="{{ group.display.image }}"
+           data-src="{% if group.display.image %}{{ group.display.image }}{% else %}{{ IMG_NONE }}{% endif %}"
            src="{{ IMG_NONE }}">
     </a>
 
