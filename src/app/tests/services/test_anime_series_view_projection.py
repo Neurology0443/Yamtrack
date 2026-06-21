@@ -696,6 +696,50 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.root.media_id, "100")
         self.assertEqual(projection.member_media_ids, ("100", "101"))
 
+    def test_local_non_boundary_alternative_can_propagate_external_boundary(
+        self,
+    ):
+        main = self.node("100", start_date=date(2020, 1, 1))
+        sequel = self.node("101", start_date=date(2021, 1, 1))
+        branch = self.node("102", media_type="ova", start_date=date(2020, 6, 1))
+        local_alternative = self.node(
+            "103", media_type="ova", start_date=date(2020, 7, 1)
+        )
+        external = self.node("200", start_date=date(2024, 1, 1))
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "102", "side_story"),
+            self.relation("102", "103", "alternative_version"),
+            self.relation("100", "200", "alternative_version"),
+            self.relation("103", "200", "alternative_version"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="100",
+            nodes={
+                node.media_id: node
+                for node in (main, sequel, branch, local_alternative, external)
+            },
+            series_line=[main, sequel],
+            relations=relations,
+        )
+
+        builder = AnimeSeriesViewProjectionBuilder(snapshot_service=snapshot_service)
+        snapshot = snapshot_service.build.return_value
+
+        boundary_keys = builder._alternative_continuity_boundary_relation_keys(
+            snapshot,
+            "100",
+        )
+        projection = builder.build("100")
+
+        self.assertIn("103", projection.member_media_ids)
+        self.assertNotIn("200", projection.member_media_ids)
+        self.assertIn(
+            ("103", "200", "alternative_version"),
+            boundary_keys,
+        )
+
     def test_external_serial_ids_are_derived_from_local_component_not_series_line_only(
         self,
     ):
@@ -711,8 +755,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             self.relation("100", "200", "alternative_version"),
             self.relation("201", "200", "alternative_version"),
         ]
-        snapshot_service = Mock()
-        snapshot_service.build.return_value = self.snapshot(
+        initial = self.snapshot(
             seed="300",
             nodes={
                 node.media_id: node
@@ -728,12 +771,18 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             series_line=[series_s1, series_s2],
             relations=relations,
         )
+        canonical = self.snapshot(
+            seed="300",
+            nodes={"300": local_seed, "301": local_s2},
+            series_line=[local_seed, local_s2],
+            relations=[self.relation("300", "301", "sequel")],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [initial, canonical]
 
         builder = AnimeSeriesViewProjectionBuilder(snapshot_service=snapshot_service)
-        snapshot = snapshot_service.build.return_value
-
         boundary_keys = builder._alternative_continuity_boundary_relation_keys(
-            snapshot,
+            initial,
             "300",
         )
         projection = builder.build("300")
@@ -746,6 +795,8 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             ("201", "200", "alternative_version"),
             boundary_keys,
         )
+        self.assertEqual(projection.root.media_id, "300")
+        self.assertEqual(projection.member_media_ids, ("300", "301"))
         self.assertNotIn("200", projection.member_media_ids)
         self.assertNotIn("201", projection.member_media_ids)
 
@@ -832,13 +883,15 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             projection.member_media_ids, ("100", "101", "200", "201", "202")
         )
 
-    def test_code_geass_like_alternative_continuity_stays_separate(
+    def test_serial_alternative_continuity_stays_separate(
         self,
     ):
         tv_s1 = self.node("100", start_date=date(2006, 1, 1))
         tv_s2 = self.node("101", start_date=date(2008, 1, 1))
         alt_s1 = self.node("200", media_type="ona", start_date=date(2024, 1, 1))
         alt_s2 = self.node("201", media_type="ona", start_date=date(2025, 1, 1))
+        # Synthetic Code Geass-like serial alternative continuity.
+        # Real Code Geass behavior was manually validated in dev.
         relations = [
             self.relation("100", "101", "sequel"),
             self.relation("200", "201", "sequel"),
