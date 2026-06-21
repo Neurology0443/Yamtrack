@@ -37,11 +37,17 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
+from app.services.anime_series_view import build_anime_series_view
+from app.services.anime_series_view_refresh_triggers import (
+    AnimeSeriesViewRefreshTriggerService,
+)
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
+    AnimeLayoutChoices,
     DateFormatChoices,
     HomeSortChoices,
+    LayoutChoices,
     MediaSortChoices,
     MediaStatusChoices,
     User,
@@ -132,15 +138,21 @@ def progress_edit(request, media_type, instance_id):
 
 @login_not_required
 @require_GET
-def media_list(request, username, media_type):
+def media_list(request, username, media_type):  # noqa: C901, PLR0912, PLR0915
     """Return the media list page."""
     target_user = get_object_or_404(User, username=username)
+    requested_layout = request.GET.get("layout")
+    if (
+        media_type != MediaTypes.ANIME.value
+        and requested_layout == AnimeLayoutChoices.SERIES
+    ):
+        requested_layout = LayoutChoices.GRID
 
     # if user is looking at own page then update preferences
     if request.user == target_user:
         layout = target_user.update_preference(
             f"{media_type}_layout",
-            request.GET.get("layout"),
+            requested_layout,
         )
         sort_filter = target_user.update_preference(
             f"{media_type}_sort",
@@ -170,7 +182,7 @@ def media_list(request, username, media_type):
 
         layout = target_user.get_valid_preference(
             f"{media_type}_layout",
-            request.GET.get("layout"),
+            requested_layout,
         )
         sort_filter = target_user.get_valid_preference(
             f"{media_type}_sort",
@@ -180,6 +192,11 @@ def media_list(request, username, media_type):
             f"{media_type}_status",
             request.GET.get("status"),
         )
+
+    if media_type != MediaTypes.ANIME.value and layout == AnimeLayoutChoices.SERIES:
+        layout = LayoutChoices.GRID
+        if request.user == target_user:
+            target_user.update_preference(f"{media_type}_layout", layout)
 
     search_query = request.GET.get("search", "")
     page = request.GET.get("page", 1)
@@ -197,27 +214,54 @@ def media_list(request, username, media_type):
         search=search_query,
     )
 
-    # Paginate results
-    items_per_page = 32
-    paginator = Paginator(media_queryset, items_per_page)
-    media_page = paginator.get_page(page)
-
-    BasicMedia.objects.annotate_max_progress(
-        media_page.object_list,
-        media_type,
+    is_anime_series_view = (
+        media_type == MediaTypes.ANIME.value and layout == AnimeLayoutChoices.SERIES
     )
+    series_result = None
+    if is_anime_series_view:
+        series_result = build_anime_series_view(
+            media_entries=media_queryset,
+            user_id=target_user.id,
+        )
+        paginator = Paginator(series_result.groups, 12)
+        media_page = paginator.get_page(page)
+        page_entries = [
+            entry.local_entry
+            for group in media_page.object_list
+            for entry in group.entries
+            if entry.local_entry is not None
+        ]
+        BasicMedia.objects.annotate_max_progress(page_entries, media_type)
+    else:
+        paginator = Paginator(media_queryset, 32)
+        media_page = paginator.get_page(page)
+        BasicMedia.objects.annotate_max_progress(
+            media_page.object_list,
+            media_type,
+        )
 
     context = {
         "media_type": media_type,
         "media_type_plural": app_tags.media_type_readable_plural(media_type).lower(),
         "media_list": media_page,
         "current_layout": layout,
-        "layout_class": ".media-grid" if layout == "grid" else "tbody",
+        "layout_class": (
+            ".anime-series-groups"
+            if is_anime_series_view
+            else ".media-grid"
+            if layout == LayoutChoices.GRID
+            else "tbody"
+        ),
         "current_sort": sort_filter,
         "current_status": status_filter,
         "sort_choices": MediaSortChoices.choices,
         "status_choices": MediaStatusChoices.choices,
         "target_user": target_user,
+        "is_anime_series_view": is_anime_series_view,
+        "series_view_result": series_result,
+        "unprojected_count": (
+            series_result.unprojected_count if series_result is not None else 0
+        ),
     }
 
     # Handle HTMX requests for partial updates
@@ -232,7 +276,9 @@ def media_list(request, username, media_type):
                 "medialist", args=[target_user.username, media_type]
             )
             return response
-        if layout == "grid":
+        if is_anime_series_view:
+            template_name = "app/components/anime_series_groups.html"
+        elif layout == LayoutChoices.GRID:
             template_name = "app/components/media_grid_items.html"
         else:
             template_name = "app/components/media_table_items.html"
@@ -757,6 +803,11 @@ def media_save(request):
                 user_id=request.user.id,
                 media_label=str(form.instance),
             )
+            if source == Sources.MAL.value and media_type == MediaTypes.ANIME.value:
+                AnimeSeriesViewRefreshTriggerService().schedule_manual_add(
+                    user=request.user,
+                    media_id=media_id,
+                )
     else:
         logger.error(form.errors.as_json())
         for field, errors in form.errors.items():
@@ -775,8 +826,19 @@ def media_delete(request):
     instance_id = request.POST["instance_id"]
     media_type = request.POST["media_type"]
     media = helpers.get_owned_media_or_404(request, media_type, instance_id)
+    deleted_media_id = media.item.media_id
+    deleted_source = media.item.source
+    deleted_media_type = media.item.media_type
     media.delete()
     logger.info("%s deleted successfully.", media)
+    if (
+        deleted_source == Sources.MAL.value
+        and deleted_media_type == MediaTypes.ANIME.value
+    ):
+        AnimeSeriesViewRefreshTriggerService().schedule_delete(
+            user=request.user,
+            media_id=deleted_media_id,
+        )
 
     return helpers.redirect_back(request)
 

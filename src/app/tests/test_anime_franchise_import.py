@@ -785,7 +785,8 @@ class AnimeFranchiseImportNotificationTests(TestCase):
         self.assertEqual(stats.cache_warm_roots, ["321"])
         self.assertEqual(stats.cache_warm_errors, 0)
         self.assertEqual(registered_roots, [])
-        self.assertEqual(len(callbacks), 1)
+        # Cache warming and Anime Series View refresh are both deferred.
+        self.assertEqual(len(callbacks), 2)
 
     @patch("app.services.anime_franchise_cache_warmer.current_app.send_task")
     @patch("app.services.anime_franchise_import.notify_entry_added_after_commit")

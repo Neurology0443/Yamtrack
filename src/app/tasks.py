@@ -5,9 +5,15 @@ from datetime import timedelta
 import requests
 from celery import shared_task
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.utils import timezone
 
+from app.anime_series_view_constants import (
+    DELETE_MODE,
+    REFRESH_MODE,
+    REFRESH_MODES,
+)
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
@@ -22,6 +28,13 @@ from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
+from app.services.anime_series_view_franchise_refresh import (
+    AnimeSeriesViewFranchiseRefreshService,
+)
+from app.services.anime_series_view_refresh_queue import (
+    normalize_media_ids,
+    refresh_queue_lock_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +61,92 @@ def cleanup_user_messages():
     logger.info("Deleted %s old shown user messages.", deleted_count)
 
     return deleted_count
+
+
+@shared_task(name="Refresh Anime Series View franchise projection")
+def refresh_anime_series_view_franchise_projection(
+    user_id,
+    media_ids,
+    mode=REFRESH_MODE,
+):
+    """Refresh persisted Anime Series View memberships for one user."""
+    normalized_ids = normalize_media_ids(media_ids)
+    lock_key = refresh_queue_lock_key(user_id, normalized_ids, mode)
+    try:
+        if not normalized_ids:
+            return {
+                "user_id": user_id,
+                "media_ids": [],
+                "mode": mode,
+                "refreshed": False,
+                "skipped": True,
+                "reason": "empty_media_ids",
+            }
+        if mode not in REFRESH_MODES:
+            return {
+                "user_id": user_id,
+                "media_ids": list(normalized_ids),
+                "mode": mode,
+                "refreshed": False,
+                "skipped": True,
+                "reason": "invalid_mode",
+            }
+
+        user = get_user_model().objects.filter(pk=user_id).first()
+        if user is None:
+            return {
+                "user_id": user_id,
+                "media_ids": list(normalized_ids),
+                "mode": mode,
+                "refreshed": False,
+                "skipped": True,
+                "reason": "user_not_found",
+            }
+
+        logger.info(
+            "Starting Anime Series View franchise projection refresh",
+            extra={"user_id": user_id, "media_ids": list(normalized_ids)},
+        )
+        service = AnimeSeriesViewFranchiseRefreshService()
+        if mode == DELETE_MODE:
+            stats = service.refresh_after_delete(
+                user=user,
+                media_ids=normalized_ids,
+            )
+        else:
+            stats = service.refresh_for_media_ids(
+                user=user,
+                media_ids=normalized_ids,
+            )
+    except Exception:
+        logger.exception(
+            "Anime Series View franchise projection refresh failed",
+            extra={"user_id": user_id, "media_ids": list(normalized_ids)},
+        )
+        raise
+    else:
+        result = {
+            "user_id": user_id,
+            "media_ids": list(normalized_ids),
+            "mode": mode,
+            "refreshed": True,
+            "requested": stats.requested,
+            "snapshots_built": stats.snapshots_built,
+            "snapshots_skipped": stats.snapshots_skipped,
+            "franchise_memberships_created": stats.franchise_memberships_created,
+            "franchise_memberships_updated": stats.franchise_memberships_updated,
+            "singleton_memberships_created": stats.singleton_memberships_created,
+            "singleton_memberships_updated": stats.singleton_memberships_updated,
+            "memberships_deleted": stats.memberships_deleted,
+            "errors": stats.errors,
+        }
+        logger.info(
+            "Completed Anime Series View franchise projection refresh",
+            extra=result,
+        )
+        return result
+    finally:
+        cache.delete(lock_key)
 
 
 @shared_task(name="Refresh MAL anime metadata")

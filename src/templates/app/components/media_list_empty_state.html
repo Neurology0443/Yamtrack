@@ -1,0 +1,20 @@
+{% load app_tags %}
+
+<div id="empty_list"
+     class="media-list-empty-state flex flex-col items-center justify-center rounded-lg bg-[#2a2f35] py-16">
+  <div class="mx-auto max-w-md p-6 text-center">
+    <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#39404b] p-4">
+      {% include "app/icons/edit.svg" with classes="h-8 w-8 text-gray-400" %}
+    </div>
+    <h3 class="mb-2 text-xl font-semibold">No {{ media_type|media_type_readable_plural }} Tracked Yet</h3>
+    {% if request.user == target_user %}
+      <p class="mb-6 text-gray-400">
+        Start tracking your {{ media_type_plural }} to keep a record of what you've {{ media_type|media_past_verb }}.
+      </p>
+      <a href="{{ media_type|sample_search }}"
+         class="rounded-md bg-indigo-600 px-4 py-2 text-white transition-colors hover:bg-indigo-700">
+        Browse {{ media_type|media_type_readable_plural }}
+      </a>
+    {% endif %}
+  </div>
+</div>
