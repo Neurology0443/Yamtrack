@@ -8,6 +8,9 @@ from django.conf import settings
 
 QUEUE_LOCK_PREFIX = "anime_series_view_refresh_queue_lock"
 DEFAULT_QUEUE_LOCK_SECONDS = 900
+RUNNING_LOCK_PREFIX = "anime_series_view_refresh_running_lock"
+DEFAULT_RUNNING_LOCK_SECONDS = 900
+DEFAULT_RUNNING_LOCK_RETRY_SECONDS = 30
 
 
 def media_id_key(media_id):
@@ -53,4 +56,27 @@ def get_refresh_queue_lock_timeout_seconds():
         settings,
         "ANIME_SERIES_VIEW_REFRESH_QUEUE_LOCK_SECONDS",
         DEFAULT_QUEUE_LOCK_SECONDS,
+    )
+
+
+def refresh_running_lock_key(user_id):
+    """Build the user-scoped running lock key for refresh execution."""
+    return f"{RUNNING_LOCK_PREFIX}:{user_id}"
+
+
+def get_refresh_running_lock_timeout_seconds():
+    """Return the configured timeout for an in-flight user refresh."""
+    return getattr(
+        settings,
+        "ANIME_SERIES_VIEW_REFRESH_RUNNING_LOCK_SECONDS",
+        DEFAULT_RUNNING_LOCK_SECONDS,
+    )
+
+
+def get_refresh_running_lock_retry_seconds():
+    """Return the retry delay when a user refresh is already running."""
+    return getattr(
+        settings,
+        "ANIME_SERIES_VIEW_REFRESH_RUNNING_LOCK_RETRY_SECONDS",
+        DEFAULT_RUNNING_LOCK_RETRY_SECONDS,
     )

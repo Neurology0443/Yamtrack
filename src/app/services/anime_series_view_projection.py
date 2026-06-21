@@ -78,7 +78,8 @@ class AnimeSeriesViewProjectionBuilder:
             include_series_view_branch_continuations=True,
         )
         initial_boundary_keys = self._alternative_continuity_boundary_relation_keys(
-            initial_snapshot
+            initial_snapshot,
+            seed_media_id,
         )
         initial_component = self._groupable_component(
             initial_snapshot,
@@ -146,10 +147,11 @@ class AnimeSeriesViewProjectionBuilder:
             refresh_cache=refresh_cache,
             include_series_view_branch_continuations=True,
         )
-        canonical_boundary_keys = self._alternative_continuity_boundary_relation_keys(
-            canonical_snapshot
-        )
         canonical_root = self._local_root(canonical_snapshot)
+        canonical_boundary_keys = self._alternative_continuity_boundary_relation_keys(
+            canonical_snapshot,
+            canonical_root.media_id if canonical_root else candidate.media_id,
+        )
         canonical_component = self._groupable_component(
             canonical_snapshot,
             canonical_root.media_id if canonical_root else candidate.media_id,
@@ -410,54 +412,73 @@ class AnimeSeriesViewProjectionBuilder:
             and str(relation.target_media_id) in component_media_ids
         ]
 
-    def _alternative_continuity_boundary_relation_keys(self, snapshot):
+    def _alternative_continuity_boundary_relation_keys(self, snapshot, seed_media_id):
         relations = self._candidate_relations(snapshot)
-        direct_boundaries = [
-            relation
-            for relation in relations
-            if self._is_independent_alternative_continuity_boundary(
-                snapshot,
-                relation,
-            )
-        ]
-        external_serial_ids = set()
-        series_line_ids = {
-            str(node.media_id) for node in getattr(snapshot, "series_line", ())
-        }
-        for relation in direct_boundaries:
-            for media_id in (
-                str(relation.source_media_id),
-                str(relation.target_media_id),
-            ):
-                if media_id not in series_line_ids:
-                    external_serial_ids.add(media_id)
-
-        return {
+        direct_boundary_keys = {
             self._relation_key(relation)
             for relation in relations
             if self._is_independent_alternative_continuity_boundary(
                 snapshot,
                 relation,
             )
-            or (
-                relation.relation_type in SERIES_VIEW_ALTERNATIVE_RELATIONS
-                and self._relation_has_external_serial_endpoint(
-                    snapshot,
-                    relation,
-                    external_serial_ids,
-                )
+        }
+        local_component_ids = self._groupable_component(
+            snapshot,
+            seed_media_id,
+            excluded_relation_keys=direct_boundary_keys,
+        )
+
+        external_serial_ids = set()
+        series_line_ids = {
+            str(node.media_id) for node in getattr(snapshot, "series_line", ())
+        }
+        for relation in relations:
+            if self._relation_key(relation) not in direct_boundary_keys:
+                continue
+            source_id = str(relation.source_media_id)
+            target_id = str(relation.target_media_id)
+            if (
+                source_id in local_component_ids
+                and target_id not in local_component_ids
+            ):
+                external_serial_ids.add(target_id)
+            elif (
+                target_id in local_component_ids
+                and source_id not in local_component_ids
+            ):
+                external_serial_ids.add(source_id)
+            elif source_id in series_line_ids and target_id not in series_line_ids:
+                external_serial_ids.add(target_id)
+            elif target_id in series_line_ids and source_id not in series_line_ids:
+                external_serial_ids.add(source_id)
+
+        propagated_boundary_keys = {
+            self._relation_key(relation)
+            for relation in relations
+            if self._is_local_to_external_serial_alternative(
+                snapshot=snapshot,
+                relation=relation,
+                local_component_ids=local_component_ids,
+                external_serial_ids=external_serial_ids,
             )
         }
+        return direct_boundary_keys | propagated_boundary_keys
 
-    def _relation_has_external_serial_endpoint(
+    def _is_local_to_external_serial_alternative(
         self,
+        *,
         snapshot,
         relation,
+        local_component_ids,
         external_serial_ids,
     ):
+        if relation.relation_type not in SERIES_VIEW_ALTERNATIVE_RELATIONS:
+            return False
         source = snapshot.nodes_by_media_id.get(str(relation.source_media_id))
         target = snapshot.nodes_by_media_id.get(str(relation.target_media_id))
         if source is None or target is None:
+            return False
+        if not self._is_root_compatible(source) or not self._is_root_compatible(target):
             return False
         if (
             source.media_type.lower()
@@ -466,10 +487,11 @@ class AnimeSeriesViewProjectionBuilder:
             not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
         ):
             return False
+        source_id = str(source.media_id)
+        target_id = str(target.media_id)
         return (
-            str(source.media_id) in external_serial_ids
-            or str(target.media_id) in external_serial_ids
-        )
+            source_id in local_component_ids and target_id in external_serial_ids
+        ) or (target_id in local_component_ids and source_id in external_serial_ids)
 
     def _is_independent_alternative_continuity_boundary(
         self,

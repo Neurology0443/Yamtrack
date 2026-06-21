@@ -625,6 +625,195 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
         self.assertEqual(projection.member_media_ids, ("620", "621"))
 
+    def test_alternative_boundary_propagation_cuts_local_non_series_line_member_to_external_serial(
+        self,
+    ):
+        old_s1 = self.node("2966", start_date=date(2008, 1, 1))
+        old_ova = self.node("6007", media_type="ova", start_date=date(2009, 4, 1))
+        old_s2 = self.node("5341", start_date=date(2009, 7, 1))
+        remake_s1 = self.node("51122", start_date=date(2024, 4, 1))
+        remake_s2 = self.node("59928", start_date=date(2025, 1, 1))
+        relations = [
+            self.relation("2966", "6007", "sequel"),
+            self.relation("6007", "5341", "sequel"),
+            self.relation("2966", "51122", "alternative_version"),
+            self.relation("6007", "51122", "alternative_version"),
+            self.relation("51122", "59928", "sequel"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="2966",
+            nodes={
+                node.media_id: node
+                for node in (old_s1, old_ova, old_s2, remake_s1, remake_s2)
+            },
+            series_line=[old_s1, old_s2],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("2966")
+
+        self.assertEqual(projection.root.media_id, "2966")
+        self.assertEqual(projection.member_media_ids, ("2966", "5341", "6007"))
+
+    def test_external_serial_propagation_does_not_cut_unrelated_external_alternative_edges(
+        self,
+    ):
+        local_s1 = self.node("100", start_date=date(2020, 1, 1))
+        local_s2 = self.node("101", start_date=date(2021, 1, 1))
+        external_root = self.node("200", start_date=date(2022, 1, 1))
+        external_other = self.node("201", start_date=date(2023, 1, 1))
+        external_unrelated = self.node("202", start_date=date(2024, 1, 1))
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "200", "alternative_version"),
+            self.relation("201", "200", "alternative_version"),
+            self.relation("202", "200", "alternative_version"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="100",
+            nodes={
+                node.media_id: node
+                for node in (
+                    local_s1,
+                    local_s2,
+                    external_root,
+                    external_other,
+                    external_unrelated,
+                )
+            },
+            series_line=[local_s1, local_s2],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("100")
+
+        self.assertEqual(projection.root.media_id, "100")
+        self.assertEqual(projection.member_media_ids, ("100", "101"))
+
+    def test_dragon_ball_like_movie_and_special_alternatives_stay_grouped(self):
+        main_tv = self.node("100", start_date=date(1986, 2, 1))
+        z_tv = self.node("101", start_date=date(1989, 4, 1))
+        movie_alt = self.node("200", media_type="movie")
+        special_alt = self.node("201", media_type="special")
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "200", "alternative_version"),
+            self.relation("101", "201", "side_story"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="100",
+            nodes={
+                node.media_id: node for node in (main_tv, z_tv, movie_alt, special_alt)
+            },
+            series_line=[main_tv, z_tv],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("100")
+
+        self.assertEqual(projection.root.media_id, "100")
+        self.assertEqual(projection.member_media_ids, ("100", "101", "200", "201"))
+
+    def test_fate_like_tv_alternative_without_local_serial_continuity_stays_grouped(
+        self,
+    ):
+        seed = self.node("300", media_type="ona", start_date=date(2020, 1, 1))
+        main = self.node("301", start_date=date(2014, 1, 1))
+        relation = self.relation("300", "301", "alternative_version")
+        canonical = self.snapshot(
+            seed="301", nodes={"300": seed, "301": main}, relations=[relation]
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            self.snapshot(
+                seed="300", nodes={"300": seed, "301": main}, relations=[relation]
+            ),
+            canonical,
+        ]
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("300")
+
+        self.assertEqual(projection.root.media_id, "301")
+        self.assertEqual(projection.member_media_ids, ("300", "301"))
+
+    def test_naruto_like_long_series_with_movies_stays_one_projection(self):
+        naruto = self.node("100", start_date=date(2002, 10, 1))
+        shippuden = self.node("101", start_date=date(2007, 2, 1))
+        movie_1 = self.node("200", media_type="movie")
+        movie_2 = self.node("201", media_type="movie")
+        special = self.node("202", media_type="special")
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "200", "side_story"),
+            self.relation("101", "201", "side_story"),
+            self.relation("101", "202", "side_story"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="100",
+            nodes={
+                node.media_id: node
+                for node in (naruto, shippuden, movie_1, movie_2, special)
+            },
+            series_line=[naruto, shippuden],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("100")
+
+        self.assertEqual(projection.root.media_id, "100")
+        self.assertEqual(
+            projection.member_media_ids, ("100", "101", "200", "201", "202")
+        )
+
+    def test_code_geass_like_alternative_continuity_stays_separate_when_boundary_detected(
+        self,
+    ):
+        tv_s1 = self.node("100", start_date=date(2006, 1, 1))
+        tv_s2 = self.node("101", start_date=date(2008, 1, 1))
+        alt_s1 = self.node("200", media_type="ona", start_date=date(2024, 1, 1))
+        alt_s2 = self.node("201", media_type="ona", start_date=date(2025, 1, 1))
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("200", "201", "sequel"),
+            self.relation("200", "100", "alternative_version"),
+        ]
+        nodes = {node.media_id: node for node in (tv_s1, tv_s2, alt_s1, alt_s2)}
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [
+            self.snapshot(
+                seed="200",
+                nodes=nodes,
+                series_line=[alt_s1, alt_s2],
+                relations=relations,
+            ),
+            self.snapshot(
+                seed="100", nodes=nodes, series_line=[tv_s1, tv_s2], relations=relations
+            ),
+        ]
+        builder = AnimeSeriesViewProjectionBuilder(snapshot_service=snapshot_service)
+
+        alt_projection = builder.build("200")
+        tv_projection = builder.build("100")
+
+        self.assertEqual(alt_projection.root.media_id, "200")
+        self.assertEqual(alt_projection.member_media_ids, ("200", "201"))
+        self.assertEqual(tv_projection.root.media_id, "100")
+        self.assertEqual(tv_projection.member_media_ids, ("100", "101"))
+
     def test_weak_side_story_without_confirmation_is_unresolved(self):
         special = self.node("700", media_type="special")
         candidate = self.node("701")

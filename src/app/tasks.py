@@ -32,11 +32,19 @@ from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
 )
 from app.services.anime_series_view_refresh_queue import (
+    get_refresh_running_lock_retry_seconds,
+    get_refresh_running_lock_timeout_seconds,
     normalize_media_ids,
     refresh_queue_lock_key,
+    refresh_running_lock_key,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_anime_series_view_refresh(task):
+    """Retry a user-scoped Anime Series View refresh after the configured delay."""
+    raise task.retry(countdown=get_refresh_running_lock_retry_seconds())
 
 
 def _build_mal_anime_franchise_payload_for_cache(media_id: str, graph_builder):
@@ -63,8 +71,13 @@ def cleanup_user_messages():
     return deleted_count
 
 
-@shared_task(name="Refresh Anime Series View franchise projection")
+@shared_task(
+    bind=True,
+    name="Refresh Anime Series View franchise projection",
+    max_retries=5,
+)
 def refresh_anime_series_view_franchise_projection(
+    self,
     user_id,
     media_ids,
     mode=REFRESH_MODE,
@@ -72,6 +85,8 @@ def refresh_anime_series_view_franchise_projection(
     """Refresh persisted Anime Series View memberships for one user."""
     normalized_ids = normalize_media_ids(media_ids)
     lock_key = refresh_queue_lock_key(user_id, normalized_ids, mode)
+    running_lock_key = refresh_running_lock_key(user_id)
+    running_lock_acquired = False
     try:
         if not normalized_ids:
             return {
@@ -102,6 +117,14 @@ def refresh_anime_series_view_franchise_projection(
                 "skipped": True,
                 "reason": "user_not_found",
             }
+
+        running_lock_acquired = cache.add(
+            running_lock_key,
+            "1",
+            timeout=get_refresh_running_lock_timeout_seconds(),
+        )
+        if not running_lock_acquired:
+            _retry_anime_series_view_refresh(self)
 
         logger.info(
             "Starting Anime Series View franchise projection refresh",
@@ -146,6 +169,8 @@ def refresh_anime_series_view_franchise_projection(
         )
         return result
     finally:
+        if running_lock_acquired:
+            cache.delete(running_lock_key)
         cache.delete(lock_key)
 
 
