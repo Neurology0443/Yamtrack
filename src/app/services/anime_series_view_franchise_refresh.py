@@ -7,15 +7,15 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
+from app.anime_series_view_constants import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+)
 from app.models import Anime, AnimeSeriesViewMembership, MediaTypes, Sources
 from app.services.anime_series_view_projection import (
     AnimeSeriesViewProjectionBuilder,
 )
 from app.services.anime_series_view_refresh_queue import normalize_media_ids
-from app.services.anime_series_view_rules import (
-    GROUP_KIND_FRANCHISE,
-    GROUP_KIND_SINGLETON,
-)
 
 logger = logging.getLogger(__name__)
 

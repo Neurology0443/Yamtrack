@@ -2,6 +2,10 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from app.anime_series_view_constants import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+)
 from app.models import (
     Anime,
     AnimeSeriesViewMembership,
@@ -11,10 +15,6 @@ from app.models import (
     Status,
 )
 from app.services.anime_series_view import build_anime_series_view
-from app.services.anime_series_view_rules import (
-    GROUP_KIND_FRANCHISE,
-    GROUP_KIND_SINGLETON,
-)
 
 
 class AnimeSeriesViewReadTests(TestCase):

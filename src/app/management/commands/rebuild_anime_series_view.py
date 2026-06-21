@@ -46,11 +46,15 @@ class Command(BaseCommand):
         for user in users.order_by("id"):
             media_ids = explicit_media_ids
             if not media_ids:
-                query = Anime.objects.filter(
-                    user=user,
-                    item__source=Sources.MAL.value,
-                    item__media_type=MediaTypes.ANIME.value,
-                ).values_list("item__media_id", flat=True)
+                query = (
+                    Anime.objects.filter(
+                        user=user,
+                        item__source=Sources.MAL.value,
+                        item__media_type=MediaTypes.ANIME.value,
+                    )
+                    .order_by("item__media_id")
+                    .values_list("item__media_id", flat=True)
+                )
                 if options["limit"] is not None:
                     query = query[: options["limit"]]
                 media_ids = normalize_media_ids(query)

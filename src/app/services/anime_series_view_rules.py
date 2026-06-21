@@ -1,13 +1,5 @@
 """Stable business rules shared by Anime Series View projections."""
 
-PROJECTION_VERSION = "franchise_root_v2"
-GROUP_KIND_FRANCHISE = "franchise"
-GROUP_KIND_SINGLETON = "singleton"
-
-REFRESH_MODE = "refresh"
-DELETE_MODE = "delete"
-REFRESH_MODES = frozenset({REFRESH_MODE, DELETE_MODE})
-
 SERIES_VIEW_CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
 SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
     {
@@ -22,7 +14,7 @@ SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
     }
 )
 
-SERIES_VIEW_ROOT_MEDIA_TYPES = frozenset({"tv", "ona", "movie"})
+SERIES_VIEW_ROOT_MEDIA_TYPES = frozenset({"tv", "ona", "movie", "ova"})
 
 SERIES_VIEW_STRONG_REROOT_RELATIONS = frozenset(
     {

@@ -9,6 +9,11 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.utils import timezone
 
+from app.anime_series_view_constants import (
+    DELETE_MODE,
+    REFRESH_MODE,
+    REFRESH_MODES,
+)
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
@@ -29,11 +34,6 @@ from app.services.anime_series_view_franchise_refresh import (
 from app.services.anime_series_view_refresh_queue import (
     normalize_media_ids,
     refresh_queue_lock_key,
-)
-from app.services.anime_series_view_rules import (
-    DELETE_MODE,
-    REFRESH_MODE,
-    REFRESH_MODES,
 )
 
 logger = logging.getLogger(__name__)

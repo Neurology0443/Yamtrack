@@ -61,3 +61,38 @@ class RebuildAnimeSeriesViewCommandTests(TestCase):
             refresh_cache=False,
             dry_run=True,
         )
+
+    @patch(
+        "app.management.commands.rebuild_anime_series_view."
+        "AnimeSeriesViewFranchiseRefreshService"
+    )
+    def test_rebuild_command_limit_is_deterministic(self, service_cls):
+        for media_id in ("30", "10", "20"):
+            item = Item.objects.create(
+                media_id=media_id,
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title=f"Anime {media_id}",
+                image=f"https://example.com/{media_id}.jpg",
+            )
+            anime = Anime(user=self.user, item=item, status=Status.PLANNING.value)
+            anime._skip_hot_priority = True
+            anime.save()
+        service_cls.return_value.refresh_for_media_ids.return_value = (
+            AnimeSeriesViewFranchiseRefreshStats(requested=2)
+        )
+
+        call_command(
+            "rebuild_anime_series_view",
+            "--user-id",
+            str(self.user.id),
+            "--limit",
+            "2",
+        )
+
+        service_cls.return_value.refresh_for_media_ids.assert_called_once_with(
+            user=self.user,
+            media_ids=("10", "20"),
+            refresh_cache=False,
+            dry_run=False,
+        )

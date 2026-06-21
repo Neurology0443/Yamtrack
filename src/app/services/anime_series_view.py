@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.anime_series_view_constants import PROJECTION_VERSION
 from app.models import AnimeSeriesViewMembership, MediaTypes, Sources
-from app.services.anime_series_view_rules import PROJECTION_VERSION
 
 LEGACY_PROJECTION_VERSION = "franchise_root_v1"
 
@@ -58,8 +58,8 @@ def build_anime_series_view(*, media_entries, user_id):
     """Group existing entries only from persisted memberships, preserving order."""
     media_entries = list(media_entries)
     media_ids = [entry.item.media_id for entry in media_entries]
-    # TODO(Neurology0443): Drop v1 after PR #99.  # noqa: FIX002
-    # Tracking: https://github.com/Neurology0443/Yamtrack/pull/99
+    # Temporary v1 fallback until all users are rebuilt or Spec 2 replaces it
+    # with the global index: https://github.com/Neurology0443/Yamtrack/pull/99
     memberships = {
         membership.media_id: membership
         for membership in AnimeSeriesViewMembership.objects.filter(

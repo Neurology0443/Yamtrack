@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_series_view_rules import (
     SERIES_VIEW_CONTINUITY_RELATIONS,
+    SERIES_VIEW_GROUPABLE_RELATIONS,
 )
 
 if TYPE_CHECKING:
@@ -158,11 +159,8 @@ class AnimeFranchiseSnapshotService:
     ) -> None:
         """Hydrate prequel/sequel continuations for non-main Series View branches."""
         series_line_ids = {node.media_id for node in series_line}
-        queue = deque(
-            media_id
-            for media_id in nodes_by_media_id
-            if media_id not in series_line_ids
-        )
+        start_nodes = self._series_view_branch_start_nodes(nodes_by_media_id)
+        queue = deque(start_nodes - series_line_ids)
         visited = set()
 
         while queue:
@@ -182,6 +180,23 @@ class AnimeFranchiseSnapshotService:
                     nodes_by_media_id[target_id] = target_node
                 if target_id not in series_line_ids and target_id not in visited:
                     queue.append(target_id)
+
+    @staticmethod
+    def _series_view_branch_start_nodes(
+        nodes_by_media_id: dict[str, AnimeNode],
+    ) -> set[str]:
+        """Return loaded endpoints connected by a groupable relation."""
+        start_nodes = set()
+        for node in list(nodes_by_media_id.values()):
+            for relation in node.relations:
+                if relation.relation_type not in SERIES_VIEW_GROUPABLE_RELATIONS:
+                    continue
+                source_id = str(relation.source_media_id)
+                target_id = str(relation.target_media_id)
+                if source_id in nodes_by_media_id and target_id in nodes_by_media_id:
+                    start_nodes.add(source_id)
+                    start_nodes.add(target_id)
+        return start_nodes
 
     def _derive_root_story_parent_candidates(
         self,

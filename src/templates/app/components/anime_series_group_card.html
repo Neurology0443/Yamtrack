@@ -1,52 +1,20 @@
 {% load app_tags %}
 
+{# TODO: A future hover may expose aggregate info; member titles stay out of the card body. #}
 <article class="h-full overflow-hidden rounded-lg bg-[#2a2f35] shadow-lg">
-  <div class="flex gap-4 border-b border-gray-700/70 p-4">
-    <a href="{{ group.display_item|media_url }}" class="shrink-0">
+  <a href="{{ group.display_item|media_url }}" class="block h-full">
+    <div class="aspect-2/3 overflow-hidden bg-[#3e454d]">
       <img alt="{{ group.display_title }}"
-           class="lazyload h-36 w-24 rounded-md bg-[#3e454d] object-cover"
+           class="lazyload h-full w-full object-cover"
            {% if group.display_image %}data-src="{{ group.display_image }}"{% endif %}
            src="{{ IMG_NONE }}">
-    </a>
-    <div class="min-w-0 py-1">
-      <a href="{{ group.display_item|media_url }}"
-         class="line-clamp-2 text-lg font-semibold text-white hover:text-indigo-400">
-        {{ group.display_title }}
-      </a>
-      <p class="mt-2 text-sm text-gray-400">
-        {{ group.entries|length }} tracked entr{{ group.entries|length|pluralize:"y,ies" }}
-      </p>
-      {% if group.display_media_type %}
-        <span class="mt-3 inline-block rounded bg-[#39404b] px-2 py-1 text-xs uppercase text-gray-300">
-          {{ group.display_media_type }}
-        </span>
-      {% endif %}
     </div>
-  </div>
-
-  <ul class="divide-y divide-gray-700/60">
-    {% for entry in group.entries %}
-      <li class="flex items-center gap-3 px-4 py-3">
-        <img alt=""
-             class="lazyload h-12 w-8 shrink-0 rounded bg-[#3e454d] object-cover"
-             data-src="{{ entry.image }}"
-             src="{{ IMG_NONE }}">
-        <div class="min-w-0 grow">
-          <a href="{{ entry.local_entry.item|media_url }}"
-             class="block truncate text-sm font-medium text-white hover:text-indigo-400">
-            {{ entry.title }}
-          </a>
-          <div class="mt-1 flex flex-wrap gap-x-3 text-xs text-gray-400">
-            <span>{{ entry.local_entry.status|media_status_readable }}</span>
-            {% if entry.local_entry.progress %}
-              <span>
-                {{ entry.local_entry.formatted_progress }}
-                {% if entry.local_entry.max_progress %}/ {{ entry.local_entry.max_progress }}{% endif %}
-              </span>
-            {% endif %}
-          </div>
-        </div>
-      </li>
-    {% endfor %}
-  </ul>
+    <div class="p-4">
+      <h2 class="line-clamp-2 text-base font-semibold text-white hover:text-indigo-400">{{ group.display_title }}</h2>
+      <div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-400">
+        {% if group.display_media_type %}<span class="uppercase">{{ group.display_media_type }}</span>{% endif %}
+        <span class="ml-auto">{{ group.entries|length }} tracked entr{{ group.entries|length|pluralize:"y,ies" }}</span>
+      </div>
+    </div>
+  </a>
 </article>

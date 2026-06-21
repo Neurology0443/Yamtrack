@@ -7,12 +7,12 @@ import logging
 from django.core.cache import cache
 from django.db import transaction
 
+from app.anime_series_view_constants import DELETE_MODE, REFRESH_MODE
 from app.services.anime_series_view_refresh_queue import (
     get_refresh_queue_lock_timeout_seconds,
     normalize_media_ids,
     refresh_queue_lock_key,
 )
-from app.services.anime_series_view_rules import DELETE_MODE, REFRESH_MODE
 
 logger = logging.getLogger(__name__)
 

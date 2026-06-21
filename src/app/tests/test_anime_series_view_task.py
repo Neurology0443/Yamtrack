@@ -4,10 +4,10 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from app.anime_series_view_constants import DELETE_MODE, REFRESH_MODE
 from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshStats,
 )
-from app.services.anime_series_view_rules import DELETE_MODE, REFRESH_MODE
 from app.tasks import refresh_anime_series_view_franchise_projection
 
 

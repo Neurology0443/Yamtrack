@@ -30,12 +30,12 @@ import app
 import events
 import users
 from app import providers
-from app.mixins import CalendarTriggerMixin
-from app.services.anime_series_view_rules import (
+from app.anime_series_view_constants import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
     PROJECTION_VERSION,
 )
+from app.mixins import CalendarTriggerMixin
 
 logger = logging.getLogger(__name__)
 

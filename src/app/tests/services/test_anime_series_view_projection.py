@@ -5,14 +5,14 @@ from unittest.mock import Mock
 
 from django.test import SimpleTestCase
 
-from app.services.anime_franchise_types import AnimeNode, AnimeRelation
-from app.services.anime_series_view_projection import (
-    AnimeSeriesViewProjectionBuilder,
-)
-from app.services.anime_series_view_rules import (
+from app.anime_series_view_constants import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
     PROJECTION_VERSION,
+)
+from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+from app.services.anime_series_view_projection import (
+    AnimeSeriesViewProjectionBuilder,
 )
 
 
@@ -441,6 +441,42 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.root.media_id, "600")
         self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
         self.assertEqual(projection.member_media_ids, ("600", "601"))
+
+    def test_ona_only_continuity_projects_as_franchise(self):
+        ona_s1 = self.node("610", media_type="ona", start_date=date(2020, 1, 1))
+        ona_s2 = self.node("611", media_type="ona", start_date=date(2022, 1, 1))
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="610",
+            nodes={"610": ona_s1, "611": ona_s2},
+            relations=[self.relation("610", "611", "sequel")],
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("610")
+
+        self.assertEqual(projection.root.media_id, "610")
+        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertEqual(projection.member_media_ids, ("610", "611"))
+
+    def test_ova_only_continuity_projects_as_franchise(self):
+        ova_a = self.node("620", media_type="ova", start_date=date(2020, 1, 1))
+        ova_b = self.node("621", media_type="ova", start_date=date(2022, 1, 1))
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="620",
+            nodes={"620": ova_a, "621": ova_b},
+            relations=[self.relation("620", "621", "sequel")],
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("620")
+
+        self.assertEqual(projection.root.media_id, "620")
+        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertEqual(projection.member_media_ids, ("620", "621"))
 
     def test_weak_side_story_without_confirmation_is_unresolved(self):
         special = self.node("700", media_type="special")

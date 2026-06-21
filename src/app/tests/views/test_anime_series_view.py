@@ -26,12 +26,12 @@ class AnimeSeriesViewTests(TestCase):
         )
         self.client.login(username="series-view", password="password")
 
-    def create_anime(self, media_id, root_id=None):
+    def create_anime(self, media_id, root_id=None, *, title=None, root_title=None):
         item = Item.objects.create(
             media_id=str(media_id),
             source=Sources.MAL.value,
             media_type=MediaTypes.ANIME.value,
-            title=f"Anime {media_id}",
+            title=title or f"Anime {media_id}",
             image=f"https://example.com/{media_id}.jpg",
         )
         anime = Anime(user=self.user, item=item, status=Status.PLANNING.value)
@@ -43,7 +43,7 @@ class AnimeSeriesViewTests(TestCase):
                 media_id=str(media_id),
                 root_media_id=str(root_id),
                 display_media_id=str(root_id),
-                display_title=f"Root {root_id}",
+                display_title=root_title or f"Root {root_id}",
                 display_image=f"https://example.com/root-{root_id}.jpg",
                 display_media_type="tv",
             )
@@ -66,6 +66,71 @@ class AnimeSeriesViewTests(TestCase):
         self.assertContains(
             response,
             "Some anime are still being prepared for Series View.",
+        )
+
+    def test_series_card_shows_only_root_metadata_and_links_to_root(self):
+        self.create_anime(
+            "1",
+            root_id="1",
+            title="Dragon Ball",
+            root_title="Dragon Ball",
+        )
+        self.create_anime(
+            "2",
+            root_id="1",
+            title="Dragon Ball Z",
+            root_title="Dragon Ball",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        root_url = reverse(
+            "media_details",
+            kwargs={
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "media_id": "1",
+                "title": "dragon-ball",
+            },
+        )
+        self.assertContains(response, "Dragon Ball")
+        self.assertNotContains(response, "Dragon Ball Z")
+        self.assertContains(response, "2 tracked entries")
+        self.assertContains(response, f'href="{root_url}"')
+        self.assertNotContains(response, "divide-y divide-gray-700/60")
+
+    def test_anime_series_view_empty_state_matches_default_media_list(self):
+        url = reverse(
+            "medialist",
+            args=[self.user.username, MediaTypes.ANIME.value],
+        )
+
+        grid_response = self.client.get(url, {"layout": "grid"})
+        series_response = self.client.get(url, {"layout": "series"})
+        partial_response = self.client.get(
+            url,
+            {"layout": "series"},
+            headers={"hx-request": "true"},
+        )
+
+        expected = "No Anime Tracked Yet"
+        self.assertContains(grid_response, expected)
+        self.assertContains(series_response, expected)
+        self.assertContains(partial_response, expected)
+        self.assertNotContains(
+            series_response,
+            "No anime match the current filters.",
+        )
+        self.assertNotContains(
+            partial_response,
+            "No anime match the current filters.",
+        )
+        self.assertTemplateUsed(
+            partial_response,
+            "app/components/media_list_empty_state.html",
         )
 
     def test_series_htmx_uses_series_partial(self):

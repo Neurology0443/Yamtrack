@@ -4,6 +4,11 @@ from unittest.mock import Mock
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from app.anime_series_view_constants import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+    PROJECTION_VERSION,
+)
 from app.models import (
     Anime,
     AnimeSeriesViewMembership,
@@ -18,11 +23,6 @@ from app.services.anime_series_view_franchise_refresh import (
 from app.services.anime_series_view_projection import (
     AnimeSeriesViewProjection,
     AnimeSeriesViewProjectionRoot,
-)
-from app.services.anime_series_view_rules import (
-    GROUP_KIND_FRANCHISE,
-    GROUP_KIND_SINGLETON,
-    PROJECTION_VERSION,
 )
 
 

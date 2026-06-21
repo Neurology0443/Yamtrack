@@ -5,11 +5,11 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
 
+from app.anime_series_view_constants import DELETE_MODE, REFRESH_MODE
 from app.services.anime_series_view_refresh_queue import refresh_queue_lock_key
 from app.services.anime_series_view_refresh_triggers import (
     AnimeSeriesViewRefreshTriggerService,
 )
-from app.services.anime_series_view_rules import DELETE_MODE, REFRESH_MODE
 
 
 class AnimeSeriesViewRefreshTriggerTests(TestCase):

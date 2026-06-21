@@ -6,11 +6,13 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import date
 
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
-from app.services.anime_series_view_rules import (
+from app.anime_series_view_constants import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
     PROJECTION_VERSION,
+)
+from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_series_view_rules import (
     SERIES_VIEW_CONTINUITY_RELATIONS,
     SERIES_VIEW_GROUPABLE_RELATIONS,
     SERIES_VIEW_REROOT_RELATION_PRIORITY,
@@ -303,8 +305,9 @@ class AnimeSeriesViewProjectionBuilder:
     ):
         if snapshot.series_line:
             return True
-        return local_root.media_type.lower() == "movie" and self._has_clear_continuity(
-            snapshot, component_media_ids
+        return (
+            local_root.media_type.lower() in SERIES_VIEW_ROOT_MEDIA_TYPES
+            and self._has_clear_continuity(snapshot, component_media_ids)
         )
 
     def _has_clear_continuity(self, snapshot, component_media_ids):
@@ -456,7 +459,10 @@ class AnimeSeriesViewProjectionBuilder:
 
     @staticmethod
     def _media_type_rank(media_type):
-        return {"tv": 0, "ona": 1, "movie": 2}.get(media_type.lower(), 3)
+        return {"tv": 0, "ona": 1, "movie": 2, "ova": 3}.get(
+            media_type.lower(),
+            4,
+        )
 
     def _normalize_media_ids(self, media_ids):
         return tuple(

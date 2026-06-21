@@ -87,6 +87,58 @@ class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
             {"100", "200", "201"},
         )
 
+    def test_series_view_branch_continuations_ignore_character_nodes(self):
+        fetched_media_ids = []
+        metadata_map = {
+            "100": {
+                "media_id": "100",
+                "title": "Main",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2010-01-01"},
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "200", "relation_type": "character"},
+                    ],
+                },
+            },
+            "200": {
+                "media_id": "200",
+                "title": "Character-related TV",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "201", "relation_type": "sequel"},
+                    ],
+                },
+            },
+            "201": {
+                "media_id": "201",
+                "title": "Unrelated sequel",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2022-01-01"},
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+        }
+
+        def fetch_metadata(media_id, refresh_cache=False):  # noqa: ARG001
+            fetched_media_ids.append(str(media_id))
+            return metadata_map[str(media_id)]
+
+        builder = AnimeFranchiseGraphBuilder(metadata_fetcher=fetch_metadata)
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "100",
+            include_series_view_branch_continuations=True,
+        )
+
+        self.assertIn("200", snapshot.nodes_by_media_id)
+        self.assertNotIn("201", snapshot.nodes_by_media_id)
+        self.assertNotIn("201", fetched_media_ids)
+
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
             "10": AnimeNode(
