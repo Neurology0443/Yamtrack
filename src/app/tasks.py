@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import requests
 from celery import shared_task
+from celery.exceptions import Retry
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -141,6 +142,8 @@ def refresh_anime_series_view_franchise_projection(
                 user=user,
                 media_ids=normalized_ids,
             )
+    except Retry:
+        raise
     except Exception:
         logger.exception(
             "Anime Series View franchise projection refresh failed",

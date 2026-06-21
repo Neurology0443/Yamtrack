@@ -59,6 +59,9 @@ def get_refresh_queue_lock_timeout_seconds():
     )
 
 
+# V1 conservative lock: serialize all Anime Series View refreshes for one user.
+# Spec V2 should replace this with a finer user + global franchise root lock once
+# the global franchise index can resolve refresh scopes before persistence.
 def refresh_running_lock_key(user_id):
     """Build the user-scoped running lock key for refresh execution."""
     return f"{RUNNING_LOCK_PREFIX}:{user_id}"

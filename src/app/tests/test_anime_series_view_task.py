@@ -1,6 +1,7 @@
 # ruff: noqa: D102
 from unittest.mock import patch
 
+from celery.exceptions import Retry
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -158,15 +159,40 @@ class AnimeSeriesViewTaskTests(TestCase):
         running_lock_key = refresh_running_lock_key(user.id)
         cache.set(running_lock_key, "1", timeout=900)
 
-        with patch.object(
-            refresh_anime_series_view_franchise_projection,
-            "retry",
-            side_effect=RuntimeError("retry requested"),
-        ) as retry:
-            with self.assertRaises(RuntimeError):
-                refresh_anime_series_view_franchise_projection(user.id, ["2"])
+        with (
+            patch.object(
+                refresh_anime_series_view_franchise_projection,
+                "retry",
+                side_effect=Retry("retry requested"),
+            ) as retry,
+            self.assertRaises(Retry),
+        ):
+            refresh_anime_series_view_franchise_projection(user.id, ["2"])
 
         retry.assert_called_once()
+        service_cls.return_value.refresh_for_media_ids.assert_not_called()
+        self.assertEqual(cache.get(running_lock_key), "1")
+
+    @patch("app.tasks.logger.exception")
+    @patch("app.tasks.AnimeSeriesViewFranchiseRefreshService")
+    def test_refresh_task_retry_does_not_log_application_exception(
+        self, service_cls, logger_exception
+    ):
+        user = get_user_model().objects.create_user(username="series-retry-log")
+        running_lock_key = refresh_running_lock_key(user.id)
+        cache.set(running_lock_key, "1", timeout=900)
+
+        with (
+            patch.object(
+                refresh_anime_series_view_franchise_projection,
+                "retry",
+                side_effect=Retry("retry requested"),
+            ),
+            self.assertRaises(Retry),
+        ):
+            refresh_anime_series_view_franchise_projection(user.id, ["2"])
+
+        logger_exception.assert_not_called()
         service_cls.return_value.refresh_for_media_ids.assert_not_called()
         self.assertEqual(cache.get(running_lock_key), "1")
 

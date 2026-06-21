@@ -625,7 +625,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
         self.assertEqual(projection.member_media_ids, ("620", "621"))
 
-    def test_alternative_boundary_propagation_cuts_local_non_series_line_member_to_external_serial(
+    def test_alternative_boundary_propagation_cuts_local_non_series_line_member(
         self,
     ):
         old_s1 = self.node("2966", start_date=date(2008, 1, 1))
@@ -658,7 +658,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.root.media_id, "2966")
         self.assertEqual(projection.member_media_ids, ("2966", "5341", "6007"))
 
-    def test_external_serial_propagation_does_not_cut_unrelated_external_alternative_edges(
+    def test_external_serial_propagation_keeps_unrelated_external_edges(
         self,
     ):
         local_s1 = self.node("100", start_date=date(2020, 1, 1))
@@ -695,6 +695,59 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         self.assertEqual(projection.root.media_id, "100")
         self.assertEqual(projection.member_media_ids, ("100", "101"))
+
+    def test_external_serial_ids_are_derived_from_local_component_not_series_line_only(
+        self,
+    ):
+        series_s1 = self.node("100", start_date=date(2020, 1, 1))
+        series_s2 = self.node("101", start_date=date(2021, 1, 1))
+        external_root = self.node("200", start_date=date(2022, 1, 1))
+        external_other = self.node("201", start_date=date(2023, 1, 1))
+        local_seed = self.node("300", start_date=date(2018, 1, 1))
+        local_s2 = self.node("301", start_date=date(2019, 1, 1))
+        relations = [
+            self.relation("300", "301", "sequel"),
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "200", "alternative_version"),
+            self.relation("201", "200", "alternative_version"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="300",
+            nodes={
+                node.media_id: node
+                for node in (
+                    series_s1,
+                    series_s2,
+                    external_root,
+                    external_other,
+                    local_seed,
+                    local_s2,
+                )
+            },
+            series_line=[series_s1, series_s2],
+            relations=relations,
+        )
+
+        builder = AnimeSeriesViewProjectionBuilder(snapshot_service=snapshot_service)
+        snapshot = snapshot_service.build.return_value
+
+        boundary_keys = builder._alternative_continuity_boundary_relation_keys(
+            snapshot,
+            "300",
+        )
+        projection = builder.build("300")
+
+        self.assertIn(
+            ("100", "200", "alternative_version"),
+            boundary_keys,
+        )
+        self.assertNotIn(
+            ("201", "200", "alternative_version"),
+            boundary_keys,
+        )
+        self.assertNotIn("200", projection.member_media_ids)
+        self.assertNotIn("201", projection.member_media_ids)
 
     def test_dragon_ball_like_movie_and_special_alternatives_stay_grouped(self):
         main_tv = self.node("100", start_date=date(1986, 2, 1))
@@ -779,7 +832,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             projection.member_media_ids, ("100", "101", "200", "201", "202")
         )
 
-    def test_code_geass_like_alternative_continuity_stays_separate_when_boundary_detected(
+    def test_code_geass_like_alternative_continuity_stays_separate(
         self,
     ):
         tv_s1 = self.node("100", start_date=date(2006, 1, 1))
