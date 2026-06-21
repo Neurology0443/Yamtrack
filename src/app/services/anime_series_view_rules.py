@@ -21,11 +21,9 @@ SERIES_VIEW_ALTERNATIVE_RELATIONS = frozenset(
         "alternative_setting",
     }
 )
-SERIES_VIEW_BRANCH_BOUNDARY_RELATIONS = frozenset(
+SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS = frozenset(
     {
         "alternative_version",
-        "alternative_setting",
-        "spin_off",
     }
 )
 SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
@@ -33,7 +31,6 @@ SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
         "tv",
         "ona",
         "ova",
-        "movie",
     }
 )
 
@@ -64,4 +61,3 @@ SERIES_VIEW_REROOT_RELATION_PRIORITY = {
     "prequel": 3,
     "sequel": 3,
 }
-
