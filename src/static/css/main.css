@@ -2964,6 +2964,9 @@
     grid-template-columns: repeat(auto-fill,minmax(180px,1fr));
   }
 }
+.media-list-empty-state {
+  grid-column: 1 / -1;
+}
 .toast-error {
   border-color: var(--color-red-600);
   background-color: color-mix(in srgb, oklch(50.5% 0.213 27.518) 95%, transparent);

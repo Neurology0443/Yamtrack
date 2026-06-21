@@ -27,6 +27,157 @@ class FakeGraphBuilder:
 
 
 class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
+    def test_series_view_option_expands_branch_continuations(self):
+        metadata_map = {
+            "100": {
+                "media_id": "100",
+                "title": "Main",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2010-01-01",
+                },
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "200", "relation_type": "spin_off"},
+                    ],
+                },
+            },
+            "200": {
+                "media_id": "200",
+                "title": "Branch S1",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2020-01-01",
+                },
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "201", "relation_type": "sequel"},
+                    ],
+                },
+            },
+            "201": {
+                "media_id": "201",
+                "title": "Branch S2",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2022-01-01",
+                },
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+        }
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "100",
+            include_series_view_branch_continuations=True,
+        )
+
+        self.assertEqual(
+            set(snapshot.nodes_by_media_id),
+            {"100", "200", "201"},
+        )
+
+    def test_series_view_branch_start_nodes_add_loaded_endpoint_independently(self):
+        loaded = AnimeNode(
+            "200",
+            "Branch",
+            "mal",
+            "tv",
+            "img",
+            date(2020, 1, 1),
+            [AnimeRelation("200", "201", "sequel")],
+        )
+
+        start_nodes = AnimeFranchiseSnapshotService._series_view_branch_start_nodes(
+            {"200": loaded}
+        )
+
+        self.assertEqual(start_nodes, {"200"})
+
+    def test_branch_continuation_traverses_loaded_relation_symmetrically(self):
+        main = AnimeNode(
+            "100",
+            "Main",
+            "mal",
+            "tv",
+            "img",
+            date(2010, 1, 1),
+            [AnimeRelation("100", "200", "spin_off")],
+        )
+        branch = AnimeNode(
+            "200",
+            "Branch S1",
+            "mal",
+            "tv",
+            "img",
+            date(2020, 1, 1),
+            [AnimeRelation("201", "200", "prequel")],
+        )
+        sequel = AnimeNode(
+            "201",
+            "Branch S2",
+            "mal",
+            "tv",
+            "img",
+            date(2022, 1, 1),
+            [],
+        )
+        builder = FakeGraphBuilder(
+            {
+                "100": main,
+                "200": branch,
+                "201": sequel,
+            }
+        )
+        nodes_by_media_id = {"100": main, "200": branch}
+
+        AnimeFranchiseSnapshotService(
+            graph_builder=builder
+        )._expand_series_view_branch_continuations(
+            nodes_by_media_id=nodes_by_media_id,
+            series_line=[main],
+        )
+
+        self.assertIn("201", nodes_by_media_id)
+
+    def test_branch_continuation_does_not_search_reverse_only_missing_node(self):
+        main = AnimeNode(
+            "100",
+            "Main",
+            "mal",
+            "tv",
+            "img",
+            date(2010, 1, 1),
+            [AnimeRelation("100", "200", "spin_off")],
+        )
+        branch = AnimeNode(
+            "200",
+            "Branch S1",
+            "mal",
+            "tv",
+            "img",
+            date(2020, 1, 1),
+            [],
+        )
+        builder = FakeGraphBuilder({"100": main, "200": branch})
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "100",
+            include_series_view_branch_continuations=True,
+        )
+
+        self.assertEqual(set(snapshot.nodes_by_media_id), {"100", "200"})
+
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
             "10": AnimeNode(

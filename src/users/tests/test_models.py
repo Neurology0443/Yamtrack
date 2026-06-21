@@ -2,13 +2,16 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 from django_celery_beat.models import CrontabSchedule, PeriodicTask
 from django_celery_results.models import TaskResult
 
 from users.models import (
+    AnimeLayoutChoices,
     HomeSortChoices,
+    LayoutChoices,
     MediaTypes,
     QuickWatchDateChoices,
     WeekStartDayChoices,
@@ -86,6 +89,35 @@ class UserUpdatePreferenceTests(TestCase):
         # Should not change the value
         self.user.refresh_from_db()
         self.assertEqual(self.user.home_sort, HomeSortChoices.UPCOMING)
+
+    def test_anime_layout_accepts_series(self):
+        """Series is a valid persisted preference only for anime."""
+        result = self.user.update_preference(
+            "anime_layout",
+            AnimeLayoutChoices.SERIES,
+        )
+
+        self.assertEqual(result, AnimeLayoutChoices.SERIES)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.anime_layout, AnimeLayoutChoices.SERIES)
+
+    def test_non_anime_layout_rejects_series(self):
+        """Shared grid/table layout fields must reject the anime-only value."""
+        result = self.user.update_preference(
+            "movie_layout",
+            AnimeLayoutChoices.SERIES,
+        )
+
+        self.assertEqual(result, LayoutChoices.GRID)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.movie_layout, LayoutChoices.GRID)
+
+    def test_database_constraint_rejects_series_for_non_anime_layout(self):
+        """The DB constraint must reject bypassing preference validation."""
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            get_user_model().objects.filter(pk=self.user.pk).update(
+                movie_layout=AnimeLayoutChoices.SERIES,
+            )
 
     def test_update_preference_boolean_field(self):
         """Test update_preference with a boolean field."""
