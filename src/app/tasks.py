@@ -30,6 +30,11 @@ from app.services.anime_series_view_refresh_queue import (
     normalize_media_ids,
     refresh_queue_lock_key,
 )
+from app.services.anime_series_view_rules import (
+    DELETE_MODE,
+    REFRESH_MODE,
+    REFRESH_MODES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +64,32 @@ def cleanup_user_messages():
 
 
 @shared_task(name="Refresh Anime Series View franchise projection")
-def refresh_anime_series_view_franchise_projection(user_id, media_ids):
+def refresh_anime_series_view_franchise_projection(
+    user_id,
+    media_ids,
+    mode=REFRESH_MODE,
+):
     """Refresh persisted Anime Series View memberships for one user."""
     normalized_ids = normalize_media_ids(media_ids)
-    cache.delete(refresh_queue_lock_key(user_id, normalized_ids))
+    cache.delete(refresh_queue_lock_key(user_id, normalized_ids, mode))
 
     if not normalized_ids:
         return {
             "user_id": user_id,
             "media_ids": [],
+            "mode": mode,
             "refreshed": False,
             "skipped": True,
             "reason": "empty_media_ids",
+        }
+    if mode not in REFRESH_MODES:
+        return {
+            "user_id": user_id,
+            "media_ids": list(normalized_ids),
+            "mode": mode,
+            "refreshed": False,
+            "skipped": True,
+            "reason": "invalid_mode",
         }
 
     user = get_user_model().objects.filter(pk=user_id).first()
@@ -78,6 +97,7 @@ def refresh_anime_series_view_franchise_projection(user_id, media_ids):
         return {
             "user_id": user_id,
             "media_ids": list(normalized_ids),
+            "mode": mode,
             "refreshed": False,
             "skipped": True,
             "reason": "user_not_found",
@@ -88,10 +108,17 @@ def refresh_anime_series_view_franchise_projection(user_id, media_ids):
         extra={"user_id": user_id, "media_ids": list(normalized_ids)},
     )
     try:
-        stats = AnimeSeriesViewFranchiseRefreshService().refresh_for_media_ids(
-            user=user,
-            media_ids=normalized_ids,
-        )
+        service = AnimeSeriesViewFranchiseRefreshService()
+        if mode == DELETE_MODE:
+            stats = service.refresh_after_delete(
+                user=user,
+                media_ids=normalized_ids,
+            )
+        else:
+            stats = service.refresh_for_media_ids(
+                user=user,
+                media_ids=normalized_ids,
+            )
     except Exception:
         logger.exception(
             "Anime Series View franchise projection refresh failed",
@@ -101,6 +128,7 @@ def refresh_anime_series_view_franchise_projection(user_id, media_ids):
     result = {
         "user_id": user_id,
         "media_ids": list(normalized_ids),
+        "mode": mode,
         "refreshed": True,
         "requested": stats.requested,
         "snapshots_built": stats.snapshots_built,

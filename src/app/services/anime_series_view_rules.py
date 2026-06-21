@@ -1,0 +1,36 @@
+"""Stable business rules shared by Anime Series View projections."""
+
+PROJECTION_VERSION = "franchise_root_v2"
+GROUP_KIND_FRANCHISE = "franchise"
+GROUP_KIND_SINGLETON = "singleton"
+
+REFRESH_MODE = "refresh"
+DELETE_MODE = "delete"
+REFRESH_MODES = frozenset({REFRESH_MODE, DELETE_MODE})
+
+SERIES_VIEW_CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
+SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
+    {
+        "prequel",
+        "sequel",
+        "parent_story",
+        "full_story",
+        "side_story",
+        "spin_off",
+        "alternative_setting",
+        "alternative_version",
+    }
+)
+
+SERIES_VIEW_ROOT_MEDIA_TYPES = frozenset({"tv", "ona"})
+
+SERIES_VIEW_REROOT_RELATION_PRIORITY = {
+    "full_story": 0,
+    "parent_story": 0,
+    "alternative_version": 1,
+    "alternative_setting": 1,
+    "side_story": 2,
+    "spin_off": 3,
+    "prequel": 4,
+    "sequel": 4,
+}

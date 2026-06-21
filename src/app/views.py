@@ -44,6 +44,7 @@ from app.services.anime_series_view_refresh_triggers import (
 from app.templatetags import app_tags
 from events.notifications import notify_entry_added_after_commit
 from users.models import (
+    AnimeLayoutChoices,
     DateFormatChoices,
     HomeSortChoices,
     LayoutChoices,
@@ -143,7 +144,7 @@ def media_list(request, username, media_type):  # noqa: C901, PLR0912, PLR0915
     requested_layout = request.GET.get("layout")
     if (
         media_type != MediaTypes.ANIME.value
-        and requested_layout == LayoutChoices.SERIES
+        and requested_layout == AnimeLayoutChoices.SERIES
     ):
         requested_layout = LayoutChoices.GRID
 
@@ -192,7 +193,7 @@ def media_list(request, username, media_type):  # noqa: C901, PLR0912, PLR0915
             request.GET.get("status"),
         )
 
-    if media_type != MediaTypes.ANIME.value and layout == LayoutChoices.SERIES:
+    if media_type != MediaTypes.ANIME.value and layout == AnimeLayoutChoices.SERIES:
         layout = LayoutChoices.GRID
         if request.user == target_user:
             target_user.update_preference(f"{media_type}_layout", layout)
@@ -214,7 +215,7 @@ def media_list(request, username, media_type):  # noqa: C901, PLR0912, PLR0915
     )
 
     is_anime_series_view = (
-        media_type == MediaTypes.ANIME.value and layout == LayoutChoices.SERIES
+        media_type == MediaTypes.ANIME.value and layout == AnimeLayoutChoices.SERIES
     )
     series_result = None
     if is_anime_series_view:

@@ -1,5 +1,4 @@
 # ruff: noqa: D102
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 from django.contrib.auth import get_user_model
@@ -13,18 +12,22 @@ from app.models import (
     Sources,
     Status,
 )
-from app.services.anime_franchise_types import AnimeNode
-from app.services.anime_series_view_franchise_projection import (
-    GROUP_KIND_FRANCHISE,
-    GROUP_KIND_SINGLETON,
-)
 from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
+)
+from app.services.anime_series_view_projection import (
+    AnimeSeriesViewProjection,
+    AnimeSeriesViewProjectionRoot,
+)
+from app.services.anime_series_view_rules import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+    PROJECTION_VERSION,
 )
 
 
 class AnimeSeriesViewFranchiseRefreshTests(TestCase):
-    """Test franchise, singleton, cleanup, and scope persistence."""
+    """Test non-destructive refresh, delete cleanup, and scoped persistence."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="series-refresh")
@@ -47,136 +50,169 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
         return anime
 
     @staticmethod
-    def node(media_id, title=None, media_type="tv"):
-        return AnimeNode(
-            media_id=str(media_id),
-            title=title or f"Node {media_id}",
-            source=Sources.MAL.value,
-            media_type=media_type,
-            image=f"https://example.com/root-{media_id}.jpg",
-            start_date=None,
+    def projection(
+        *,
+        seed,
+        root,
+        members,
+        group_kind=GROUP_KIND_FRANCHISE,
+    ):
+        return AnimeSeriesViewProjection(
+            seed_media_id=str(seed),
+            root=AnimeSeriesViewProjectionRoot(
+                media_id=str(root),
+                title=f"Root {root}",
+                image=f"https://example.com/root-{root}.jpg",
+                media_type="tv",
+                start_date=None,
+            ),
+            member_media_ids=tuple(str(member) for member in members),
+            group_kind=group_kind,
+            projection_version=PROJECTION_VERSION,
         )
 
-    def test_all_tracked_snapshot_entries_share_series_line_root(self):
-        root = self.node("1", "Root")
-        nodes = {
-            media_id: self.node(media_id) for media_id in ("1", "2", "3", "4", "5")
-        }
-        nodes["1"] = root
-        for media_id in nodes:
-            self.create_anime(media_id)
-        snapshot = SimpleNamespace(
-            nodes_by_media_id=nodes,
-            series_line=[root, nodes["2"]],
+    def service(self, projection):
+        builder = Mock()
+        builder.build.return_value = projection
+        return AnimeSeriesViewFranchiseRefreshService(
+            projection_builder=builder
+        ), builder
+
+    def test_normal_refresh_preserves_old_membership_on_projection_error(self):
+        anime = self.create_anime("20")
+        membership = AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id=anime.item.media_id,
+            root_media_id="old-root",
+            display_media_id="old-root",
         )
-        snapshot_service = Mock()
-        snapshot_service.build.return_value = snapshot
+        builder = Mock()
+        builder.build.side_effect = RuntimeError("snapshot unavailable")
 
         stats = AnimeSeriesViewFranchiseRefreshService(
-            snapshot_service=snapshot_service
-        ).refresh_for_media_ids(user=self.user, media_ids=["3"])
+            projection_builder=builder
+        ).refresh_for_media_ids(user=self.user, media_ids=["20"])
 
-        memberships = AnimeSeriesViewMembership.objects.filter(user=self.user)
-        self.assertEqual(memberships.count(), 5)
-        self.assertEqual(
-            set(memberships.values_list("root_media_id", flat=True)),
-            {"1"},
+        membership.refresh_from_db()
+        self.assertEqual(membership.root_media_id, "old-root")
+        self.assertEqual(stats.errors, 1)
+        self.assertEqual(stats.snapshots_skipped, 1)
+        self.assertEqual(stats.memberships_deleted, 0)
+
+    def test_delete_removes_only_direct_membership_when_projection_fails(self):
+        for media_id in ("30", "31", "32"):
+            self.create_anime(media_id)
+            AnimeSeriesViewMembership.objects.create(
+                user=self.user,
+                media_id=media_id,
+                root_media_id="30",
+                display_media_id="30",
+            )
+        builder = Mock()
+        builder.build.side_effect = RuntimeError("snapshot unavailable")
+
+        stats = AnimeSeriesViewFranchiseRefreshService(
+            projection_builder=builder
+        ).refresh_after_delete(user=self.user, media_ids=["31"])
+
+        self.assertFalse(
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id="31",
+            ).exists()
         )
         self.assertEqual(
-            set(memberships.values_list("display_media_id", flat=True)),
-            {"1"},
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id__in=["30", "32"],
+            ).count(),
+            2,
+        )
+        self.assertEqual(stats.memberships_deleted, 1)
+        self.assertEqual(stats.errors, 1)
+
+    def test_franchise_projection_persists_all_tracked_members_under_one_root(self):
+        self.create_anime("42916")
+        self.create_anime("50275")
+        service, _builder = self.service(
+            self.projection(
+                seed="42916",
+                root="11757",
+                members=("11757", "42916", "50275"),
+            )
+        )
+
+        stats = service.refresh_for_media_ids(
+            user=self.user,
+            media_ids=["42916"],
+        )
+
+        memberships = AnimeSeriesViewMembership.objects.filter(user=self.user)
+        self.assertEqual(memberships.count(), 2)
+        self.assertEqual(
+            set(memberships.values_list("root_media_id", flat=True)),
+            {"11757"},
         )
         self.assertEqual(
             set(memberships.values_list("group_kind", flat=True)),
             {GROUP_KIND_FRANCHISE},
         )
-        self.assertEqual(stats.franchise_memberships_created, 5)
+        self.assertEqual(stats.franchise_memberships_created, 2)
 
-    def test_empty_series_line_creates_explicit_singletons(self):
-        nodes = {media_id: self.node(media_id) for media_id in ("10", "11")}
-        for media_id in nodes:
-            self.create_anime(media_id)
-        snapshot_service = Mock()
-        snapshot_service.build.return_value = SimpleNamespace(
-            nodes_by_media_id=nodes,
-            series_line=[],
+    def test_singleton_projection_persists_only_explicit_singleton(self):
+        self.create_anime("900")
+        self.create_anime("901")
+        service, _builder = self.service(
+            self.projection(
+                seed="900",
+                root="900",
+                members=("900",),
+                group_kind=GROUP_KIND_SINGLETON,
+            )
         )
 
-        AnimeSeriesViewFranchiseRefreshService(
-            snapshot_service=snapshot_service
-        ).refresh_for_media_ids(user=self.user, media_ids=["10"])
+        service.refresh_for_media_ids(user=self.user, media_ids=["900"])
 
-        memberships = AnimeSeriesViewMembership.objects.filter(user=self.user)
-        self.assertEqual(
-            set(memberships.values_list("group_kind", flat=True)),
-            {GROUP_KIND_SINGLETON},
-        )
-        for membership in memberships:
-            self.assertEqual(membership.root_media_id, membership.media_id)
-            self.assertEqual(membership.display_media_id, membership.media_id)
-
-    def test_cleanup_stays_inside_scope_and_direct_membership_is_removed_on_error(self):
-        requested = self.create_anime("20")
-        outside = self.create_anime("99")
-        AnimeSeriesViewMembership.objects.create(
+        membership = AnimeSeriesViewMembership.objects.get(
             user=self.user,
-            media_id=requested.item.media_id,
-            root_media_id="20",
-            display_media_id="20",
+            media_id="900",
         )
-        AnimeSeriesViewMembership.objects.create(
-            user=self.user,
-            media_id=outside.item.media_id,
-            root_media_id="99",
-            display_media_id="99",
-        )
-        snapshot_service = Mock()
-        snapshot_service.build.side_effect = RuntimeError("snapshot failed")
-
-        stats = AnimeSeriesViewFranchiseRefreshService(
-            snapshot_service=snapshot_service
-        ).refresh_for_media_ids(user=self.user, media_ids=["20"])
-
+        self.assertEqual(membership.root_media_id, "900")
+        self.assertEqual(membership.group_kind, GROUP_KIND_SINGLETON)
         self.assertFalse(
             AnimeSeriesViewMembership.objects.filter(
                 user=self.user,
-                media_id="20",
+                media_id="901",
             ).exists()
         )
-        self.assertTrue(
-            AnimeSeriesViewMembership.objects.filter(
-                user=self.user,
-                media_id="99",
-            ).exists()
-        )
-        self.assertEqual(stats.errors, 1)
-        self.assertEqual(stats.memberships_deleted, 1)
 
-    def test_removes_untracked_memberships_only_in_built_scope(self):
-        tracked = self.create_anime("30")
-        outside = self.create_anime("98")
-        for media_id in ("30", "31", "98"):
+    def test_stale_cleanup_is_limited_to_projection_members(self):
+        tracked = self.create_anime("40")
+        outside = self.create_anime("99")
+        for media_id in ("40", "41", "99"):
             AnimeSeriesViewMembership.objects.create(
                 user=self.user,
                 media_id=media_id,
                 root_media_id=media_id,
                 display_media_id=media_id,
             )
-        root = self.node("30")
-        snapshot_service = Mock()
-        snapshot_service.build.return_value = SimpleNamespace(
-            nodes_by_media_id={"30": root, "31": self.node("31")},
-            series_line=[root],
+        service, _builder = self.service(
+            self.projection(
+                seed=tracked.item.media_id,
+                root="40",
+                members=("40", "41"),
+            )
         )
 
-        AnimeSeriesViewFranchiseRefreshService(
-            snapshot_service=snapshot_service
-        ).refresh_for_media_ids(user=self.user, media_ids=[tracked.item.media_id])
+        service.refresh_for_media_ids(
+            user=self.user,
+            media_ids=[tracked.item.media_id],
+        )
 
         self.assertFalse(
             AnimeSeriesViewMembership.objects.filter(
                 user=self.user,
-                media_id="31",
+                media_id="41",
             ).exists()
         )
         self.assertTrue(
@@ -186,35 +222,22 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
             ).exists()
         )
 
-    def test_updates_existing_membership_without_creating_a_duplicate(self):
-        first = self.create_anime("40")
-        self.create_anime("41")
-        membership = AnimeSeriesViewMembership.objects.create(
+    def test_equivalent_projections_are_persisted_once(self):
+        self.create_anime("50")
+        projection = self.projection(
+            seed="50",
+            root="50",
+            members=("50", "51"),
+        )
+        builder = Mock()
+        builder.build.return_value = projection
+        service = AnimeSeriesViewFranchiseRefreshService(projection_builder=builder)
+
+        stats = service.refresh_for_media_ids(
             user=self.user,
-            media_id=first.item.media_id,
-            root_media_id="old",
-            display_media_id="old",
-            group_kind=GROUP_KIND_SINGLETON,
-        )
-        root = self.node("40", "Updated Root")
-        snapshot_service = Mock()
-        snapshot_service.build.return_value = SimpleNamespace(
-            nodes_by_media_id={"40": root, "41": self.node("41")},
-            series_line=[root],
+            media_ids=["50", "51"],
         )
 
-        stats = AnimeSeriesViewFranchiseRefreshService(
-            snapshot_service=snapshot_service
-        ).refresh_for_media_ids(user=self.user, media_ids=["41"])
-
-        membership.refresh_from_db()
-        self.assertEqual(membership.root_media_id, "40")
-        self.assertEqual(membership.group_kind, GROUP_KIND_FRANCHISE)
-        self.assertEqual(
-            AnimeSeriesViewMembership.objects.filter(
-                user=self.user,
-                media_id="40",
-            ).count(),
-            1,
-        )
-        self.assertEqual(stats.franchise_memberships_updated, 1)
+        self.assertEqual(builder.build.call_count, 2)
+        self.assertEqual(stats.snapshots_skipped, 1)
+        self.assertEqual(stats.franchise_memberships_created, 1)

@@ -9,6 +9,7 @@ from app.services.anime_series_view_refresh_queue import refresh_queue_lock_key
 from app.services.anime_series_view_refresh_triggers import (
     AnimeSeriesViewRefreshTriggerService,
 )
+from app.services.anime_series_view_rules import DELETE_MODE, REFRESH_MODE
 
 
 class AnimeSeriesViewRefreshTriggerTests(TestCase):
@@ -27,15 +28,31 @@ class AnimeSeriesViewRefreshTriggerTests(TestCase):
             )
             delay.assert_not_called()
 
-        delay.assert_called_once_with(self.user.id, ["2", "10"])
+        delay.assert_called_once_with(self.user.id, ["2", "10"], REFRESH_MODE)
 
     @patch("app.tasks.refresh_anime_series_view_franchise_projection.delay")
-    def test_queue_lock_prevents_duplicate_enqueue(self, delay):
+    def test_manual_add_uses_refresh_mode(self, delay):
+        service = AnimeSeriesViewRefreshTriggerService()
+        with self.captureOnCommitCallbacks(execute=True):
+            service.schedule_manual_add(user=self.user, media_id="2")
+
+        delay.assert_called_once_with(self.user.id, ["2"], REFRESH_MODE)
+
+    @patch("app.tasks.refresh_anime_series_view_franchise_projection.delay")
+    def test_delete_uses_delete_mode(self, delay):
+        service = AnimeSeriesViewRefreshTriggerService()
+        with self.captureOnCommitCallbacks(execute=True):
+            service.schedule_delete(user=self.user, media_id="2")
+
+        delay.assert_called_once_with(self.user.id, ["2"], DELETE_MODE)
+
+    @patch("app.tasks.refresh_anime_series_view_franchise_projection.delay")
+    def test_queue_lock_prevents_duplicate_enqueue_for_same_mode(self, delay):
         service = AnimeSeriesViewRefreshTriggerService()
         with self.captureOnCommitCallbacks(execute=True):
             service.schedule_manual_add(user=self.user, media_id="2")
         with self.captureOnCommitCallbacks(execute=True):
-            service.schedule_delete(user=self.user, media_id="2")
+            service.schedule_manual_add(user=self.user, media_id="2")
 
         delay.assert_called_once()
 
@@ -50,4 +67,12 @@ class AnimeSeriesViewRefreshTriggerTests(TestCase):
                 media_id="2",
             )
 
-        self.assertIsNone(cache.get(refresh_queue_lock_key(self.user.id, ["2"])))
+        self.assertIsNone(
+            cache.get(
+                refresh_queue_lock_key(
+                    self.user.id,
+                    ["2"],
+                    REFRESH_MODE,
+                )
+            )
+        )

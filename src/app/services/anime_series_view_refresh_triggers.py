@@ -12,6 +12,7 @@ from app.services.anime_series_view_refresh_queue import (
     normalize_media_ids,
     refresh_queue_lock_key,
 )
+from app.services.anime_series_view_rules import DELETE_MODE, REFRESH_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -21,17 +22,17 @@ class AnimeSeriesViewRefreshTriggerService:
 
     def schedule_manual_add(self, *, user, media_id) -> None:
         """Schedule a refresh after a manual MAL anime creation."""
-        self._schedule(user=user, media_ids=(media_id,))
+        self._schedule(user=user, media_ids=(media_id,), mode=REFRESH_MODE)
 
     def schedule_delete(self, *, user, media_id) -> None:
         """Schedule cleanup and regrouping after a MAL anime deletion."""
-        self._schedule(user=user, media_ids=(media_id,))
+        self._schedule(user=user, media_ids=(media_id,), mode=DELETE_MODE)
 
     def schedule_import_batch(self, *, user, media_ids) -> None:
         """Schedule one normalized refresh batch for an import snapshot."""
-        self._schedule(user=user, media_ids=media_ids)
+        self._schedule(user=user, media_ids=media_ids, mode=REFRESH_MODE)
 
-    def _schedule(self, *, user, media_ids) -> None:
+    def _schedule(self, *, user, media_ids, mode) -> None:
         normalized_ids = normalize_media_ids(media_ids)
         if not normalized_ids:
             return
@@ -43,7 +44,7 @@ class AnimeSeriesViewRefreshTriggerService:
                 refresh_anime_series_view_franchise_projection,
             )
 
-            lock_key = refresh_queue_lock_key(user_id, normalized_ids)
+            lock_key = refresh_queue_lock_key(user_id, normalized_ids, mode)
             acquired = cache.add(
                 lock_key,
                 "1",
@@ -63,6 +64,7 @@ class AnimeSeriesViewRefreshTriggerService:
                 refresh_anime_series_view_franchise_projection.delay(
                     user_id,
                     list(normalized_ids),
+                    mode,
                 )
             except Exception:
                 cache.delete(lock_key)
@@ -71,6 +73,7 @@ class AnimeSeriesViewRefreshTriggerService:
                     extra={
                         "user_id": user_id,
                         "media_ids": list(normalized_ids),
+                        "mode": mode,
                     },
                 )
 

@@ -1,4 +1,4 @@
-"""Persist the simple franchise-root read model for Anime Series View."""
+"""Persist user memberships from pure Anime Series View projections."""
 
 from __future__ import annotations
 
@@ -8,14 +8,14 @@ from dataclasses import dataclass
 from django.db import transaction
 
 from app.models import Anime, AnimeSeriesViewMembership, MediaTypes, Sources
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
-from app.services.anime_series_view_franchise_projection import (
-    GROUP_KIND_FRANCHISE,
-    GROUP_KIND_SINGLETON,
-    PROJECTION_VERSION,
-    resolve_series_line_root,
+from app.services.anime_series_view_projection import (
+    AnimeSeriesViewProjectionBuilder,
 )
 from app.services.anime_series_view_refresh_queue import normalize_media_ids
+from app.services.anime_series_view_rules import (
+    GROUP_KIND_FRANCHISE,
+    GROUP_KIND_SINGLETON,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +36,13 @@ class AnimeSeriesViewFranchiseRefreshStats:
 
 
 class AnimeSeriesViewFranchiseRefreshService:
-    """Build canonical snapshots and persist one membership per tracked anime."""
+    """Persist one membership per tracked anime from reusable projections."""
 
-    def __init__(self, *, snapshot_service=None):
-        """Initialize with the canonical snapshot service."""
-        self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
+    def __init__(self, *, projection_builder=None):
+        """Initialize with the pure projection builder."""
+        self.projection_builder = (
+            projection_builder or AnimeSeriesViewProjectionBuilder()
+        )
 
     def refresh_for_media_ids(
         self,
@@ -50,20 +52,63 @@ class AnimeSeriesViewFranchiseRefreshService:
         refresh_cache=False,
         dry_run=False,
     ) -> AnimeSeriesViewFranchiseRefreshStats:
-        """Refresh all distinct snapshot scopes reached by the requested IDs."""
-        normalized_ids = normalize_media_ids(media_ids)
-        stats = AnimeSeriesViewFranchiseRefreshStats(requested=len(normalized_ids))
+        """Refresh valid projections without deleting rows before a successful build."""
+        return self._refresh_for_media_ids(
+            user=user,
+            media_ids=media_ids,
+            refresh_cache=refresh_cache,
+            dry_run=dry_run,
+        )
 
-        if not dry_run:
-            stats.memberships_deleted += self.remove_direct_memberships(
+    def refresh_after_delete(
+        self,
+        *,
+        user,
+        media_ids,
+        refresh_cache=False,
+        dry_run=False,
+    ) -> AnimeSeriesViewFranchiseRefreshStats:
+        """Remove deleted rows first, then best-effort refresh remaining scopes."""
+        normalized_ids = normalize_media_ids(media_ids)
+        direct_deleted = 0
+        if dry_run:
+            direct_deleted = AnimeSeriesViewMembership.objects.filter(
+                user=user,
+                media_id__in=normalized_ids,
+            ).count()
+        else:
+            direct_deleted = self.remove_direct_memberships(
                 user=user,
                 media_ids=normalized_ids,
             )
 
-        processed_scopes: set[frozenset[str]] = set()
+        return self._refresh_for_media_ids(
+            user=user,
+            media_ids=normalized_ids,
+            refresh_cache=refresh_cache,
+            dry_run=dry_run,
+            direct_deleted=direct_deleted,
+        )
+
+    def _refresh_for_media_ids(
+        self,
+        *,
+        user,
+        media_ids,
+        refresh_cache,
+        dry_run,
+        direct_deleted=0,
+    ):
+        normalized_ids = normalize_media_ids(media_ids)
+        stats = AnimeSeriesViewFranchiseRefreshStats(
+            requested=len(normalized_ids),
+            memberships_deleted=direct_deleted,
+        )
+
+        processed_projections = set()
         for media_id in normalized_ids:
             try:
-                snapshot = self.snapshot_service.build(
+                projection = self.projection_builder.build(
                     media_id,
                     refresh_cache=refresh_cache,
                 )
@@ -72,26 +117,26 @@ class AnimeSeriesViewFranchiseRefreshService:
                 stats.errors += 1
                 stats.snapshots_skipped += 1
                 logger.exception(
-                    "Failed to build Anime Series View franchise snapshot",
+                    "Failed to build Anime Series View projection",
                     extra={"user_id": user.id, "media_id": media_id},
                 )
                 continue
 
-            scope_media_ids = {
-                str(scope_media_id) for scope_media_id in snapshot.nodes_by_media_id
-            }
-            scope_key = frozenset(scope_media_ids)
-            if not scope_key or scope_key in processed_scopes:
+            projection_key = (
+                projection.root.media_id,
+                frozenset(projection.member_media_ids),
+                projection.projection_version,
+            )
+            if projection_key in processed_projections:
                 stats.snapshots_skipped += 1
                 continue
-            processed_scopes.add(scope_key)
+            processed_projections.add(projection_key)
 
             scope_stats = AnimeSeriesViewFranchiseRefreshStats()
             try:
-                self._persist_scope(
+                self._persist_projection(
                     user=user,
-                    snapshot=snapshot,
-                    scope_media_ids=scope_media_ids,
+                    projection=projection,
                     stats=scope_stats,
                     dry_run=dry_run,
                 )
@@ -102,7 +147,7 @@ class AnimeSeriesViewFranchiseRefreshService:
                     extra={
                         "user_id": user.id,
                         "media_id": media_id,
-                        "scope_media_ids": sorted(scope_media_ids),
+                        "member_media_ids": list(projection.member_media_ids),
                     },
                 )
                 continue
@@ -135,15 +180,15 @@ class AnimeSeriesViewFranchiseRefreshService:
         return deleted
 
     @transaction.atomic
-    def _persist_scope(
+    def _persist_projection(
         self,
         *,
         user,
-        snapshot,
-        scope_media_ids,
+        projection,
         stats,
         dry_run,
     ):
+        scope_media_ids = projection.member_media_ids
         tracked_anime = list(
             Anime.objects.select_related("item").filter(
                 user=user,
@@ -174,17 +219,21 @@ class AnimeSeriesViewFranchiseRefreshService:
         if not tracked_anime:
             return
 
-        root = resolve_series_line_root(snapshot)
         for anime in tracked_anime:
             media_id = anime.item.media_id
-            if root is not None:
-                defaults = self._franchise_defaults(root)
+            if projection.group_kind == GROUP_KIND_FRANCHISE:
+                defaults = self._franchise_defaults(projection)
                 created_field = "franchise_memberships_created"
                 updated_field = "franchise_memberships_updated"
-            else:
-                defaults = self._singleton_defaults(anime.item)
+            elif projection.group_kind == GROUP_KIND_SINGLETON:
+                defaults = self._singleton_defaults(projection)
                 created_field = "singleton_memberships_created"
                 updated_field = "singleton_memberships_updated"
+            else:
+                msg = (
+                    f"Unsupported Anime Series View group kind: {projection.group_kind}"
+                )
+                raise ValueError(msg)
 
             if dry_run:
                 field_name = (
@@ -202,7 +251,8 @@ class AnimeSeriesViewFranchiseRefreshService:
             setattr(stats, field_name, getattr(stats, field_name) + 1)
 
     @staticmethod
-    def _franchise_defaults(root):
+    def _franchise_defaults(projection):
+        root = projection.root
         return {
             "root_media_id": root.media_id,
             "display_media_id": root.media_id,
@@ -211,18 +261,19 @@ class AnimeSeriesViewFranchiseRefreshService:
             "display_media_type": root.media_type,
             "display_start_date": root.start_date,
             "group_kind": GROUP_KIND_FRANCHISE,
-            "projection_version": PROJECTION_VERSION,
+            "projection_version": projection.projection_version,
         }
 
     @staticmethod
-    def _singleton_defaults(local_item):
+    def _singleton_defaults(projection):
+        root = projection.root
         return {
-            "root_media_id": local_item.media_id,
-            "display_media_id": local_item.media_id,
-            "display_title": local_item.title,
-            "display_image": local_item.image,
-            "display_media_type": local_item.media_type,
-            "display_start_date": getattr(local_item, "start_date", None),
+            "root_media_id": root.media_id,
+            "display_media_id": root.media_id,
+            "display_title": root.title,
+            "display_image": root.image,
+            "display_media_type": root.media_type,
+            "display_start_date": root.start_date,
             "group_kind": GROUP_KIND_SINGLETON,
-            "projection_version": PROJECTION_VERSION,
+            "projection_version": projection.projection_version,
         }

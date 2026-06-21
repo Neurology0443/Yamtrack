@@ -25,3 +25,9 @@ class AnimeSeriesViewRefreshQueueTests(SimpleTestCase):
             refresh_queue_lock_key(1, ["10", "2"]),
             refresh_queue_lock_key(1, ["2", "10"]),
         )
+
+    def test_lock_key_distinguishes_refresh_and_delete_modes(self):
+        self.assertNotEqual(
+            refresh_queue_lock_key(1, ["2"], "refresh"),
+            refresh_queue_lock_key(1, ["2"], "delete"),
+        )

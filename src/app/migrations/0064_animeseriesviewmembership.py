@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "projection_version",
-                    models.CharField(default="franchise_root_v1", max_length=30),
+                    models.CharField(default="franchise_root_v2", max_length=30),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),

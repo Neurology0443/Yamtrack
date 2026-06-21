@@ -31,7 +31,7 @@ import events
 import users
 from app import providers
 from app.mixins import CalendarTriggerMixin
-from app.services.anime_series_view_franchise_projection import (
+from app.services.anime_series_view_rules import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
     PROJECTION_VERSION,

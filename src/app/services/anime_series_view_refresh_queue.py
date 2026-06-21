@@ -39,10 +39,11 @@ def normalize_media_ids(media_ids):
     )
 
 
-def refresh_queue_lock_key(user_id, media_ids):
+def refresh_queue_lock_key(user_id, media_ids, mode="refresh"):
     """Build a short, order-independent cache lock key."""
     normalized_ids = normalize_media_ids(media_ids)
-    digest = hashlib.sha256(",".join(normalized_ids).encode()).hexdigest()[:20]
+    payload = f"{mode}:{','.join(normalized_ids)}"
+    digest = hashlib.sha256(payload.encode()).hexdigest()[:20]
     return f"{QUEUE_LOCK_PREFIX}:{user_id}:{digest}"
 
 

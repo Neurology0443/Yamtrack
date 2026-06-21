@@ -11,7 +11,7 @@ from app.models import (
     Status,
 )
 from app.services.anime_series_view import build_anime_series_view
-from app.services.anime_series_view_franchise_projection import (
+from app.services.anime_series_view_rules import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
 )
@@ -65,4 +65,23 @@ class AnimeSeriesViewReadTests(TestCase):
             ["2", "1"],
         )
         self.assertEqual(result.groups[1].group_kind, GROUP_KIND_SINGLETON)
+        self.assertEqual(result.unprojected_count, 1)
+
+    def test_legacy_projection_version_is_not_read(self):
+        entry = self.create_anime("5")
+        AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id="5",
+            root_media_id="5",
+            display_media_id="5",
+            display_title="Legacy",
+            projection_version="franchise_root_v1",
+        )
+
+        result = build_anime_series_view(
+            media_entries=[entry],
+            user_id=self.user.id,
+        )
+
+        self.assertEqual(result.groups, [])
         self.assertEqual(result.unprojected_count, 1)

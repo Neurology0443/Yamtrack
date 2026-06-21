@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.models import AnimeSeriesViewMembership, MediaTypes, Sources
+from app.services.anime_series_view_rules import PROJECTION_VERSION
 
 
 @dataclass
@@ -60,6 +61,7 @@ def build_anime_series_view(*, media_entries, user_id):
         for membership in AnimeSeriesViewMembership.objects.filter(
             user_id=user_id,
             media_id__in=media_ids,
+            projection_version=PROJECTION_VERSION,
         )
     }
 
