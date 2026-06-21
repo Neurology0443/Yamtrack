@@ -1,4 +1,3 @@
-
 """Pure, reusable projection builder for Anime Series View franchises."""
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from app.anime_series_view_constants import (
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_series_view_rules import (
-    SERIES_VIEW_BRANCH_BOUNDARY_RELATIONS,
+    SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS,
     SERIES_VIEW_CONTINUITY_RELATIONS,
     SERIES_VIEW_GROUPABLE_RELATIONS,
     SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES,
@@ -425,16 +424,12 @@ class AnimeSeriesViewProjectionBuilder:
             str(node.media_id) for node in getattr(snapshot, "series_line", ())
         }
         for relation in direct_boundaries:
-            source_id = str(relation.source_media_id)
-            target_id = str(relation.target_media_id)
-            if source_id not in series_line_ids:
-                external_serial_ids.update(
-                    self._continuity_component_ids(snapshot, source_id)
-                )
-            if target_id not in series_line_ids:
-                external_serial_ids.update(
-                    self._continuity_component_ids(snapshot, target_id)
-                )
+            for media_id in (
+                str(relation.source_media_id),
+                str(relation.target_media_id),
+            ):
+                if media_id not in series_line_ids:
+                    external_serial_ids.add(media_id)
 
         return {
             self._relation_key(relation)
@@ -444,7 +439,7 @@ class AnimeSeriesViewProjectionBuilder:
                 relation,
             )
             or (
-                relation.relation_type in SERIES_VIEW_BRANCH_BOUNDARY_RELATIONS
+                relation.relation_type in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS
                 and self._relation_has_external_serial_endpoint(
                     snapshot,
                     relation,
@@ -480,7 +475,7 @@ class AnimeSeriesViewProjectionBuilder:
         snapshot,
         relation,
     ):
-        if relation.relation_type not in SERIES_VIEW_BRANCH_BOUNDARY_RELATIONS:
+        if relation.relation_type not in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS:
             return False
 
         source = snapshot.nodes_by_media_id.get(str(relation.source_media_id))
@@ -503,102 +498,9 @@ class AnimeSeriesViewProjectionBuilder:
         if not series_line_ids:
             return False
 
-        source_id = str(source.media_id)
-        target_id = str(target.media_id)
-        source_in_line = source_id in series_line_ids
-        target_in_line = target_id in series_line_ids
-        if source_in_line == target_in_line:
-            return False
-
-        return self._has_newer_independent_branch_continuity(
-            snapshot,
-            source_id,
-            target_id,
-        )
-
-    def _has_newer_independent_branch_continuity(
-        self,
-        snapshot,
-        source_media_id,
-        target_media_id,
-    ):
-        source_component = self._continuity_component_ids(snapshot, source_media_id)
-        target_component = self._continuity_component_ids(snapshot, target_media_id)
-
-        if source_component == target_component:
-            return False
-
-        source_has_continuity = len(source_component) > 1
-        target_has_continuity = len(target_component) > 1
-        if not source_has_continuity and not target_has_continuity:
-            return False
-
-        source_start = self._oldest_component_start_date(snapshot, source_component)
-        target_start = self._oldest_component_start_date(snapshot, target_component)
-
-        if source_start is None or target_start is None:
-            return source_has_continuity and target_has_continuity
-
-        if source_start > target_start:
-            return source_has_continuity
-        if target_start > source_start:
-            return target_has_continuity
-        return source_has_continuity and target_has_continuity
-
-    def _continuity_component_ids(self, snapshot, seed_media_id):
-        seed_media_id = str(seed_media_id)
-        seed_node = snapshot.nodes_by_media_id.get(seed_media_id)
-        if (
-            seed_node is None
-            or seed_node.media_type.lower()
-            not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-        ):
-            return {seed_media_id}
-
-        adjacency = {}
-        for media_id, node in snapshot.nodes_by_media_id.items():
-            if (
-                node.media_type.lower()
-                in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-            ):
-                adjacency[str(media_id)] = set()
-
-        if seed_media_id not in adjacency:
-            return {seed_media_id}
-
-        for relation in self._candidate_relations(snapshot):
-            if relation.relation_type not in SERIES_VIEW_CONTINUITY_RELATIONS:
-                continue
-
-            source_id = str(relation.source_media_id)
-            target_id = str(relation.target_media_id)
-            if source_id not in adjacency or target_id not in adjacency:
-                continue
-
-            adjacency[source_id].add(target_id)
-            adjacency[target_id].add(source_id)
-
-        visited = set()
-        queue = deque([seed_media_id])
-        while queue:
-            media_id = queue.popleft()
-            if media_id in visited:
-                continue
-            visited.add(media_id)
-            queue.extend(adjacency[media_id] - visited)
-        return visited
-
-    @staticmethod
-    def _oldest_component_start_date(snapshot, component_media_ids):
-        dates = [
-            node.start_date
-            for media_id in component_media_ids
-            if (node := snapshot.nodes_by_media_id.get(str(media_id))) is not None
-            and node.start_date is not None
-        ]
-        if not dates:
-            return None
-        return min(dates)
+        source_in_line = str(source.media_id) in series_line_ids
+        target_in_line = str(target.media_id) in series_line_ids
+        return source_in_line != target_in_line
 
     @staticmethod
     def _candidate_relations(snapshot):
