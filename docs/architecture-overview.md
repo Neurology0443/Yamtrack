@@ -20,9 +20,11 @@ Franchise Graph
     ↓
 Franchise Snapshot
     ↓
-├── UI Projection
+├── Detail-page UI Projection
+├── Anime Series View Projection
 ├── Import Projection
-└── Cache Projection
+├── Cache Projection
+└── Discovery / notification monitoring
 ```
 
 The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.
@@ -51,6 +53,9 @@ Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on to
 
 - clearer MAL anime franchise pages;
 - automatic grouping of related MAL anime entries;
+- anime-only Series View layout for grouping tracked MAL anime into franchise cards;
+- persisted per-user AnimeSeriesViewMembership read model;
+- asynchronous refresh of Series View memberships after add/import/delete;
 - optional automatic import of useful missing franchise entries;
 - persistent scan scheduling for franchise imports;
 - complete franchise cache payloads for responsive detail pages;
@@ -112,6 +117,17 @@ Existing user MAL anime
  -> scan-state update
  -> entry-added notification
  -> cache warmup scheduling
+```
+
+
+### Anime list Series View
+
+```text
+Anime list Series View
+ -> DB-filtered user anime queryset
+ -> persisted AnimeSeriesViewMembership lookup
+ -> group by root_media_id
+ -> render anime_series_group_card.html
 ```
 
 ### MAL anime release-date notifications
@@ -176,9 +192,11 @@ The cache projection stores a complete, user-agnostic payload for detail pages:
 - Celery task `Import anime franchise` runs import automation.
 - Celery task `Scan MAL anime release dates` checks a bounded batch of due
   start-date states.
+- Celery task `Refresh Anime Series View franchise projection` updates persisted memberships.
 - Beat schedule entry `auto_import_anime_franchise` exists only when import automation is enabled.
 - `views.py` enriches cached payloads with current-user data at render time.
 - `media_details.html` renders prepared context and should not classify entries.
+- `media_list` renders Anime Series View from DB-only memberships and does not build snapshots.
 
 ## Settings
 
@@ -213,6 +231,7 @@ Documented settings currently present in `src/config/settings.py`. For setting b
 
 - [Anime franchise snapshot](anime-franchise-snapshot.md)
 - [Anime franchise grouping](anime-franchise-grouping.md)
+- [Anime Series View](anime-series-view.md)
 - [Anime franchise import](anime-franchise-import.md)
 - [Anime franchise cache](anime-franchise-cache.md)
 - [Anime release-date notifications](anime-release-date-notifications.md)
@@ -227,3 +246,5 @@ Documented settings currently present in `src/config/settings.py`. For setting b
 - Views should orchestrate cache/context only, not patch placement.
 - Templates render only.
 - Complete franchise cache never stores user-specific data.
+- Anime Series View reader must stay DB-only.
+- No MAL provider call, snapshot build, cache build, or DB write belongs in `media_list` rendering.
