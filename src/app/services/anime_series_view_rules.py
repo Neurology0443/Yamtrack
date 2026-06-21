@@ -26,6 +26,15 @@ SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
         "tv",
         "ona",
         "ova",
+        "movie",
+    }
+)
+
+SERIES_VIEW_BRANCH_BOUNDARY_RELATIONS = frozenset(
+    {
+        "alternative_version",
+        "alternative_setting",
+        "spin_off",
     }
 )
 
