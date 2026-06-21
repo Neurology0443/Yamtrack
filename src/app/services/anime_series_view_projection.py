@@ -13,7 +13,7 @@ from app.anime_series_view_constants import (
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_series_view_rules import (
-    SERIES_VIEW_ALTERNATIVE_RELATIONS,
+    SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS,
     SERIES_VIEW_CONTINUITY_RELATIONS,
     SERIES_VIEW_GROUPABLE_RELATIONS,
     SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES,
@@ -85,7 +85,7 @@ class AnimeSeriesViewProjectionBuilder:
             seed_media_id,
             excluded_relation_keys=initial_boundary_keys,
         )
-        local_root = self._local_root(initial_snapshot)
+        local_root = self._component_root(initial_snapshot, initial_component)
         candidate = self._select_best_root_candidate(
             initial_snapshot,
             initial_component,
@@ -165,8 +165,10 @@ class AnimeSeriesViewProjectionBuilder:
             bool(getattr(canonical_snapshot, "is_truncated", False)) and not is_strong
         )
 
-        if canonical_snapshot.series_line:
-            root_node = canonical_snapshot.series_line[0]
+        component_root = self._component_root(canonical_snapshot, canonical_component)
+
+        if component_root is not None:
+            root_node = component_root
         elif is_strong:
             root_node = canonical_snapshot.nodes_by_media_id.get(
                 candidate.media_id,
@@ -393,6 +395,18 @@ class AnimeSeriesViewProjectionBuilder:
         root_node = snapshot.root_node
         return root_node if self._is_root_compatible(root_node) else None
 
+    def _component_root(self, snapshot, component_media_ids):
+        root_node = self._oldest_root_node(snapshot, component_media_ids)
+        if root_node is not None:
+            return root_node
+
+        component_media_ids = {str(media_id) for media_id in component_media_ids}
+        local_root = self._local_root(snapshot)
+        if local_root is not None and str(local_root.media_id) in component_media_ids:
+            return local_root
+
+        return None
+
     def _component_relations(
         self,
         snapshot,
@@ -440,7 +454,7 @@ class AnimeSeriesViewProjectionBuilder:
                 relation,
             )
             or (
-                relation.relation_type in SERIES_VIEW_ALTERNATIVE_RELATIONS
+                relation.relation_type in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS
                 and self._relation_has_external_serial_endpoint(
                     snapshot,
                     relation,
@@ -476,7 +490,7 @@ class AnimeSeriesViewProjectionBuilder:
         snapshot,
         relation,
     ):
-        if relation.relation_type not in SERIES_VIEW_ALTERNATIVE_RELATIONS:
+        if relation.relation_type not in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS:
             return False
 
         source = snapshot.nodes_by_media_id.get(str(relation.source_media_id))
