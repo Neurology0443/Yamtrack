@@ -22,14 +22,13 @@ def handle_error(error):
 
     try:
         error_json = error_resp.json()
-    except requests.exceptions.JSONDecodeError as json_error:
-        logger.exception("Failed to decode JSON response")
-        raise services.ProviderAPIError(Sources.MAL.value, error) from json_error
+    except requests.exceptions.JSONDecodeError:
+        error_json = None
 
     if status_code == requests.codes.forbidden:
         details = "API key is missing"
         raise services.ProviderAPIError(Sources.MAL.value, error, details)
-    if status_code == requests.codes.bad_request:
+    if status_code == requests.codes.bad_request and error_json:
         error_message = error_json.get("message")
         if error_message == "Invalid client id":
             details = "Invalid API key"
@@ -37,7 +36,10 @@ def handle_error(error):
         if error_message == "invalid q":
             return {"data": []}
 
-    raise services.ProviderAPIError(Sources.MAL.value, error)
+    details = None
+    if error_json is None:
+        details = "Non-JSON error response"
+    raise services.ProviderAPIError(Sources.MAL.value, error, details)
 
 
 def search(media_type, query, page):

@@ -33,6 +33,7 @@ from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
 )
 from app.services.anime_series_view_refresh_queue import (
+    get_refresh_provider_retry_seconds,
     get_refresh_running_lock_retry_seconds,
     get_refresh_running_lock_timeout_seconds,
     normalize_media_ids,
@@ -46,6 +47,47 @@ logger = logging.getLogger(__name__)
 def _retry_anime_series_view_refresh(task):
     """Retry a user-scoped Anime Series View refresh after the configured delay."""
     raise task.retry(countdown=get_refresh_running_lock_retry_seconds())
+
+
+def _retry_anime_series_view_refresh_after_provider_error(
+    task,
+    *,
+    user_id,
+    media_ids,
+    mode,
+):
+    """Retry only media IDs blocked by transient provider failures."""
+    raise task.retry(
+        args=(user_id, list(media_ids), mode),
+        countdown=get_refresh_provider_retry_seconds(),
+    )
+
+
+def _retry_anime_series_view_refresh_if_provider_errors(
+    task,
+    *,
+    stats,
+    user_id,
+    mode,
+):
+    """Retry only media IDs that failed due to transient provider errors."""
+    if not stats.retryable_media_ids:
+        return
+    logger.warning(
+        "Retrying Anime Series View refresh after retryable provider errors",
+        extra={
+            "user_id": user_id,
+            "media_ids": list(stats.retryable_media_ids),
+            "mode": mode,
+            "retry": task.request.retries,
+        },
+    )
+    _retry_anime_series_view_refresh_after_provider_error(
+        task,
+        user_id=user_id,
+        media_ids=stats.retryable_media_ids,
+        mode=mode,
+    )
 
 
 def _build_mal_anime_franchise_payload_for_cache(media_id: str, graph_builder):
@@ -142,6 +184,12 @@ def refresh_anime_series_view_franchise_projection(
                 user=user,
                 media_ids=normalized_ids,
             )
+        _retry_anime_series_view_refresh_if_provider_errors(
+            self,
+            stats=stats,
+            user_id=user_id,
+            mode=mode,
+        )
     except Retry:
         raise
     except Exception:
@@ -165,6 +213,8 @@ def refresh_anime_series_view_franchise_projection(
             "singleton_memberships_updated": stats.singleton_memberships_updated,
             "memberships_deleted": stats.memberships_deleted,
             "errors": stats.errors,
+            "retryable_errors": stats.retryable_errors,
+            "retryable_media_ids": list(stats.retryable_media_ids),
         }
         logger.info(
             "Completed Anime Series View franchise projection refresh",

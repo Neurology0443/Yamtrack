@@ -1,6 +1,7 @@
 # ruff: noqa: D102
 from unittest.mock import Mock, patch
 
+import requests
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -9,6 +10,7 @@ from app.anime_series_view_constants import (
     GROUP_KIND_SINGLETON,
     PROJECTION_VERSION,
 )
+from app.providers import services
 from app.models import (
     Anime,
     AnimeSeriesViewMembership,
@@ -110,6 +112,29 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
         self.assertEqual(stats.errors, 1)
         self.assertEqual(stats.snapshots_skipped, 1)
         self.assertEqual(stats.memberships_deleted, 0)
+
+    def test_retryable_provider_error_is_recorded_without_deleting_membership(self):
+        anime = self.create_anime("20")
+        membership = AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id=anime.item.media_id,
+            root_media_id="old-root",
+            display_media_id="old-root",
+        )
+        response = Mock(status_code=504, text="Gateway Timeout")
+        error = requests.exceptions.HTTPError(response=response)
+        builder = Mock()
+        builder.build.side_effect = services.ProviderAPIError(Sources.MAL.value, error)
+
+        stats = AnimeSeriesViewFranchiseRefreshService(
+            projection_builder=builder
+        ).refresh_for_media_ids(user=self.user, media_ids=["20"])
+
+        membership.refresh_from_db()
+        self.assertEqual(membership.root_media_id, "old-root")
+        self.assertEqual(stats.errors, 1)
+        self.assertEqual(stats.retryable_errors, 1)
+        self.assertEqual(stats.retryable_media_ids, ["20"])
 
     def test_delete_removes_only_direct_membership_when_projection_fails(self):
         for media_id in ("30", "31", "32"):

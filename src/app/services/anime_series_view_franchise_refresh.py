@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django.db import transaction
 
@@ -12,6 +12,7 @@ from app.anime_series_view_constants import (
     GROUP_KIND_SINGLETON,
 )
 from app.models import Anime, AnimeSeriesViewMembership, MediaTypes, Sources
+from app.providers.services import is_retryable_provider_error
 from app.services.anime_series_view_projection import (
     AnimeSeriesViewProjectionBuilder,
 )
@@ -33,6 +34,8 @@ class AnimeSeriesViewFranchiseRefreshStats:
     singleton_memberships_updated: int = 0
     memberships_deleted: int = 0
     errors: int = 0
+    retryable_errors: int = 0
+    retryable_media_ids: list[str] = field(default_factory=list)
 
 
 class AnimeSeriesViewFranchiseRefreshService:
@@ -118,13 +121,28 @@ class AnimeSeriesViewFranchiseRefreshService:
                     refresh_cache=refresh_cache,
                 )
                 stats.snapshots_built += 1
-            except Exception:
+            except Exception as exc:
                 stats.errors += 1
                 stats.snapshots_skipped += 1
-                logger.exception(
-                    "Failed to build Anime Series View projection",
-                    extra={"user_id": user.id, "media_id": media_id},
-                )
+                if is_retryable_provider_error(exc):
+                    stats.retryable_errors += 1
+                    stats.retryable_media_ids.append(media_id)
+                    logger.warning(
+                        "Anime Series View projection build failed with "
+                        "retryable provider error",
+                        extra={
+                            "user_id": user.id,
+                            "media_id": media_id,
+                            "provider": getattr(exc, "provider", None),
+                            "status_code": getattr(exc, "status_code", None),
+                        },
+                        exc_info=True,
+                    )
+                else:
+                    logger.exception(
+                        "Failed to build Anime Series View projection",
+                        extra={"user_id": user.id, "media_id": media_id},
+                    )
                 continue
 
             if not projection.is_confident:

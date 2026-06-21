@@ -156,6 +156,52 @@ class ServicesTests(TestCase):
 
         self.assertEqual(cm.exception.provider, Sources.MAL.value)
 
+    def test_handle_error_mal_non_json_gateway_timeout(self):
+        """MAL non-JSON retryable errors should preserve the HTTP status."""
+        mock_response = MagicMock()
+        mock_response.status_code = 504
+        mock_response.text = "<html>Gateway Timeout</html>"
+        mock_response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "Expecting value",
+            "",
+            0,
+        )
+
+        error = requests.exceptions.HTTPError("504 Gateway Timeout")
+        error.response = mock_response
+
+        with self.assertRaises(services.ProviderAPIError) as cm:
+            mal.handle_error(error)
+
+        self.assertEqual(cm.exception.provider, Sources.MAL.value)
+        self.assertEqual(cm.exception.status_code, 504)
+        self.assertIn("Non-JSON error response", str(cm.exception))
+
+    def test_is_retryable_provider_error(self):
+        """Only transient provider failures should be classified as retryable."""
+
+        def provider_error(status_code):
+            response = MagicMock() if status_code is not None else None
+            if response is not None:
+                response.status_code = status_code
+                response.text = f"HTTP {status_code}"
+            error = requests.exceptions.HTTPError(response=response)
+            return services.ProviderAPIError(Sources.MAL.value, error)
+
+        for status_code in (429, 500, 502, 503, 504, None):
+            with self.subTest(status_code=status_code):
+                self.assertTrue(
+                    services.is_retryable_provider_error(provider_error(status_code))
+                )
+
+        for status_code in (400, 403, 404):
+            with self.subTest(status_code=status_code):
+                self.assertFalse(
+                    services.is_retryable_provider_error(provider_error(status_code))
+                )
+
+        self.assertFalse(services.is_retryable_provider_error(RuntimeError("boom")))
+
     def test_provider_api_error_without_response(self):
         """Test ProviderAPIError with network errors that have no response."""
         error = requests.exceptions.ConnectionError("Connection aborted")

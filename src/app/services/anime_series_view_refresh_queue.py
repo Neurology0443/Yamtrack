@@ -11,6 +11,7 @@ DEFAULT_QUEUE_LOCK_SECONDS = 900
 RUNNING_LOCK_PREFIX = "anime_series_view_refresh_running_lock"
 DEFAULT_RUNNING_LOCK_SECONDS = 900
 DEFAULT_RUNNING_LOCK_RETRY_SECONDS = 30
+DEFAULT_PROVIDER_RETRY_SECONDS = 60
 
 
 def media_id_key(media_id):
@@ -82,4 +83,13 @@ def get_refresh_running_lock_retry_seconds():
         settings,
         "ANIME_SERIES_VIEW_REFRESH_RUNNING_LOCK_RETRY_SECONDS",
         DEFAULT_RUNNING_LOCK_RETRY_SECONDS,
+    )
+
+
+def get_refresh_provider_retry_seconds():
+    """Return the retry delay for transient provider failures."""
+    return getattr(
+        settings,
+        "ANIME_SERIES_VIEW_REFRESH_PROVIDER_RETRY_SECONDS",
+        DEFAULT_PROVIDER_RETRY_SECONDS,
     )

@@ -427,17 +427,6 @@ class AnimeSeriesViewProjectionBuilder:
             seed_media_id,
             excluded_relation_keys=direct_boundary_keys,
         )
-        local_serial_component_ids = self._groupable_component(
-            snapshot,
-            seed_media_id,
-            excluded_relation_keys=direct_boundary_keys
-            | {
-                self._relation_key(relation)
-                for relation in relations
-                if relation.relation_type in SERIES_VIEW_ALTERNATIVE_RELATIONS
-            },
-        )
-
         external_serial_ids = set()
         for relation in relations:
             if self._relation_key(relation) not in direct_boundary_keys:
@@ -452,16 +441,6 @@ class AnimeSeriesViewProjectionBuilder:
             elif (
                 target_id in local_component_ids
                 and source_id not in local_component_ids
-            ):
-                external_serial_ids.add(source_id)
-            elif (
-                source_id in local_serial_component_ids
-                and target_id not in local_serial_component_ids
-            ):
-                external_serial_ids.add(target_id)
-            elif (
-                target_id in local_serial_component_ids
-                and source_id not in local_serial_component_ids
             ):
                 external_serial_ids.add(source_id)
 

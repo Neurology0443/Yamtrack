@@ -24,6 +24,8 @@ from app.providers import (
 
 logger = logging.getLogger(__name__)
 
+RETRYABLE_PROVIDER_STATUS_CODES = {429, 500, 502, 503, 504}
+
 
 def get_redis_client():
     """Return a Redis client."""
@@ -78,6 +80,15 @@ session.mount(
     "https://boardgamegeek.com/xmlapi2",
     LimiterAdapter(per_second=2),
 )
+
+
+def is_retryable_provider_error(exc):
+    """Return True when an exception represents a transient provider failure."""
+    if not isinstance(exc, ProviderAPIError):
+        return False
+    if exc.status_code is None:
+        return True
+    return exc.status_code in RETRYABLE_PROVIDER_STATUS_CODES
 
 
 class ProviderAPIError(Exception):

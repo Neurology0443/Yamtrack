@@ -459,7 +459,6 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         relations = [
             self.relation("51122", "2966", "alternative_version"),
             self.relation("51122", "5341", "alternative_version"),
-            self.relation("51122", "6007", "alternative_version"),
             self.relation("51122", "59928", "sequel"),
             self.relation("59928", "51122", "prequel"),
             self.relation("2966", "6007", "sequel"),
@@ -522,7 +521,6 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         relations = [
             self.relation("51122", "2966", "alternative_version"),
             self.relation("51122", "5341", "alternative_version"),
-            self.relation("51122", "6007", "alternative_version"),
             self.relation("51122", "59928", "sequel"),
             self.relation("2966", "6007", "sequel"),
             self.relation("6007", "5341", "sequel"),
@@ -637,7 +635,6 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             self.relation("2966", "6007", "sequel"),
             self.relation("6007", "5341", "sequel"),
             self.relation("2966", "51122", "alternative_version"),
-            self.relation("6007", "51122", "alternative_version"),
             self.relation("51122", "59928", "sequel"),
         ]
         snapshot_service = Mock()
@@ -696,7 +693,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.root.media_id, "100")
         self.assertEqual(projection.member_media_ids, ("100", "101"))
 
-    def test_local_non_boundary_alternative_can_propagate_external_boundary(
+    def test_local_non_boundary_alternative_does_not_become_boundary(
         self,
     ):
         main = self.node("100", start_date=date(2020, 1, 1))
@@ -711,7 +708,6 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             self.relation("100", "102", "side_story"),
             self.relation("102", "103", "alternative_version"),
             self.relation("100", "200", "alternative_version"),
-            self.relation("103", "200", "alternative_version"),
         ]
         snapshot_service = Mock()
         snapshot_service.build.return_value = self.snapshot(
@@ -735,8 +731,50 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         self.assertIn("103", projection.member_media_ids)
         self.assertNotIn("200", projection.member_media_ids)
-        self.assertIn(
-            ("103", "200", "alternative_version"),
+        self.assertNotIn(
+            ("102", "103", "alternative_version"),
+            boundary_keys,
+        )
+
+    def test_local_alternative_member_is_not_marked_external_by_serial_component(
+        self,
+    ):
+        main = self.node("100", start_date=date(2020, 1, 1))
+        sequel = self.node("101", start_date=date(2021, 1, 1))
+        branch = self.node("102", media_type="ova", start_date=date(2020, 6, 1))
+        local_alternative = self.node(
+            "103", media_type="ova", start_date=date(2020, 7, 1)
+        )
+        relations = [
+            self.relation("100", "101", "sequel"),
+            self.relation("100", "102", "side_story"),
+            self.relation("102", "103", "alternative_version"),
+            self.relation("100", "103", "alternative_version"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="100",
+            nodes={
+                node.media_id: node
+                for node in (main, sequel, branch, local_alternative)
+            },
+            series_line=[main, sequel],
+            relations=relations,
+        )
+
+        builder = AnimeSeriesViewProjectionBuilder(snapshot_service=snapshot_service)
+        snapshot = snapshot_service.build.return_value
+
+        boundary_keys = builder._alternative_continuity_boundary_relation_keys(
+            snapshot,
+            "100",
+        )
+        projection = builder.build("100")
+
+        self.assertEqual(projection.root.media_id, "100")
+        self.assertIn("103", projection.member_media_ids)
+        self.assertNotIn(
+            ("102", "103", "alternative_version"),
             boundary_keys,
         )
 
