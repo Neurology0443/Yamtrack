@@ -122,6 +122,18 @@ class AnimeSeriesViewFranchiseRefreshService:
                 )
                 continue
 
+            if not projection.is_confident:
+                stats.snapshots_skipped += 1
+                logger.info(
+                    "Skipping unresolved Anime Series View projection",
+                    extra={
+                        "user_id": user.id,
+                        "media_id": media_id,
+                        "skip_reason": projection.skip_reason,
+                    },
+                )
+                continue
+
             projection_key = (
                 projection.root.media_id,
                 frozenset(projection.member_media_ids),

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from app.models import AnimeSeriesViewMembership, MediaTypes, Sources
 from app.services.anime_series_view_rules import PROJECTION_VERSION
 
+LEGACY_PROJECTION_VERSION = "franchise_root_v1"
+
 
 @dataclass
 class AnimeSeriesViewDisplayEntry:
@@ -56,6 +58,8 @@ def build_anime_series_view(*, media_entries, user_id):
     """Group existing entries only from persisted memberships, preserving order."""
     media_entries = list(media_entries)
     media_ids = [entry.item.media_id for entry in media_entries]
+    # TODO(Neurology0443): Drop v1 after PR #99.  # noqa: FIX002
+    # Tracking: https://github.com/Neurology0443/Yamtrack/pull/99
     memberships = {
         membership.media_id: membership
         for membership in AnimeSeriesViewMembership.objects.filter(
@@ -64,6 +68,18 @@ def build_anime_series_view(*, media_entries, user_id):
             projection_version=PROJECTION_VERSION,
         )
     }
+    legacy_media_ids = set(media_ids) - set(memberships)
+    if legacy_media_ids:
+        memberships.update(
+            {
+                membership.media_id: membership
+                for membership in AnimeSeriesViewMembership.objects.filter(
+                    user_id=user_id,
+                    media_id__in=legacy_media_ids,
+                    projection_version=LEGACY_PROJECTION_VERSION,
+                )
+            }
+        )
 
     groups_by_root = {}
     groups = []

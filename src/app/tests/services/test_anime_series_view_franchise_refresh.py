@@ -78,6 +78,18 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
             projection_builder=builder
         ), builder
 
+    @staticmethod
+    def unresolved_projection(seed, members):
+        return AnimeSeriesViewProjection(
+            seed_media_id=str(seed),
+            root=None,
+            member_media_ids=tuple(str(member) for member in members),
+            group_kind=None,
+            projection_version=PROJECTION_VERSION,
+            is_confident=False,
+            skip_reason="weak_reroot_unconfirmed",
+        )
+
     def test_normal_refresh_preserves_old_membership_on_projection_error(self):
         anime = self.create_anime("20")
         membership = AnimeSeriesViewMembership.objects.create(
@@ -130,6 +142,60 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
         )
         self.assertEqual(stats.memberships_deleted, 1)
         self.assertEqual(stats.errors, 1)
+
+    def test_unresolved_projection_preserves_existing_membership(self):
+        anime = self.create_anime("35")
+        membership = AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id=anime.item.media_id,
+            root_media_id="old-root",
+            display_media_id="old-root",
+        )
+        service, _builder = self.service(self.unresolved_projection("35", ("35", "36")))
+
+        stats = service.refresh_for_media_ids(
+            user=self.user,
+            media_ids=["35"],
+        )
+
+        membership.refresh_from_db()
+        self.assertEqual(membership.root_media_id, "old-root")
+        self.assertEqual(stats.snapshots_skipped, 1)
+        self.assertEqual(stats.memberships_deleted, 0)
+
+    def test_delete_with_unresolved_projection_preserves_other_memberships(self):
+        for media_id in ("36", "37", "38"):
+            self.create_anime(media_id)
+            AnimeSeriesViewMembership.objects.create(
+                user=self.user,
+                media_id=media_id,
+                root_media_id="36",
+                display_media_id="36",
+            )
+        service, _builder = self.service(
+            self.unresolved_projection("37", ("36", "37", "38"))
+        )
+
+        stats = service.refresh_after_delete(
+            user=self.user,
+            media_ids=["37"],
+        )
+
+        self.assertFalse(
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id="37",
+            ).exists()
+        )
+        self.assertEqual(
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id__in=["36", "38"],
+            ).count(),
+            2,
+        )
+        self.assertEqual(stats.snapshots_skipped, 1)
+        self.assertEqual(stats.memberships_deleted, 1)
 
     def test_franchise_projection_persists_all_tracked_members_under_one_root(self):
         self.create_anime("42916")
@@ -241,3 +307,21 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
         self.assertEqual(builder.build.call_count, 2)
         self.assertEqual(stats.snapshots_skipped, 1)
         self.assertEqual(stats.franchise_memberships_created, 1)
+
+    def test_branch_continuation_member_is_persisted_under_main_root(self):
+        self.create_anime("82")
+        service, _builder = self.service(
+            self.projection(
+                seed="82",
+                root="80",
+                members=("80", "81", "82"),
+            )
+        )
+
+        service.refresh_for_media_ids(user=self.user, media_ids=["82"])
+
+        membership = AnimeSeriesViewMembership.objects.get(
+            user=self.user,
+            media_id="82",
+        )
+        self.assertEqual(membership.root_media_id, "80")

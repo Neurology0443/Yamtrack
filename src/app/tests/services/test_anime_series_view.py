@@ -67,7 +67,7 @@ class AnimeSeriesViewReadTests(TestCase):
         self.assertEqual(result.groups[1].group_kind, GROUP_KIND_SINGLETON)
         self.assertEqual(result.unprojected_count, 1)
 
-    def test_legacy_projection_version_is_not_read(self):
+    def test_legacy_projection_version_is_used_as_temporary_fallback(self):
         entry = self.create_anime("5")
         AnimeSeriesViewMembership.objects.create(
             user=self.user,
@@ -83,5 +83,6 @@ class AnimeSeriesViewReadTests(TestCase):
             user_id=self.user.id,
         )
 
-        self.assertEqual(result.groups, [])
-        self.assertEqual(result.unprojected_count, 1)
+        self.assertEqual(len(result.groups), 1)
+        self.assertEqual(result.groups[0].root_media_id, "5")
+        self.assertEqual(result.unprojected_count, 0)

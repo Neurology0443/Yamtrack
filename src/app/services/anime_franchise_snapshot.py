@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_series_view_rules import (
+    SERIES_VIEW_CONTINUITY_RELATIONS,
+)
 
 if TYPE_CHECKING:
     from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -44,6 +47,7 @@ class AnimeFranchiseSnapshot:
         default_factory=list
     )
     root_story_parent_candidates: list[AnimeRelation] = field(default_factory=list)
+    is_truncated: bool = False
 
 
 class AnimeFranchiseSnapshotService:
@@ -58,6 +62,7 @@ class AnimeFranchiseSnapshotService:
         media_id: str,
         *,
         refresh_cache: bool = False,
+        include_series_view_branch_continuations: bool = False,
     ) -> AnimeFranchiseSnapshot:
         """Build a normalized franchise snapshot for one MAL anime ID."""
         self.graph_builder.refresh_cache = refresh_cache
@@ -116,6 +121,11 @@ class AnimeFranchiseSnapshotService:
             root_node=root_node,
             nodes_by_media_id=nodes_by_media_id,
         )
+        if include_series_view_branch_continuations:
+            self._expand_series_view_branch_continuations(
+                nodes_by_media_id=nodes_by_media_id,
+                series_line=series_line,
+            )
 
         all_relations = [
             relation
@@ -137,7 +147,41 @@ class AnimeFranchiseSnapshotService:
             has_series_line=has_series_line,
             fallback_anchor_media_id=fallback_anchor_media_id,
             canonical_root_media_id=canonical_root_media_id,
+            is_truncated=bool(getattr(self.graph_builder, "truncated", False)),
         )
+
+    def _expand_series_view_branch_continuations(
+        self,
+        *,
+        nodes_by_media_id: dict[str, AnimeNode],
+        series_line: list[AnimeNode],
+    ) -> None:
+        """Hydrate prequel/sequel continuations for non-main Series View branches."""
+        series_line_ids = {node.media_id for node in series_line}
+        queue = deque(
+            media_id
+            for media_id in nodes_by_media_id
+            if media_id not in series_line_ids
+        )
+        visited = set()
+
+        while queue:
+            media_id = queue.popleft()
+            if media_id in visited:
+                continue
+            visited.add(media_id)
+
+            for relation in self.graph_builder.get_direct_neighbors(media_id):
+                if relation.relation_type not in SERIES_VIEW_CONTINUITY_RELATIONS:
+                    continue
+                target_id = str(relation.target_media_id)
+                if target_id not in nodes_by_media_id:
+                    target_node = self.graph_builder.ensure_node(target_id)
+                    if target_node is None:
+                        continue
+                    nodes_by_media_id[target_id] = target_node
+                if target_id not in series_line_ids and target_id not in visited:
+                    queue.append(target_id)
 
     def _derive_root_story_parent_candidates(
         self,

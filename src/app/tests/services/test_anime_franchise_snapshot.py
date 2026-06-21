@@ -27,6 +27,66 @@ class FakeGraphBuilder:
 
 
 class AnimeFranchiseSnapshotServiceTests(SimpleTestCase):
+    def test_series_view_option_expands_branch_continuations(self):
+        metadata_map = {
+            "100": {
+                "media_id": "100",
+                "title": "Main",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2010-01-01",
+                },
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "200", "relation_type": "spin_off"},
+                    ],
+                },
+            },
+            "200": {
+                "media_id": "200",
+                "title": "Branch S1",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2020-01-01",
+                },
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "201", "relation_type": "sequel"},
+                    ],
+                },
+            },
+            "201": {
+                "media_id": "201",
+                "title": "Branch S2",
+                "source": "mal",
+                "details": {
+                    "raw_media_type": "tv",
+                    "start_date": "2022-01-01",
+                },
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+        }
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "100",
+            include_series_view_branch_continuations=True,
+        )
+
+        self.assertEqual(
+            set(snapshot.nodes_by_media_id),
+            {"100", "200", "201"},
+        )
+
     def test_series_line_tv_only_and_deterministic(self):
         nodes = {
             "10": AnimeNode(
