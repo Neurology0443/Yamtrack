@@ -32,6 +32,7 @@ class AnimeSeriesViewGroup:
     display_media_type: str
     display_start_date: object | None
     group_kind: str
+    display_projection_version: str = ""
     entries: list[AnimeSeriesViewDisplayEntry] = field(default_factory=list)
 
     @property
@@ -56,6 +57,9 @@ class AnimeSeriesViewResult:
 
 def build_anime_series_view(*, media_entries, user_id):
     """Group existing entries only from persisted memberships, preserving order."""
+    # Series View needs the full filtered user list before paginating groups.
+    # This is acceptable for the per-user read model in PR #99. Spec 2 should
+    # replace it with a global franchise index / DB-level join path.
     media_entries = list(media_entries)
     media_ids = [entry.item.media_id for entry in media_entries]
     # Temporary v1 fallback until all users are rebuilt or Spec 2 replaces it
@@ -100,9 +104,21 @@ def build_anime_series_view(*, media_entries, user_id):
                 display_media_type=membership.display_media_type,
                 display_start_date=membership.display_start_date,
                 group_kind=membership.group_kind,
+                display_projection_version=membership.projection_version,
             )
             groups_by_root[membership.root_media_id] = group
             groups.append(group)
+        elif (
+            group.display_projection_version == LEGACY_PROJECTION_VERSION
+            and membership.projection_version == PROJECTION_VERSION
+        ):
+            group.display_media_id = membership.display_media_id
+            group.display_title = membership.display_title
+            group.display_image = membership.display_image
+            group.display_media_type = membership.display_media_type
+            group.display_start_date = membership.display_start_date
+            group.group_kind = membership.group_kind
+            group.display_projection_version = membership.projection_version
 
         group.entries.append(
             AnimeSeriesViewDisplayEntry(

@@ -172,14 +172,16 @@ class AnimeFranchiseSnapshotService:
             for relation in self.graph_builder.get_direct_neighbors(media_id):
                 if relation.relation_type not in SERIES_VIEW_CONTINUITY_RELATIONS:
                     continue
-                target_id = str(relation.target_media_id)
-                if target_id not in nodes_by_media_id:
-                    target_node = self.graph_builder.ensure_node(target_id)
-                    if target_node is None:
+                other_id = self._other_relation_endpoint(relation, media_id)
+                if other_id is None:
+                    continue
+                if other_id not in nodes_by_media_id:
+                    other_node = self.graph_builder.ensure_node(other_id)
+                    if other_node is None:
                         continue
-                    nodes_by_media_id[target_id] = target_node
-                if target_id not in series_line_ids and target_id not in visited:
-                    queue.append(target_id)
+                    nodes_by_media_id[other_id] = other_node
+                if other_id not in series_line_ids and other_id not in visited:
+                    queue.append(other_id)
 
     @staticmethod
     def _series_view_branch_start_nodes(
@@ -193,10 +195,23 @@ class AnimeFranchiseSnapshotService:
                     continue
                 source_id = str(relation.source_media_id)
                 target_id = str(relation.target_media_id)
-                if source_id in nodes_by_media_id and target_id in nodes_by_media_id:
+                if source_id in nodes_by_media_id:
                     start_nodes.add(source_id)
+                if target_id in nodes_by_media_id:
                     start_nodes.add(target_id)
         return start_nodes
+
+    @staticmethod
+    def _other_relation_endpoint(relation: AnimeRelation, media_id: str) -> str | None:
+        """Return the relation endpoint opposite the current loaded node."""
+        media_id = str(media_id)
+        source_id = str(relation.source_media_id)
+        target_id = str(relation.target_media_id)
+        if source_id == media_id:
+            return target_id
+        if target_id == media_id:
+            return source_id
+        return None
 
     def _derive_root_story_parent_candidates(
         self,

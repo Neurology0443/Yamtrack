@@ -15,6 +15,19 @@ SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
 )
 
 SERIES_VIEW_ROOT_MEDIA_TYPES = frozenset({"tv", "ona", "movie", "ova"})
+SERIES_VIEW_ALTERNATIVE_RELATIONS = frozenset(
+    {
+        "alternative_version",
+        "alternative_setting",
+    }
+)
+SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
+    {
+        "tv",
+        "ona",
+        "ova",
+    }
+)
 
 SERIES_VIEW_STRONG_REROOT_RELATIONS = frozenset(
     {

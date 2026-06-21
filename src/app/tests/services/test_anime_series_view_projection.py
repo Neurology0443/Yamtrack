@@ -320,18 +320,47 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertTrue(projection.is_rerooted)
         self.assertIn("200", projection.member_media_ids)
 
-    def test_alternative_ona_with_local_series_line_reroots_to_main_root(self):
+    def test_independent_alternative_ona_continuity_stays_local(self):
         alternative = self.node(
             "300",
             media_type="ona",
             start_date=date(2021, 1, 1),
         )
+        alternative_s2 = self.node(
+            "301",
+            media_type="ona",
+            start_date=date(2022, 1, 1),
+        )
         main = self.node("250", start_date=date(2015, 1, 1))
-        relation = self.relation("300", "250", "alternative_version")
+        relations = [
+            self.relation("300", "250", "alternative_version"),
+            self.relation("300", "301", "sequel"),
+        ]
         initial = self.snapshot(
             seed="300",
-            nodes={"250": main, "300": alternative},
-            series_line=[alternative],
+            nodes={"250": main, "300": alternative, "301": alternative_s2},
+            series_line=[alternative, alternative_s2],
+            relations=relations,
+            direct_candidates=[relations[0]],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = initial
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("300")
+
+        self.assertEqual(projection.root.media_id, "300")
+        self.assertEqual(projection.member_media_ids, ("300", "301"))
+        self.assertFalse(projection.is_rerooted)
+
+    def test_alternative_ona_satellite_without_local_line_still_reroots(self):
+        alternative = self.node("310", media_type="ona")
+        main = self.node("250", start_date=date(2015, 1, 1))
+        relation = self.relation("310", "250", "alternative_version")
+        initial = self.snapshot(
+            seed="310",
+            nodes={"250": main, "310": alternative},
             relations=[relation],
             direct_candidates=[relation],
         )
@@ -345,7 +374,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         projection = AnimeSeriesViewProjectionBuilder(
             snapshot_service=snapshot_service
-        ).build("300")
+        ).build("310")
 
         self.assertEqual(projection.root.media_id, "250")
         self.assertTrue(projection.is_rerooted)
@@ -407,6 +436,124 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(
             projection.member_media_ids,
             ("500", "501", "502"),
+        )
+
+    def test_independent_remake_continuity_stays_separate_from_old_series(self):
+        old_s1 = self.node("2966", start_date=date(2008, 1, 1))
+        old_ova = self.node("6007", media_type="ova", start_date=date(2009, 4, 1))
+        old_s2 = self.node("5341", start_date=date(2009, 7, 1))
+        old_special = self.node("6884", media_type="special")
+        remake_s1 = self.node("51122", start_date=date(2024, 4, 1))
+        remake_s2 = self.node("59928", start_date=date(2025, 1, 1))
+        nodes = {
+            node.media_id: node
+            for node in (
+                old_s1,
+                old_ova,
+                old_s2,
+                old_special,
+                remake_s1,
+                remake_s2,
+            )
+        }
+        relations = [
+            self.relation("51122", "2966", "alternative_version"),
+            self.relation("51122", "5341", "alternative_version"),
+            self.relation("51122", "6007", "alternative_version"),
+            self.relation("51122", "59928", "sequel"),
+            self.relation("59928", "51122", "prequel"),
+            self.relation("2966", "6007", "sequel"),
+            self.relation("6007", "5341", "sequel"),
+            self.relation("5341", "6884", "side_story"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="51122",
+            nodes=nodes,
+            series_line=[remake_s1, remake_s2],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("51122")
+
+        self.assertTrue(projection.is_confident)
+        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertEqual(projection.root.media_id, "51122")
+        self.assertEqual(projection.member_media_ids, ("51122", "59928"))
+        self.assertFalse(projection.is_rerooted)
+
+    def test_independent_remake_second_season_uses_local_remake_root(self):
+        old_s1 = self.node("2966", start_date=date(2008, 1, 1))
+        remake_s1 = self.node("51122", start_date=date(2024, 4, 1))
+        remake_s2 = self.node("59928", start_date=date(2025, 1, 1))
+        relations = [
+            self.relation("51122", "2966", "alternative_version"),
+            self.relation("51122", "59928", "sequel"),
+            self.relation("59928", "51122", "prequel"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="59928",
+            nodes={
+                "2966": old_s1,
+                "51122": remake_s1,
+                "59928": remake_s2,
+            },
+            series_line=[remake_s1, remake_s2],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("59928")
+
+        self.assertEqual(projection.root.media_id, "51122")
+        self.assertEqual(projection.member_media_ids, ("51122", "59928"))
+
+    def test_old_continuity_stays_separate_from_independent_remake(self):
+        old_s1 = self.node("2966", start_date=date(2008, 1, 1))
+        old_ova = self.node("6007", media_type="ova", start_date=date(2009, 4, 1))
+        old_s2 = self.node("5341", start_date=date(2009, 7, 1))
+        old_special = self.node("6884", media_type="special")
+        remake_s1 = self.node("51122", start_date=date(2024, 4, 1))
+        remake_s2 = self.node("59928", start_date=date(2025, 1, 1))
+        relations = [
+            self.relation("51122", "2966", "alternative_version"),
+            self.relation("51122", "5341", "alternative_version"),
+            self.relation("51122", "6007", "alternative_version"),
+            self.relation("51122", "59928", "sequel"),
+            self.relation("2966", "6007", "sequel"),
+            self.relation("6007", "5341", "sequel"),
+            self.relation("5341", "6884", "side_story"),
+        ]
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = self.snapshot(
+            seed="2966",
+            nodes={
+                node.media_id: node
+                for node in (
+                    old_s1,
+                    old_ova,
+                    old_s2,
+                    old_special,
+                    remake_s1,
+                    remake_s2,
+                )
+            },
+            series_line=[old_s1, old_s2],
+            relations=relations,
+        )
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("2966")
+
+        self.assertEqual(projection.root.media_id, "2966")
+        self.assertEqual(
+            projection.member_media_ids,
+            ("2966", "5341", "6007", "6884"),
         )
 
     def test_movie_only_continuity_projects_as_franchise(self):

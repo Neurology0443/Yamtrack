@@ -2,6 +2,7 @@
 from django.test import SimpleTestCase
 
 from app.services.anime_series_view_refresh_queue import (
+    DEFAULT_QUEUE_LOCK_SECONDS,
     normalize_media_ids,
     refresh_queue_lock_key,
 )
@@ -31,3 +32,6 @@ class AnimeSeriesViewRefreshQueueTests(SimpleTestCase):
             refresh_queue_lock_key(1, ["2"], "refresh"),
             refresh_queue_lock_key(1, ["2"], "delete"),
         )
+
+    def test_default_lock_timeout_covers_queue_and_execution(self):
+        self.assertEqual(DEFAULT_QUEUE_LOCK_SECONDS, 900)

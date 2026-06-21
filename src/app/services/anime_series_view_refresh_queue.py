@@ -7,7 +7,7 @@ import hashlib
 from django.conf import settings
 
 QUEUE_LOCK_PREFIX = "anime_series_view_refresh_queue_lock"
-DEFAULT_QUEUE_LOCK_SECONDS = 120
+DEFAULT_QUEUE_LOCK_SECONDS = 900
 
 
 def media_id_key(media_id):
@@ -48,7 +48,7 @@ def refresh_queue_lock_key(user_id, media_ids, mode="refresh"):
 
 
 def get_refresh_queue_lock_timeout_seconds():
-    """Return the configured short queue lock timeout."""
+    """Return the configured timeout covering normal queue and execution time."""
     return getattr(
         settings,
         "ANIME_SERIES_VIEW_REFRESH_QUEUE_LOCK_SECONDS",

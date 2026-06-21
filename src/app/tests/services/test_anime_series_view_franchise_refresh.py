@@ -1,5 +1,5 @@
 # ruff: noqa: D102
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -288,8 +288,9 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
             ).exists()
         )
 
-    def test_equivalent_projections_are_persisted_once(self):
+    def test_refresh_skips_build_for_ids_covered_by_successful_projection(self):
         self.create_anime("50")
+        self.create_anime("51")
         projection = self.projection(
             seed="50",
             root="50",
@@ -304,9 +305,89 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
             media_ids=["50", "51"],
         )
 
-        self.assertEqual(builder.build.call_count, 2)
+        builder.build.assert_called_once_with("50", refresh_cache=False)
         self.assertEqual(stats.snapshots_skipped, 1)
-        self.assertEqual(stats.franchise_memberships_created, 1)
+        self.assertEqual(stats.franchise_memberships_created, 2)
+
+    def test_refresh_does_not_cover_projection_when_persistence_fails(self):
+        self.create_anime("70")
+        self.create_anime("71")
+        projection = self.projection(
+            seed="70",
+            root="70",
+            members=("70", "71"),
+        )
+        builder = Mock()
+        builder.build.return_value = projection
+        service = AnimeSeriesViewFranchiseRefreshService(projection_builder=builder)
+        original_persist = service._persist_projection
+        persist_calls = 0
+
+        def persist_with_first_failure(**kwargs):
+            nonlocal persist_calls
+            persist_calls += 1
+            if persist_calls == 1:
+                message = "database unavailable"
+                raise RuntimeError(message)
+            return original_persist(**kwargs)
+
+        with patch.object(
+            service,
+            "_persist_projection",
+            side_effect=persist_with_first_failure,
+        ):
+            stats = service.refresh_for_media_ids(
+                user=self.user,
+                media_ids=["70", "71"],
+            )
+
+        self.assertEqual(builder.build.call_count, 2)
+        self.assertEqual(stats.errors, 1)
+        self.assertEqual(
+            AnimeSeriesViewMembership.objects.filter(
+                user=self.user,
+                media_id__in=["70", "71"],
+            ).count(),
+            2,
+        )
+
+    def test_independent_remake_and_old_continuity_persist_separately(self):
+        for media_id in ("2966", "51122", "59928"):
+            self.create_anime(media_id)
+        old_projection = self.projection(
+            seed="2966",
+            root="2966",
+            members=("2966",),
+        )
+        remake_projection = self.projection(
+            seed="51122",
+            root="51122",
+            members=("51122", "59928"),
+        )
+        builder = Mock()
+        builder.build.side_effect = lambda media_id, **_kwargs: (
+            old_projection if media_id == "2966" else remake_projection
+        )
+
+        stats = AnimeSeriesViewFranchiseRefreshService(
+            projection_builder=builder
+        ).refresh_for_media_ids(
+            user=self.user,
+            media_ids=["51122", "59928", "2966"],
+        )
+
+        memberships = {
+            membership.media_id: membership
+            for membership in AnimeSeriesViewMembership.objects.filter(user=self.user)
+        }
+        self.assertEqual(memberships["2966"].root_media_id, "2966")
+        self.assertEqual(memberships["2966"].display_media_id, "2966")
+        self.assertEqual(memberships["51122"].root_media_id, "51122")
+        self.assertEqual(memberships["51122"].display_media_id, "51122")
+        self.assertEqual(memberships["59928"].root_media_id, "51122")
+        self.assertEqual(memberships["59928"].display_media_id, "51122")
+        self.assertEqual(stats.snapshots_built, 2)
+        self.assertEqual(stats.snapshots_skipped, 1)
 
     def test_branch_continuation_member_is_persisted_under_main_root(self):
         self.create_anime("82")

@@ -5,6 +5,7 @@ from django.test import TestCase
 from app.anime_series_view_constants import (
     GROUP_KIND_FRANCHISE,
     GROUP_KIND_SINGLETON,
+    PROJECTION_VERSION,
 )
 from app.models import (
     Anime,
@@ -86,3 +87,42 @@ class AnimeSeriesViewReadTests(TestCase):
         self.assertEqual(len(result.groups), 1)
         self.assertEqual(result.groups[0].root_media_id, "5")
         self.assertEqual(result.unprojected_count, 0)
+
+    def test_v2_display_metadata_wins_over_v1_fallback_for_same_root(self):
+        legacy_entry = self.create_anime("6")
+        current_entry = self.create_anime("7")
+        AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id="6",
+            root_media_id="100",
+            display_media_id="100",
+            display_title="Old v1",
+            display_image="https://example.com/old.jpg",
+            display_media_type="tv",
+            group_kind=GROUP_KIND_FRANCHISE,
+            projection_version="franchise_root_v1",
+        )
+        AnimeSeriesViewMembership.objects.create(
+            user=self.user,
+            media_id="7",
+            root_media_id="100",
+            display_media_id="101",
+            display_title="Fresh v2",
+            display_image="https://example.com/fresh.jpg",
+            display_media_type="ona",
+            group_kind=GROUP_KIND_FRANCHISE,
+            projection_version=PROJECTION_VERSION,
+        )
+
+        result = build_anime_series_view(
+            media_entries=[legacy_entry, current_entry],
+            user_id=self.user.id,
+        )
+
+        self.assertEqual(len(result.groups), 1)
+        self.assertEqual(result.groups[0].display_title, "Fresh v2")
+        self.assertEqual(result.groups[0].display_media_id, "101")
+        self.assertEqual(
+            result.groups[0].display_projection_version,
+            PROJECTION_VERSION,
+        )

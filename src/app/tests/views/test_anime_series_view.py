@@ -26,7 +26,15 @@ class AnimeSeriesViewTests(TestCase):
         )
         self.client.login(username="series-view", password="password")
 
-    def create_anime(self, media_id, root_id=None, *, title=None, root_title=None):
+    def create_anime(
+        self,
+        media_id,
+        root_id=None,
+        *,
+        title=None,
+        root_title=None,
+        root_image=None,
+    ):
         item = Item.objects.create(
             media_id=str(media_id),
             source=Sources.MAL.value,
@@ -44,7 +52,7 @@ class AnimeSeriesViewTests(TestCase):
                 root_media_id=str(root_id),
                 display_media_id=str(root_id),
                 display_title=root_title or f"Root {root_id}",
-                display_image=f"https://example.com/root-{root_id}.jpg",
+                display_image=(root_image or f"https://example.com/root-{root_id}.jpg"),
                 display_media_type="tv",
             )
         return anime
@@ -101,6 +109,67 @@ class AnimeSeriesViewTests(TestCase):
         self.assertContains(response, "2 tracked entries")
         self.assertContains(response, f'href="{root_url}"')
         self.assertNotContains(response, "divide-y divide-gray-700/60")
+
+    def test_independent_remake_card_links_to_its_display_root(self):
+        old_image = "https://example.com/old-spice.jpg"
+        remake_image = "https://example.com/remake-spice.jpg"
+        self.create_anime(
+            "2966",
+            root_id="2966",
+            title="Spice and Wolf",
+            root_title="Spice and Wolf",
+            root_image=old_image,
+        )
+        self.create_anime(
+            "51122",
+            root_id="51122",
+            title="Merchant Meets the Wise Wolf",
+            root_title="Merchant Meets the Wise Wolf",
+            root_image=remake_image,
+        )
+        self.create_anime(
+            "59928",
+            root_id="51122",
+            title="Merchant Meets the Wise Wolf 2nd Season",
+            root_title="Merchant Meets the Wise Wolf",
+            root_image=remake_image,
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        remake_url = reverse(
+            "media_details",
+            kwargs={
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "media_id": "51122",
+                "title": "merchant-meets-the-wise-wolf",
+            },
+        )
+        old_url = reverse(
+            "media_details",
+            kwargs={
+                "source": Sources.MAL.value,
+                "media_type": MediaTypes.ANIME.value,
+                "media_id": "2966",
+                "title": "spice-and-wolf",
+            },
+        )
+        groups = {
+            group.root_media_id: group
+            for group in response.context["media_list"].object_list
+        }
+
+        self.assertEqual(set(groups), {"2966", "51122"})
+        self.assertEqual(groups["51122"].display_media_id, "51122")
+        self.assertEqual(groups["51122"].display_image, remake_image)
+        self.assertNotEqual(groups["51122"].display_image, old_image)
+        self.assertContains(response, f'href="{remake_url}"')
+        self.assertContains(response, f'href="{old_url}"')
+        self.assertContains(response, f'data-src="{remake_image}"')
 
     def test_anime_series_view_empty_state_matches_default_media_list(self):
         url = reverse(

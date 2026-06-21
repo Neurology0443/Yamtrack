@@ -106,7 +106,12 @@ class AnimeSeriesViewFranchiseRefreshService:
         )
 
         processed_projections = set()
+        covered_media_ids = set()
         for media_id in normalized_ids:
+            if media_id in covered_media_ids:
+                stats.snapshots_skipped += 1
+                continue
+
             try:
                 projection = self.projection_builder.build(
                     media_id,
@@ -141,8 +146,8 @@ class AnimeSeriesViewFranchiseRefreshService:
             )
             if projection_key in processed_projections:
                 stats.snapshots_skipped += 1
+                covered_media_ids.update(projection.member_media_ids)
                 continue
-            processed_projections.add(projection_key)
 
             scope_stats = AnimeSeriesViewFranchiseRefreshStats()
             try:
@@ -164,6 +169,8 @@ class AnimeSeriesViewFranchiseRefreshService:
                 )
                 continue
 
+            processed_projections.add(projection_key)
+            covered_media_ids.update(projection.member_media_ids)
             for field_name in (
                 "franchise_memberships_created",
                 "franchise_memberships_updated",
