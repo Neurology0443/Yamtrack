@@ -7,6 +7,7 @@ from django.conf import settings
 from app.providers import mal
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_mal_metadata import anime_minimal_from_metadata
 
 
 class AnimeFranchiseHydrationContext:
@@ -67,6 +68,20 @@ class AnimeFranchiseBuildSession:
     def metadata_fetcher(self):
         """Return the memoized MAL metadata fetcher."""
         return self.hydration_context.fetch_anime
+
+    def fetch_anime(self, media_id, *, refresh_cache=None):
+        """Fetch full MAL anime metadata using the session refresh default."""
+        if refresh_cache is None:
+            refresh_cache = self.refresh_cache
+        return self.hydration_context.fetch_anime(
+            media_id,
+            refresh_cache=refresh_cache,
+        )
+
+    def anime_minimal(self, media_id, *, refresh_cache=None):
+        """Return minimal MAL anime metadata without issuing a separate fetch."""
+        metadata = self.fetch_anime(media_id, refresh_cache=refresh_cache)
+        return anime_minimal_from_metadata(metadata)
 
     def graph_builder(self):
         """Create a graph builder using the session fetcher."""

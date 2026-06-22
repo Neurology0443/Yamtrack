@@ -49,8 +49,8 @@ class ProcessManualMALAnimeFranchiseTaskTests(TestCase):
         cache_service_class.assert_called_once_with(build_session=build_session)
         cache_service_class.return_value.build_and_save.assert_called_once_with(
             "100",
-            refresh_cache=True,
-            force=True,
+            refresh_cache=False,
+            force_cache_rebuild=True,
         )
         projection_builder_class.assert_called_once_with(
             snapshot_service=snapshot_service,
@@ -61,7 +61,22 @@ class ProcessManualMALAnimeFranchiseTaskTests(TestCase):
         refresh_service_class.return_value.refresh_for_media_ids.assert_called_once_with(
             user=user,
             media_ids=("100",),
-            refresh_cache=True,
+            refresh_cache=False,
         )
         self.assertTrue(result["cache_ui"]["success"])
         self.assertTrue(result["series_view"]["success"])
+
+
+    @patch("app.tasks.cache.delete")
+    @patch("app.tasks.get_user_model")
+    def test_task_deletes_manual_lock_on_unexpected_error(
+        self,
+        get_user_model_mock,
+        cache_delete,
+    ):
+        get_user_model_mock.side_effect = RuntimeError("database unavailable")
+
+        with self.assertRaises(RuntimeError):
+            process_manual_mal_anime_franchise(7, 100)
+
+        cache_delete.assert_called_once_with("anime_franchise_manual_add:7:100")

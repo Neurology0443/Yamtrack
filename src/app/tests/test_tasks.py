@@ -154,8 +154,12 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                     {"media_id": "200", "kind": "root", "component_root_mal_id": "200"},
                 ],
                 "cache_warm_scheduled": 2,
+                "cache_warm_built": 0,
+                "cache_warm_skipped": 0,
                 "cache_warm_roots": ["100", "200"],
                 "cache_warm_errors": 0,
+                "series_view_refreshes": 0,
+                "series_view_refresh_errors": 0,
                 "discovery_errors": 2,
             },
         )
@@ -173,8 +177,12 @@ class ImportAnimeFranchiseTaskTests(TestCase):
 
         self.assertEqual(result["cache_warm_targets"], [])
         self.assertEqual(result["cache_warm_scheduled"], 0)
+        self.assertEqual(result["cache_warm_built"], 0)
+        self.assertEqual(result["cache_warm_skipped"], 0)
         self.assertEqual(result["cache_warm_roots"], [])
         self.assertEqual(result["cache_warm_errors"], 0)
+        self.assertEqual(result["series_view_refreshes"], 0)
+        self.assertEqual(result["series_view_refresh_errors"], 0)
         self.assertEqual(result["discovery_errors"], 0)
 
     @patch("app.tasks.cache")

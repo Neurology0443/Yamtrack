@@ -26,8 +26,19 @@ class AnimeFranchiseCacheBuildService:
         """Create the builder with an optional shared build session."""
         self.build_session = build_session or AnimeFranchiseBuildSession()
 
-    def build_and_save(self, media_id, *, refresh_cache=False, force=False) -> dict:
-        """Build the UI projection and save canonical/scoped cache payloads."""
+    def build_and_save(
+        self,
+        media_id,
+        *,
+        refresh_cache=False,
+        force_cache_rebuild=False,
+    ) -> dict:
+        """Build and save UI cache payloads.
+
+        force_cache_rebuild only bypasses the existing-alias shortcut for the
+        user-agnostic UI cache. It does not force MAL API refreshes; MAL
+        freshness is controlled exclusively by refresh_cache.
+        """
         media_id = str(media_id)
         started_at = time.monotonic()
         try:
@@ -57,7 +68,7 @@ class AnimeFranchiseCacheBuildService:
             duration = time.monotonic() - started_at
             existing_alias_lookup = (
                 None
-                if force
+                if force_cache_rebuild
                 else anime_franchise_cache.load_valid_alias_payload_for_media(media_id)
             )
             if existing_alias_lookup is not None:

@@ -232,8 +232,18 @@ def import_anime_franchise(
 
     try:
         build_session = AnimeFranchiseBuildSession(refresh_cache=refresh_cache)
+        projection_builder = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=build_session.build_series_view_snapshot_service(),
+        )
         stats = AnimeFranchiseImportService(
+            build_session=build_session,
             snapshot_service=build_session.snapshot_service(),
+            cache_build_service=AnimeFranchiseCacheBuildService(
+                build_session=build_session,
+            ),
+            series_view_refresh_service=AnimeSeriesViewFranchiseRefreshService(
+                projection_builder=projection_builder,
+            ),
         ).run(
             profile_key=profile_key,
             dry_run=False,
@@ -260,8 +270,12 @@ def import_anime_franchise(
             "created_ids": stats.created_ids,
             "cache_warm_targets": stats.cache_warm_targets,
             "cache_warm_scheduled": stats.cache_warm_scheduled,
+            "cache_warm_built": stats.cache_warm_built,
+            "cache_warm_skipped": stats.cache_warm_skipped,
             "cache_warm_roots": stats.cache_warm_roots,
             "cache_warm_errors": stats.cache_warm_errors,
+            "series_view_refreshes": stats.series_view_refreshes,
+            "series_view_refresh_errors": stats.series_view_refresh_errors,
             "discovery_errors": stats.discovery_errors,
         }
 
@@ -304,85 +318,87 @@ def build_mal_anime_franchise_payload(media_id):
 def process_manual_mal_anime_franchise(user_id, media_id):
     """Coordinate franchise cache warm and Series View refresh after add."""
     media_id = str(media_id)
-    result = {
-        "user_id": user_id,
-        "media_id": media_id,
-        "cache_ui": {"attempted": True, "success": False},
-        "series_view": {"attempted": True, "success": False},
-    }
-    user = get_user_model().objects.filter(pk=user_id).first()
-    if user is None:
-        result["cache_ui"]["attempted"] = False
-        result["series_view"]["attempted"] = False
-        result["skipped"] = True
-        result["reason"] = "user_not_found"
-        cache.delete(manual_add_queue_lock_key(user_id, media_id))
-        return result
-
-    build_session = AnimeFranchiseBuildSession()
-    cache_service = AnimeFranchiseCacheBuildService(build_session=build_session)
+    lock_key = manual_add_queue_lock_key(user_id, media_id)
     try:
-        cache_result = cache_service.build_and_save(
-            media_id,
-            refresh_cache=True,
-            force=True,
-        )
-        result["cache_ui"].update(
-            {
-                "success": bool(cache_result.get("built")),
-                "canonical_media_id": cache_result.get("canonical_media_id"),
-                "result": cache_result,
-            },
-        )
-    except Exception as error:
-        logger.exception(
-            "Manual MAL anime franchise cache warm failed",
-            extra={"user_id": user_id, "media_id": media_id},
-        )
-        result["cache_ui"]["error"] = str(error)[:250]
+        result = {
+            "user_id": user_id,
+            "media_id": media_id,
+            "cache_ui": {"attempted": True, "success": False},
+            "series_view": {"attempted": True, "success": False},
+        }
+        user = get_user_model().objects.filter(pk=user_id).first()
+        if user is None:
+            result["cache_ui"]["attempted"] = False
+            result["series_view"]["attempted"] = False
+            result["skipped"] = True
+            result["reason"] = "user_not_found"
+            return result
 
-    projection_builder = AnimeSeriesViewProjectionBuilder(
-        snapshot_service=build_session.build_series_view_snapshot_service(),
-    )
-    refresh_service = AnimeSeriesViewFranchiseRefreshService(
-        projection_builder=projection_builder,
-    )
-    try:
-        stats = refresh_service.refresh_for_media_ids(
-            user=user,
-            media_ids=(media_id,),
-            refresh_cache=True,
-        )
-        result["series_view"].update(
-            {
-                "success": stats.errors == 0,
-                "stats": {
-                    "requested": stats.requested,
-                    "snapshots_built": stats.snapshots_built,
-                    "snapshots_skipped": stats.snapshots_skipped,
-                    "franchise_memberships_created": (
-                        stats.franchise_memberships_created
-                    ),
-                    "franchise_memberships_updated": (
-                        stats.franchise_memberships_updated
-                    ),
-                    "singleton_memberships_created": (
-                        stats.singleton_memberships_created
-                    ),
-                    "singleton_memberships_updated": (
-                        stats.singleton_memberships_updated
-                    ),
-                    "memberships_deleted": stats.memberships_deleted,
-                    "errors": stats.errors,
+        build_session = AnimeFranchiseBuildSession(refresh_cache=False)
+        cache_service = AnimeFranchiseCacheBuildService(build_session=build_session)
+        try:
+            cache_result = cache_service.build_and_save(
+                media_id,
+                refresh_cache=False,
+                force_cache_rebuild=True,
+            )
+            result["cache_ui"].update(
+                {
+                    "success": bool(cache_result.get("built")),
+                    "canonical_media_id": cache_result.get("canonical_media_id"),
+                    "result": cache_result,
                 },
-            },
-        )
-    except Exception as error:
-        logger.exception(
-            "Manual MAL anime Series View refresh failed",
-            extra={"user_id": user_id, "media_id": media_id},
-        )
-        result["series_view"]["error"] = str(error)[:250]
+            )
+        except Exception as error:
+            logger.exception(
+                "Manual MAL anime franchise cache warm failed",
+                extra={"user_id": user_id, "media_id": media_id},
+            )
+            result["cache_ui"]["error"] = str(error)[:250]
 
-    cache.delete(manual_add_queue_lock_key(user_id, media_id))
-    return result
+        projection_builder = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=build_session.build_series_view_snapshot_service(),
+        )
+        refresh_service = AnimeSeriesViewFranchiseRefreshService(
+            projection_builder=projection_builder,
+        )
+        try:
+            stats = refresh_service.refresh_for_media_ids(
+                user=user,
+                media_ids=(media_id,),
+                refresh_cache=False,
+            )
+            result["series_view"].update(
+                {
+                    "success": stats.errors == 0,
+                    "stats": {
+                        "requested": stats.requested,
+                        "snapshots_built": stats.snapshots_built,
+                        "snapshots_skipped": stats.snapshots_skipped,
+                        "franchise_memberships_created": (
+                            stats.franchise_memberships_created
+                        ),
+                        "franchise_memberships_updated": (
+                            stats.franchise_memberships_updated
+                        ),
+                        "singleton_memberships_created": (
+                            stats.singleton_memberships_created
+                        ),
+                        "singleton_memberships_updated": (
+                            stats.singleton_memberships_updated
+                        ),
+                        "memberships_deleted": stats.memberships_deleted,
+                        "errors": stats.errors,
+                    },
+                },
+            )
+        except Exception as error:
+            logger.exception(
+                "Manual MAL anime Series View refresh failed",
+                extra={"user_id": user_id, "media_id": media_id},
+            )
+            result["series_view"]["error"] = str(error)[:250]
+
+        return result
+    finally:
+        cache.delete(lock_key)
