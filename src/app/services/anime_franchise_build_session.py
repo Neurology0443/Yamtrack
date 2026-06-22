@@ -13,11 +13,23 @@ from app.services.anime_mal_metadata import anime_minimal_from_metadata
 class AnimeFranchiseHydrationContext:
     """Memoize MAL anime detail hydration for the lifetime of one operation."""
 
+    FETCH_LEVEL_STALE_ALLOWED = 1
+    FETCH_LEVEL_NORMAL = 2
+    FETCH_LEVEL_REFRESHED = 3
+
     def __init__(self, *, anime_fetcher=None):
         """Create a context backed by the provided fetcher or mal.anime."""
         self.anime_fetcher = anime_fetcher or mal.anime
         self._metadata_by_media_id = {}
-        self._refreshed_media_ids = set()
+        self._fetch_level_by_media_id = {}
+
+    def _required_fetch_level(self, *, refresh_cache, allow_stale):
+        """Return the minimum session-local freshness level for the request."""
+        if refresh_cache:
+            return self.FETCH_LEVEL_REFRESHED
+        if allow_stale:
+            return self.FETCH_LEVEL_STALE_ALLOWED
+        return self.FETCH_LEVEL_NORMAL
 
     def fetch_anime(
         self,
@@ -27,30 +39,25 @@ class AnimeFranchiseHydrationContext:
         allow_stale=False,
         schedule_stale_refresh=False,
     ):
-        """Fetch one MAL anime payload, reusing session-local results."""
+        """Fetch one MAL anime payload, reusing sufficiently fresh results."""
         media_id = str(media_id)
-
-        if refresh_cache:
-            if media_id not in self._refreshed_media_ids:
-                metadata = self.anime_fetcher(
-                    media_id,
-                    refresh_cache=True,
-                    allow_stale=allow_stale,
-                    schedule_stale_refresh=schedule_stale_refresh,
-                )
-                self._metadata_by_media_id[media_id] = metadata
-                self._refreshed_media_ids.add(media_id)
+        required_level = self._required_fetch_level(
+            refresh_cache=refresh_cache,
+            allow_stale=allow_stale,
+        )
+        current_level = self._fetch_level_by_media_id.get(media_id)
+        if current_level is not None and current_level >= required_level:
             return self._metadata_by_media_id[media_id]
 
-        if media_id not in self._metadata_by_media_id:
-            self._metadata_by_media_id[media_id] = self.anime_fetcher(
-                media_id,
-                refresh_cache=False,
-                allow_stale=allow_stale,
-                schedule_stale_refresh=schedule_stale_refresh,
-            )
-
-        return self._metadata_by_media_id[media_id]
+        metadata = self.anime_fetcher(
+            media_id,
+            refresh_cache=refresh_cache,
+            allow_stale=allow_stale,
+            schedule_stale_refresh=schedule_stale_refresh,
+        )
+        self._metadata_by_media_id[media_id] = metadata
+        self._fetch_level_by_media_id[media_id] = required_level
+        return metadata
 
 
 class AnimeFranchiseBuildSession:

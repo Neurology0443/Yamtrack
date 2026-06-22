@@ -159,3 +159,66 @@ class AnimeFranchiseBuildSessionTests(SimpleTestCase):
                 "status": "finished_airing",
             },
         }
+
+
+class AnimeFranchiseHydrationContextFreshnessLevelTests(SimpleTestCase):
+    def test_stale_allowed_repeated_uses_one_fetch(self):
+        context, calls = self._context()
+
+        context.fetch_anime("123", allow_stale=True)
+        context.fetch_anime("123", allow_stale=True)
+
+        self.assertEqual(len(calls), 1)
+
+    def test_stale_allowed_then_normal_fetches_again(self):
+        context, calls = self._context()
+
+        first = context.fetch_anime("123", allow_stale=True)
+        second = context.fetch_anime("123", allow_stale=False)
+
+        self.assertEqual(len(calls), 2)
+        self.assertIsNot(first, second)
+        self.assertEqual(calls[1][1]["allow_stale"], False)
+
+    def test_normal_then_stale_allowed_reuses_normal_fetch(self):
+        context, calls = self._context()
+
+        context.fetch_anime("123", allow_stale=False)
+        context.fetch_anime("123", allow_stale=True)
+
+        self.assertEqual(len(calls), 1)
+
+    def test_refreshed_then_normal_reuses_refreshed_fetch(self):
+        context, calls = self._context()
+
+        context.fetch_anime("123", refresh_cache=True)
+        context.fetch_anime("123", allow_stale=False)
+
+        self.assertEqual(len(calls), 1)
+
+    def test_stale_allowed_then_refresh_fetches_again(self):
+        context, calls = self._context()
+
+        first = context.fetch_anime("123", allow_stale=True)
+        second = context.fetch_anime("123", refresh_cache=True)
+
+        self.assertEqual(len(calls), 2)
+        self.assertIsNot(first, second)
+        self.assertEqual(calls[1][1]["refresh_cache"], True)
+
+    def test_repeated_refresh_fetches_once(self):
+        context, calls = self._context()
+
+        context.fetch_anime("123", refresh_cache=True)
+        context.fetch_anime("123", refresh_cache=True)
+
+        self.assertEqual(len(calls), 1)
+
+    def _context(self):
+        calls = []
+
+        def fetcher(media_id, **kwargs):
+            calls.append((media_id, kwargs))
+            return {"media_id": str(media_id), "call": len(calls)}
+
+        return AnimeFranchiseHydrationContext(anime_fetcher=fetcher), calls

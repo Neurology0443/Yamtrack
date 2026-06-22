@@ -167,6 +167,47 @@ class ImportAnimeFranchiseTaskTests(TestCase):
 
     @patch("app.tasks.cache")
     @patch("app.tasks.AnimeFranchiseImportService")
+    @patch("app.tasks.AnimeSeriesViewFranchiseRefreshService")
+    @patch("app.tasks.AnimeSeriesViewProjectionBuilder")
+    @patch("app.tasks.AnimeFranchiseCacheBuildService")
+    @patch("app.tasks.AnimeFranchiseBuildSession")
+    def test_import_task_wires_single_build_session(
+        self,
+        build_session_class,
+        cache_build_service_class,
+        projection_builder_class,
+        refresh_service_class,
+        import_service_class,
+        mock_cache,
+    ):
+        mock_cache.add.return_value = True
+        build_session = build_session_class.return_value
+        series_snapshot_service = (
+            build_session.build_series_view_snapshot_service.return_value
+        )
+        import_service_class.return_value.run.return_value = FranchiseImportStats()
+
+        import_anime_franchise(refresh_cache=True)
+
+        build_session_class.assert_called_once_with(refresh_cache=True)
+        projection_builder_class.assert_called_once_with(
+            snapshot_service=series_snapshot_service,
+        )
+        cache_build_service_class.assert_called_once_with(
+            build_session=build_session,
+        )
+        refresh_service_class.assert_called_once_with(
+            projection_builder=projection_builder_class.return_value,
+        )
+        import_service_class.assert_called_once_with(
+            build_session=build_session,
+            snapshot_service=build_session.snapshot_service.return_value,
+            cache_build_service=cache_build_service_class.return_value,
+            series_view_refresh_service=refresh_service_class.return_value,
+        )
+
+    @patch("app.tasks.cache")
+    @patch("app.tasks.AnimeFranchiseImportService")
     def test_import_task_returns_default_cache_warm_fields(
         self, mock_service_cls, mock_cache
     ):

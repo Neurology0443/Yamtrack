@@ -178,3 +178,41 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
             media_ids={"100", "50"},
             refresh_cache=True,
         )
+
+    @patch("app.services.anime_franchise_import.AnimeSeriesViewFranchiseRefreshService")
+    @patch("app.services.anime_franchise_import.AnimeSeriesViewProjectionBuilder")
+    @patch("app.services.anime_franchise_import.AnimeFranchiseCacheBuildService")
+    def test_constructor_defaults_use_provided_build_session(
+        self,
+        cache_build_service_class,
+        projection_builder_class,
+        refresh_service_class,
+    ):
+        build_session = Mock()
+        snapshot_service = Mock()
+        series_snapshot_service = Mock()
+        build_session.snapshot_service.return_value = snapshot_service
+        build_session.build_series_view_snapshot_service.return_value = (
+            series_snapshot_service
+        )
+
+        service = AnimeFranchiseImportService(build_session=build_session)
+
+        self.assertIs(service.snapshot_service, snapshot_service)
+        cache_build_service_class.assert_called_once_with(
+            build_session=build_session,
+        )
+        self.assertIs(
+            service.cache_build_service,
+            cache_build_service_class.return_value,
+        )
+        projection_builder_class.assert_called_once_with(
+            snapshot_service=series_snapshot_service,
+        )
+        refresh_service_class.assert_called_once_with(
+            projection_builder=projection_builder_class.return_value,
+        )
+        self.assertIs(
+            service.series_view_refresh_service,
+            refresh_service_class.return_value,
+        )

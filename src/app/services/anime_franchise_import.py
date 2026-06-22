@@ -18,6 +18,7 @@ from app.services.anime_import_state import AnimeImportStateService
 from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
 )
+from app.services.anime_series_view_projection import AnimeSeriesViewProjectionBuilder
 from events.notifications import notify_entry_added_after_commit
 
 if TYPE_CHECKING:
@@ -93,9 +94,14 @@ class AnimeFranchiseImportService:
             )
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
-        self.series_view_refresh_service = (
-            series_view_refresh_service or AnimeSeriesViewFranchiseRefreshService()
-        )
+        if series_view_refresh_service is None:
+            projection_builder = AnimeSeriesViewProjectionBuilder(
+                snapshot_service=self.build_session.build_series_view_snapshot_service(),
+            )
+            series_view_refresh_service = AnimeSeriesViewFranchiseRefreshService(
+                projection_builder=projection_builder,
+            )
+        self.series_view_refresh_service = series_view_refresh_service
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
