@@ -1,5 +1,4 @@
 import logging
-import time
 from datetime import timedelta
 
 import requests
@@ -17,36 +16,23 @@ from app.anime_series_view_constants import (
 from app.models import UserMessage
 from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
-from app.services.anime_franchise_context import serialize_franchise_payload
-from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
+from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
 from app.services.anime_franchise_import import AnimeFranchiseImportService
-from app.services.anime_franchise_scoped_payload import (
-    build_scoped_seed_payload_from_snapshot,
-)
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
+from app.services.anime_franchise_manual_add_triggers import manual_add_queue_lock_key
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
 )
-from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
 )
+from app.services.anime_series_view_projection import AnimeSeriesViewProjectionBuilder
 from app.services.anime_series_view_refresh_queue import (
     normalize_media_ids,
     refresh_queue_lock_key,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _build_mal_anime_franchise_payload_for_cache(media_id: str, graph_builder):
-    """Build the franchise snapshot and UI payload for cache serialization."""
-    snapshot_service = AnimeFranchiseSnapshotService(
-        graph_builder=graph_builder,
-    )
-    snapshot = snapshot_service.build(media_id)
-    franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
-    return snapshot, franchise_payload
 
 
 @shared_task(name="Cleanup user messages")
@@ -245,7 +231,10 @@ def import_anime_franchise(
         }
 
     try:
-        stats = AnimeFranchiseImportService().run(
+        build_session = AnimeFranchiseBuildSession(refresh_cache=refresh_cache)
+        stats = AnimeFranchiseImportService(
+            snapshot_service=build_session.snapshot_service(),
+        ).run(
             profile_key=profile_key,
             dry_run=False,
             full_rescan=full_rescan,
@@ -283,7 +272,7 @@ def import_anime_franchise(
 
 
 @shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
-def build_mal_anime_franchise_payload(media_id):  # noqa: C901, PLR0912, PLR0915
+def build_mal_anime_franchise_payload(media_id):
     """Build and cache the complete MAL anime franchise payload in the background."""
     media_id = str(media_id)
     task_lock_key = anime_franchise_cache.get_task_lock_key(media_id)
@@ -304,173 +293,96 @@ def build_mal_anime_franchise_payload(media_id):  # noqa: C901, PLR0912, PLR0915
             "reason": "already_running",
         }
 
-    started_at = time.monotonic()
     try:
-        anime_franchise_cache.mark_attempt(media_id)
-        graph_builder = AnimeFranchiseGraphBuilder(
-            max_nodes=settings.ANIME_FRANCHISE_MAX_NODES,
-        )
-        snapshot, franchise_payload = _build_mal_anime_franchise_payload_for_cache(
-            media_id,
-            graph_builder,
-        )
-        truncated = bool(graph_builder.truncated)
-        aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
-        can_use_aliases = aliases_enabled and not truncated
-        truncation_reason = graph_builder.truncation_reason or ""
-        node_count = graph_builder.node_count
-        serialized_payload = serialize_franchise_payload(
-            franchise_payload,
-            root_media_id=media_id,
-        )
-        canonical_payload, canonical_media_id, _aliasable_media_ids = (
-            anime_franchise_cache.prepare_payload_for_aliasing(
-                serialized_payload,
-                build_seed_media_id=media_id,
-                truncated=truncated,
-                aliases_enabled=aliases_enabled,
-            )
-        )
-        is_canonical_build = media_id == canonical_media_id
-        duration = time.monotonic() - started_at
-        existing_alias_lookup = (
-            anime_franchise_cache.load_valid_alias_payload_for_media(
-                media_id,
-            )
-        )
-        if existing_alias_lookup is not None:
-            anime_franchise_cache.delete_direct_payload(media_id)
-            logger.info(
-                "Skipping direct MAL anime franchise cache write for media_id=%s "
-                "because a valid alias to canonical_media_id=%s already exists",
-                media_id,
-                existing_alias_lookup.canonical_media_id,
-            )
-            return {
-                "media_id": media_id,
-                "canonical_media_id": existing_alias_lookup.canonical_media_id,
-                "built": True,
-                "skipped_direct_write": True,
-                "reason": "valid_alias_exists",
-                "node_count": node_count,
-                "duration": duration,
-                "truncated": truncated,
-                "truncation_reason": truncation_reason,
-                "alias_count": 0,
-            }
-
-        alias_count = 0
-        seed_is_aliasable_in_existing_canonical = False
-        if is_canonical_build:
-            anime_franchise_cache.save_payload(
-                canonical_media_id,
-                canonical_payload,
-                fetched_at=timezone.now(),
-                node_count=node_count,
-                build_duration_seconds=duration,
-                truncated=truncated,
-                truncation_reason=truncation_reason,
-            )
-            if can_use_aliases:
-                alias_count = anime_franchise_cache.replace_aliases(
-                    canonical_media_id,
-                    canonical_payload,
-                    truncated=False,
-                )
-        else:
-            logger.info(
-                "Skipping canonical MAL anime franchise cache write for "
-                "non-canonical seed media_id=%s canonical_media_id=%s",
-                media_id,
-                canonical_media_id,
-            )
-            existing_canonical_payload, existing_canonical_meta = (
-                anime_franchise_cache.load_payload(canonical_media_id)
-            )
-            existing_aliasable_ids = set()
-            if existing_canonical_payload:
-                existing_aliasable_ids = {
-                    str(aliasable_media_id)
-                    for aliasable_media_id in existing_canonical_payload.get(
-                        "aliasable_media_ids",
-                        [],
-                    )
-                }
-                if can_use_aliases:
-                    alias_count = anime_franchise_cache.replace_aliases(
-                        canonical_media_id,
-                        existing_canonical_payload,
-                        truncated=False,
-                    )
-            else:
-                anime_franchise_cache.maybe_schedule_build(
-                    canonical_media_id,
-                    existing_canonical_meta,
-                    has_payload=False,
-                )
-            seed_is_aliasable_in_existing_canonical = media_id in existing_aliasable_ids
-        scoped_payload = build_scoped_seed_payload_from_snapshot(
-            snapshot,
-            seed_media_id=media_id,
-        )
-        if not is_canonical_build and seed_is_aliasable_in_existing_canonical:
-            anime_franchise_cache.delete_direct_payload(media_id)
-        if (
-            scoped_payload is not None
-            and not is_canonical_build
-            and not seed_is_aliasable_in_existing_canonical
-        ):
-            scoped_node_count = len(
-                anime_franchise_cache.extract_payload_media_ids(scoped_payload),
-            )
-            anime_franchise_cache.save_payload(
-                media_id,
-                scoped_payload,
-                fetched_at=timezone.now(),
-                node_count=scoped_node_count,
-                build_duration_seconds=duration,
-                truncated=False,
-                truncation_reason="",
-            )
-        if truncated:
-            logger.info(
-                "MAL anime franchise build truncated for media_id=%s max_nodes=%s",
-                media_id,
-                settings.ANIME_FRANCHISE_MAX_NODES,
-            )
-        logger.info(
-            "MAL anime franchise build completed for media_id=%s canonical_media_id=%s "
-            "nodes=%s duration=%s truncated=%s aliases=%s",
-            media_id,
-            canonical_media_id,
-            node_count,
-            round(duration, 3),
-            truncated,
-            alias_count,
-        )
-        return {  # noqa: TRY300 - task returns structured success payloads
-            "media_id": media_id,
-            "canonical_media_id": canonical_media_id,
-            "built": True,
-            "node_count": node_count,
-            "duration": duration,
-            "truncated": truncated,
-            "truncation_reason": truncation_reason,
-            "alias_count": alias_count,
-        }
-    except Exception as error:  # noqa: BLE001 - background task must isolate failures
-        error_message = str(error) or error.__class__.__name__
-        anime_franchise_cache.mark_error(media_id, error_message)
-        logger.warning(
-            "MAL anime franchise build failed for media_id=%s: %s",
-            media_id,
-            error_message,
-        )
-        return {
-            "media_id": media_id,
-            "built": False,
-            "error": error_message[:250],
-        }
+        return AnimeFranchiseCacheBuildService().build_and_save(media_id)
     finally:
         cache.delete(task_lock_key)
         cache.delete(anime_franchise_cache.get_queue_lock_key(media_id))
+
+
+@shared_task(name="Process manual MAL anime franchise")
+def process_manual_mal_anime_franchise(user_id, media_id):
+    """Coordinate franchise cache warm and Series View refresh after add."""
+    media_id = str(media_id)
+    result = {
+        "user_id": user_id,
+        "media_id": media_id,
+        "cache_ui": {"attempted": True, "success": False},
+        "series_view": {"attempted": True, "success": False},
+    }
+    user = get_user_model().objects.filter(pk=user_id).first()
+    if user is None:
+        result["cache_ui"]["attempted"] = False
+        result["series_view"]["attempted"] = False
+        result["skipped"] = True
+        result["reason"] = "user_not_found"
+        cache.delete(manual_add_queue_lock_key(user_id, media_id))
+        return result
+
+    build_session = AnimeFranchiseBuildSession()
+    cache_service = AnimeFranchiseCacheBuildService(build_session=build_session)
+    try:
+        cache_result = cache_service.build_and_save(
+            media_id,
+            refresh_cache=True,
+            force=True,
+        )
+        result["cache_ui"].update(
+            {
+                "success": bool(cache_result.get("built")),
+                "canonical_media_id": cache_result.get("canonical_media_id"),
+                "result": cache_result,
+            },
+        )
+    except Exception as error:
+        logger.exception(
+            "Manual MAL anime franchise cache warm failed",
+            extra={"user_id": user_id, "media_id": media_id},
+        )
+        result["cache_ui"]["error"] = str(error)[:250]
+
+    projection_builder = AnimeSeriesViewProjectionBuilder(
+        snapshot_service=build_session.build_series_view_snapshot_service(),
+    )
+    refresh_service = AnimeSeriesViewFranchiseRefreshService(
+        projection_builder=projection_builder,
+    )
+    try:
+        stats = refresh_service.refresh_for_media_ids(
+            user=user,
+            media_ids=(media_id,),
+            refresh_cache=True,
+        )
+        result["series_view"].update(
+            {
+                "success": stats.errors == 0,
+                "stats": {
+                    "requested": stats.requested,
+                    "snapshots_built": stats.snapshots_built,
+                    "snapshots_skipped": stats.snapshots_skipped,
+                    "franchise_memberships_created": (
+                        stats.franchise_memberships_created
+                    ),
+                    "franchise_memberships_updated": (
+                        stats.franchise_memberships_updated
+                    ),
+                    "singleton_memberships_created": (
+                        stats.singleton_memberships_created
+                    ),
+                    "singleton_memberships_updated": (
+                        stats.singleton_memberships_updated
+                    ),
+                    "memberships_deleted": stats.memberships_deleted,
+                    "errors": stats.errors,
+                },
+            },
+        )
+    except Exception as error:
+        logger.exception(
+            "Manual MAL anime Series View refresh failed",
+            extra={"user_id": user_id, "media_id": media_id},
+        )
+        result["series_view"]["error"] = str(error)[:250]
+
+    cache.delete(manual_add_queue_lock_key(user_id, media_id))
+    return result
