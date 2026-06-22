@@ -37,6 +37,9 @@ from app.services.anime_franchise_context import (
     has_displayable_franchise_entries,
     prepare_anime_franchise_context,
 )
+from app.services.anime_franchise_manual_add_triggers import (
+    AnimeFranchiseManualAddTriggerService,
+)
 from app.services.anime_series_view import build_anime_series_view
 from app.services.anime_series_view_refresh_triggers import (
     AnimeSeriesViewRefreshTriggerService,
@@ -804,7 +807,7 @@ def media_save(request):
                 media_label=str(form.instance),
             )
             if source == Sources.MAL.value and media_type == MediaTypes.ANIME.value:
-                AnimeSeriesViewRefreshTriggerService().schedule_manual_add(
+                AnimeFranchiseManualAddTriggerService().schedule_manual_add(
                     user=request.user,
                     media_id=media_id,
                 )
