@@ -20,7 +20,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
     """Test canonical roots, controlled reroots, members, and singleton safety."""
 
     @staticmethod
-    def node(media_id, *, media_type="tv", start_date=None):
+    def node(media_id, *, media_type="tv", start_date=None, alternative_title_en=""):
         return AnimeNode(
             media_id=str(media_id),
             title=f"Anime {media_id}",
@@ -28,6 +28,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             media_type=media_type,
             image=f"https://example.com/{media_id}.jpg",
             start_date=start_date,
+            alternative_title_en=alternative_title_en,
         )
 
     @staticmethod
@@ -97,6 +98,35 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             refresh_cache=False,
             include_series_view_branch_continuations=True,
         )
+
+
+    def test_projection_root_carries_alternative_title(self):
+        root = self.node(
+            "100",
+            start_date=date(2024, 1, 1),
+            alternative_title_en="Delicious in Dungeon",
+        )
+        snapshot = self.snapshot(seed="100", nodes={"100": root}, series_line=[root])
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("100")
+
+        self.assertEqual(projection.root.alternative_title_en, "Delicious in Dungeon")
+
+    def test_projection_root_defaults_to_empty_alternative_title(self):
+        root = self.node("100", start_date=date(2024, 1, 1))
+        snapshot = self.snapshot(seed="100", nodes={"100": root}, series_line=[root])
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("100")
+
+        self.assertEqual(projection.root.alternative_title_en, "")
 
     def test_rezero_special_reroots_to_main_series_and_keeps_seed(self):
         special = self.node("36286", media_type="special")

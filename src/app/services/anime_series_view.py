@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from app.anime_series_view_constants import PROJECTION_VERSION
 from app.models import AnimeSeriesViewMembership, MediaTypes, Sources
 
-LEGACY_PROJECTION_VERSION = "franchise_root_v1"
+LEGACY_PROJECTION_VERSIONS = ("franchise_root_v2", "franchise_root_v1")
+PROJECTION_VERSION_PRIORITY = (PROJECTION_VERSION, *LEGACY_PROJECTION_VERSIONS)
 
 
 @dataclass
@@ -33,6 +34,7 @@ class AnimeSeriesViewGroup:
     display_start_date: object | None
     group_kind: str
     display_projection_version: str = ""
+    display_alternative_title_en: str = ""
     entries: list[AnimeSeriesViewDisplayEntry] = field(default_factory=list)
 
     @property
@@ -62,27 +64,20 @@ def build_anime_series_view(*, media_entries, user_id):
     # replace it with a global franchise index / DB-level join path.
     media_entries = list(media_entries)
     media_ids = [entry.item.media_id for entry in media_entries]
-    # Temporary v1 fallback until all users are rebuilt or Spec 2 replaces it
+    # Temporary legacy fallback until all users are rebuilt or Spec 2 replaces it
     # with the global index: https://github.com/Neurology0443/Yamtrack/pull/99
-    memberships = {
-        membership.media_id: membership
-        for membership in AnimeSeriesViewMembership.objects.filter(
+    memberships = {}
+    for version in PROJECTION_VERSION_PRIORITY:
+        missing_media_ids = set(media_ids) - set(memberships)
+        if not missing_media_ids:
+            break
+        version_memberships = AnimeSeriesViewMembership.objects.filter(
             user_id=user_id,
-            media_id__in=media_ids,
-            projection_version=PROJECTION_VERSION,
+            media_id__in=missing_media_ids,
+            projection_version=version,
         )
-    }
-    legacy_media_ids = set(media_ids) - set(memberships)
-    if legacy_media_ids:
         memberships.update(
-            {
-                membership.media_id: membership
-                for membership in AnimeSeriesViewMembership.objects.filter(
-                    user_id=user_id,
-                    media_id__in=legacy_media_ids,
-                    projection_version=LEGACY_PROJECTION_VERSION,
-                )
-            }
+            {membership.media_id: membership for membership in version_memberships}
         )
 
     groups_by_root = {}
@@ -100,6 +95,9 @@ def build_anime_series_view(*, media_entries, user_id):
                 root_media_id=membership.root_media_id,
                 display_media_id=membership.display_media_id,
                 display_title=membership.display_title,
+                display_alternative_title_en=(
+                    membership.display_alternative_title_en or ""
+                ),
                 display_image=membership.display_image,
                 display_media_type=membership.display_media_type,
                 display_start_date=membership.display_start_date,
@@ -108,12 +106,14 @@ def build_anime_series_view(*, media_entries, user_id):
             )
             groups_by_root[membership.root_media_id] = group
             groups.append(group)
-        elif (
-            group.display_projection_version == LEGACY_PROJECTION_VERSION
-            and membership.projection_version == PROJECTION_VERSION
-        ):
+        elif _projection_version_rank(
+            membership.projection_version
+        ) < _projection_version_rank(group.display_projection_version):
             group.display_media_id = membership.display_media_id
             group.display_title = membership.display_title
+            group.display_alternative_title_en = (
+                membership.display_alternative_title_en or ""
+            )
             group.display_image = membership.display_image
             group.display_media_type = membership.display_media_type
             group.display_start_date = membership.display_start_date
@@ -134,3 +134,10 @@ def build_anime_series_view(*, media_entries, user_id):
         groups=groups,
         unprojected_count=unprojected_count,
     )
+
+
+def _projection_version_rank(version):
+    try:
+        return PROJECTION_VERSION_PRIORITY.index(version)
+    except ValueError:
+        return len(PROJECTION_VERSION_PRIORITY)

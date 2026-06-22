@@ -1,6 +1,6 @@
 """Stable constants shared by Anime Series View models and services."""
 
-PROJECTION_VERSION = "franchise_root_v2"
+PROJECTION_VERSION = "franchise_root_v3"
 
 GROUP_KIND_FRANCHISE = "franchise"
 GROUP_KIND_SINGLETON = "singleton"
