@@ -33,6 +33,7 @@ class AnimeSeriesViewGroup:
     display_start_date: object | None
     group_kind: str
     display_projection_version: str = ""
+    display_alternative_title_en: str = ""
     entries: list[AnimeSeriesViewDisplayEntry] = field(default_factory=list)
 
     @property
@@ -100,6 +101,9 @@ def build_anime_series_view(*, media_entries, user_id):
                 root_media_id=membership.root_media_id,
                 display_media_id=membership.display_media_id,
                 display_title=membership.display_title,
+                display_alternative_title_en=(
+                    membership.display_alternative_title_en or ""
+                ),
                 display_image=membership.display_image,
                 display_media_type=membership.display_media_type,
                 display_start_date=membership.display_start_date,
@@ -114,6 +118,9 @@ def build_anime_series_view(*, media_entries, user_id):
         ):
             group.display_media_id = membership.display_media_id
             group.display_title = membership.display_title
+            group.display_alternative_title_en = (
+                membership.display_alternative_title_en or ""
+            )
             group.display_image = membership.display_image
             group.display_media_type = membership.display_media_type
             group.display_start_date = membership.display_start_date

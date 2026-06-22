@@ -34,6 +34,7 @@ class AnimeSeriesViewTests(TestCase):
         title=None,
         root_title=None,
         root_image=None,
+        display_alternative_title_en="",
     ):
         item = Item.objects.create(
             media_id=str(media_id),
@@ -54,8 +55,51 @@ class AnimeSeriesViewTests(TestCase):
                 display_title=root_title or f"Root {root_id}",
                 display_image=(root_image or f"https://example.com/root-{root_id}.jpg"),
                 display_media_type="tv",
+                display_alternative_title_en=display_alternative_title_en,
             )
         return anime
+
+
+    def test_series_card_hover_overlay_uses_english_alternative_title(self):
+        self.create_anime(
+            "1",
+            root_id="1",
+            root_title="Dungeon Meshi",
+            display_alternative_title_en="Delicious in Dungeon",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, "Dungeon Meshi")
+        self.assertContains(response, "Delicious in Dungeon")
+        self.assertEqual(
+            response.context["media_list"].object_list[0].display_alternative_title_en,
+            "Delicious in Dungeon",
+        )
+
+    def test_series_card_hover_overlay_falls_back_to_display_title(self):
+        self.create_anime("1", root_id="1", root_title="Dungeon Meshi")
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(
+            response,
+            (
+                '<span class="line-clamp-4 text-center text-base '
+                'font-semibold text-white">Dungeon Meshi</span>'
+            ),
+            html=True,
+        )
+        self.assertEqual(
+            response.context["media_list"].object_list[0].display_alternative_title_en,
+            "",
+        )
 
     def test_series_layout_groups_cards_and_reports_unprojected(self):
         self.create_anime("1", root_id="1")

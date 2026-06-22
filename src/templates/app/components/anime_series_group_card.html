@@ -1,13 +1,15 @@
 {% load app_tags %}
 
-{# TODO: A future hover may expose aggregate info; member titles stay out of the card body. #}
 <article class="h-full overflow-hidden rounded-lg bg-[#2a2f35] shadow-lg">
   <a href="{{ group.display_item|media_url }}" class="block h-full">
-    <div class="aspect-2/3 overflow-hidden bg-[#3e454d]">
+    <div class="group relative aspect-2/3 overflow-hidden bg-[#3e454d]">
       <img alt="{{ group.display_title }}"
            class="lazyload h-full w-full object-cover"
            {% if group.display_image %}data-src="{{ group.display_image }}"{% endif %}
            src="{{ IMG_NONE }}">
+      <div class="absolute inset-0 flex items-center justify-center bg-black/80 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        <span class="line-clamp-4 text-center text-base font-semibold text-white">{{ group.display_alternative_title_en|default:group.display_title }}</span>
+      </div>
     </div>
     <div class="p-4">
       <h2 class="line-clamp-2 text-base font-semibold text-white hover:text-indigo-400">{{ group.display_title }}</h2>

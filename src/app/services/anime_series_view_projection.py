@@ -32,6 +32,7 @@ class AnimeSeriesViewProjectionRoot:
     image: str
     media_type: str
     start_date: date | None
+    alternative_title_en: str = ""
 
 
 @dataclass(frozen=True)
@@ -617,6 +618,7 @@ class AnimeSeriesViewProjectionBuilder:
             image=node.image,
             media_type=node.media_type,
             start_date=node.start_date,
+            alternative_title_en=node.alternative_title_en or "",
         )
 
     def _node_sort_key(self, node):

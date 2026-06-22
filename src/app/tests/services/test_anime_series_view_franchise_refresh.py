@@ -56,6 +56,7 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
         root,
         members,
         group_kind=GROUP_KIND_FRANCHISE,
+        alternative_title_en="",
     ):
         return AnimeSeriesViewProjection(
             seed_media_id=str(seed),
@@ -65,6 +66,7 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
                 image=f"https://example.com/root-{root}.jpg",
                 media_type="tv",
                 start_date=None,
+                alternative_title_en=alternative_title_en,
             ),
             member_media_ids=tuple(str(member) for member in members),
             group_kind=group_kind,
@@ -89,6 +91,40 @@ class AnimeSeriesViewFranchiseRefreshTests(TestCase):
             is_confident=False,
             skip_reason="weak_reroot_unconfirmed",
         )
+
+
+    def test_refresh_persists_display_alternative_title(self):
+        self.create_anime("10")
+        projection = self.projection(
+            seed="10",
+            root="10",
+            members=["10"],
+            alternative_title_en="Delicious in Dungeon",
+        )
+
+        self.service(projection)[0].refresh_for_media_ids(
+            user=self.user, media_ids=["10"]
+        )
+
+        membership = AnimeSeriesViewMembership.objects.get(
+            user=self.user, media_id="10"
+        )
+        self.assertEqual(
+            membership.display_alternative_title_en, "Delicious in Dungeon"
+        )
+
+    def test_refresh_persists_empty_display_alternative_title_when_absent(self):
+        self.create_anime("11")
+        projection = self.projection(seed="11", root="11", members=["11"])
+
+        self.service(projection)[0].refresh_for_media_ids(
+            user=self.user, media_ids=["11"]
+        )
+
+        membership = AnimeSeriesViewMembership.objects.get(
+            user=self.user, media_id="11"
+        )
+        self.assertEqual(membership.display_alternative_title_en, "")
 
     def test_normal_refresh_preserves_old_membership_on_projection_error(self):
         anime = self.create_anime("20")

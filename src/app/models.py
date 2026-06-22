@@ -2020,6 +2020,9 @@ class AnimeSeriesViewMembership(models.Model):
     root_media_id = models.CharField(max_length=36)
     display_media_id = models.CharField(max_length=36)
     display_title = models.CharField(max_length=500, blank=True, default="")
+    display_alternative_title_en = models.CharField(
+        max_length=500, blank=True, default=""
+    )
     display_image = models.URLField(max_length=1000, blank=True, default="")
     display_media_type = models.CharField(max_length=40, blank=True, default="")
     display_start_date = models.DateField(null=True, blank=True)
