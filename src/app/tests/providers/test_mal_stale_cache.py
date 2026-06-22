@@ -320,12 +320,13 @@ class MALAnimeStaleCacheTests(TestCase):
         mock_schedule.assert_not_called()
         self.assertIsNone(cache.get("search_mal_anime_cowboy_1:meta"))
 
+
 class MALAnimeAlternativeTitleTests(TestCase):
     @patch("app.providers.mal.services.api_request")
     def test_anime_normalizes_english_alternative_title(self, mock_api_request):
         response = dict(API_RESPONSE)
         response["alternative_titles"] = {
-            "en": "Delicious in Dungeon",
+            "en": "  Delicious in Dungeon  ",
             "ja": "ダンジョン飯",
             "synonyms": ["Dungeon Food"],
         }
@@ -336,6 +337,18 @@ class MALAnimeAlternativeTitleTests(TestCase):
         self.assertEqual(result["alternative_title_en"], "Delicious in Dungeon")
         fields = mock_api_request.call_args.kwargs["params"]["fields"]
         self.assertIn("alternative_titles", fields)
+
+    @patch("app.providers.mal.services.api_request")
+    def test_anime_preserves_internal_spaces_in_english_alternative_title(
+        self, mock_api_request
+    ):
+        response = dict(API_RESPONSE)
+        response["alternative_titles"] = {"en": "Delicious in Dungeon"}
+        mock_api_request.return_value = response
+
+        result = mal.anime("38003", refresh_cache=True)
+
+        self.assertEqual(result["alternative_title_en"], "Delicious in Dungeon")
 
     @patch("app.providers.mal.services.api_request")
     def test_anime_uses_empty_alternative_title_for_missing_or_invalid_values(

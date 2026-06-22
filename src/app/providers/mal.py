@@ -112,7 +112,9 @@ def _fetch_anime_from_api(media_id):
     if not isinstance(alternative_titles, dict):
         alternative_titles = {}
     alternative_title_en = alternative_titles.get("en")
-    if not isinstance(alternative_title_en, str):
+    if isinstance(alternative_title_en, str):
+        alternative_title_en = alternative_title_en.strip()
+    else:
         alternative_title_en = ""
 
     return {

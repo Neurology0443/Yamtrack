@@ -35,6 +35,7 @@ class AnimeSeriesViewTests(TestCase):
         root_title=None,
         root_image=None,
         display_alternative_title_en="",
+        projection_version=None,
     ):
         item = Item.objects.create(
             media_id=str(media_id),
@@ -47,6 +48,9 @@ class AnimeSeriesViewTests(TestCase):
         anime._skip_hot_priority = True
         anime.save()
         if root_id is not None:
+            membership_kwargs = {}
+            if projection_version:
+                membership_kwargs["projection_version"] = projection_version
             AnimeSeriesViewMembership.objects.create(
                 user=self.user,
                 media_id=str(media_id),
@@ -56,9 +60,52 @@ class AnimeSeriesViewTests(TestCase):
                 display_image=(root_image or f"https://example.com/root-{root_id}.jpg"),
                 display_media_type="tv",
                 display_alternative_title_en=display_alternative_title_en,
+                **membership_kwargs,
             )
         return anime
 
+    def test_series_layout_keeps_v2_memberships_visible_after_v3_bump(self):
+        self.create_anime(
+            "1",
+            root_id="1",
+            root_title="Dungeon Meshi",
+            projection_version="franchise_root_v2",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        self.assertContains(response, "Dungeon Meshi")
+        self.assertEqual(response.context["media_list"].paginator.count, 1)
+        self.assertEqual(
+            response.context["media_list"].object_list[0].display_projection_version,
+            "franchise_root_v2",
+        )
+
+    def test_series_layout_uses_newer_group_metadata_when_available(self):
+        self.create_anime(
+            "1",
+            root_id="10",
+            root_title="Legacy Root",
+            projection_version="franchise_root_v2",
+        )
+        self.create_anime(
+            "2",
+            root_id="10",
+            root_title="Current Root",
+            projection_version="franchise_root_v3",
+        )
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.ANIME.value]),
+            {"layout": "series"},
+        )
+
+        group = response.context["media_list"].object_list[0]
+        self.assertEqual(group.display_title, "Current Root")
+        self.assertEqual(group.display_projection_version, "franchise_root_v3")
 
     def test_series_card_hover_overlay_uses_english_alternative_title(self):
         self.create_anime(
@@ -75,6 +122,9 @@ class AnimeSeriesViewTests(TestCase):
 
         self.assertContains(response, "Dungeon Meshi")
         self.assertContains(response, "Delicious in Dungeon")
+        self.assertContains(response, "hover-tap:opacity-100")
+        self.assertNotContains(response, "trackModal")
+        self.assertNotContains(response, "rating")
         self.assertEqual(
             response.context["media_list"].object_list[0].display_alternative_title_en,
             "Delicious in Dungeon",

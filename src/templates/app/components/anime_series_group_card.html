@@ -7,7 +7,7 @@
            class="lazyload h-full w-full object-cover"
            {% if group.display_image %}data-src="{{ group.display_image }}"{% endif %}
            src="{{ IMG_NONE }}">
-      <div class="absolute inset-0 flex items-center justify-center bg-black/80 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+      <div class="absolute inset-0 flex items-center justify-center bg-black/80 p-4 opacity-0 transition-opacity duration-200 hover-tap:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100">
         <span class="line-clamp-4 text-center text-base font-semibold text-white">{{ group.display_alternative_title_en|default:group.display_title }}</span>
       </div>
     </div>
