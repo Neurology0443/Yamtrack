@@ -11,12 +11,8 @@
         <span class="line-clamp-4 text-center text-base font-semibold text-white">{{ group.display_alternative_title_en|default:group.display_title }}</span>
       </div>
     </div>
-    <div class="p-4">
-      <h2 class="line-clamp-2 text-base font-semibold text-white hover:text-indigo-400">{{ group.display_title }}</h2>
-      <div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-400">
-        {% if group.display_media_type %}<span class="uppercase">{{ group.display_media_type }}</span>{% endif %}
-        <span class="ml-auto">{{ group.entries|length }} tracked entr{{ group.entries|length|pluralize:"y,ies" }}</span>
-      </div>
+    <div class="p-3">
+      <span class="text-xs text-gray-400">{{ group.entries|length }} tracked entr{{ group.entries|length|pluralize:"y,ies" }}</span>
     </div>
   </a>
 </article>

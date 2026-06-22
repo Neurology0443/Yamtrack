@@ -122,7 +122,13 @@ class AnimeSeriesViewTests(TestCase):
 
         self.assertContains(response, "Dungeon Meshi")
         self.assertContains(response, "Delicious in Dungeon")
+        self.assertContains(response, "1 tracked entry")
         self.assertContains(response, "hover-tap:opacity-100")
+        self.assertNotContains(response, "<h2")
+        self.assertNotContains(response, "line-clamp-2 text-base font-semibold")
+        self.assertNotContains(
+            response, '<span class="uppercase">tv</span>', html=True
+        )
         self.assertNotContains(response, "trackModal")
         self.assertNotContains(response, "rating")
         self.assertEqual(
@@ -145,6 +151,12 @@ class AnimeSeriesViewTests(TestCase):
                 'font-semibold text-white">Dungeon Meshi</span>'
             ),
             html=True,
+        )
+        self.assertContains(response, "1 tracked entry")
+        self.assertNotContains(response, "<h2")
+        self.assertNotContains(response, "line-clamp-2 text-base font-semibold")
+        self.assertNotContains(
+            response, '<span class="uppercase">tv</span>', html=True
         )
         self.assertEqual(
             response.context["media_list"].object_list[0].display_alternative_title_en,
@@ -201,6 +213,11 @@ class AnimeSeriesViewTests(TestCase):
         self.assertContains(response, "Dragon Ball")
         self.assertNotContains(response, "Dragon Ball Z")
         self.assertContains(response, "2 tracked entries")
+        self.assertNotContains(response, "<h2")
+        self.assertNotContains(response, "line-clamp-2 text-base font-semibold")
+        self.assertNotContains(
+            response, '<span class="uppercase">tv</span>', html=True
+        )
         self.assertContains(response, f'href="{root_url}"')
         self.assertNotContains(response, "divide-y divide-gray-700/60")
 
