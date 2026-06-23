@@ -6,6 +6,7 @@ This runbook is the quick reference for franchise grouping/import and notificati
 
 - `app.tests.services.test_anime_franchise`
 - `app.tests.services.test_anime_franchise_snapshot`
+- `app.tests.services.test_anime_series_view_projection`
 - `app.tests.services.test_anime_franchise_ui_pipeline`
 - `app.tests.services.test_anime_franchise_import_profiles`
 - `app.tests.services.test_anime_import_state`
@@ -25,6 +26,7 @@ From repo root:
 cd src
 python manage.py test app.tests.services.test_anime_franchise
 python manage.py test app.tests.services.test_anime_franchise_snapshot
+python manage.py test app.tests.services.test_anime_series_view_projection
 python manage.py test app.tests.services.test_anime_franchise_ui_pipeline
 python manage.py test app.tests.services.test_anime_franchise_import_profiles
 python manage.py test app.tests.services.test_anime_import_state
@@ -44,6 +46,7 @@ cd src
 python manage.py test \
   app.tests.services.test_anime_franchise \
   app.tests.services.test_anime_franchise_snapshot \
+  app.tests.services.test_anime_series_view_projection \
   app.tests.services.test_anime_franchise_ui_pipeline \
   app.tests.services.test_anime_franchise_import_profiles \
   app.tests.services.test_anime_import_state \
@@ -61,6 +64,7 @@ python manage.py test \
 ```bash
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_snapshot"
+docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_series_view_projection"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_ui_pipeline"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_import_profiles"
 docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_import_state"
@@ -76,7 +80,7 @@ docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test event
 ## When to run which tests
 
 - Changed grouping graph/snapshot/assembler/rules/UI profile/UI pipeline:
-  - run service tests (including `app.tests.services.test_anime_franchise_ui_pipeline` for promoted continuity + section placement flow) + `test_media_details`.
+  - run service tests (including `app.tests.services.test_anime_series_view_projection` for Anime Series View grouping/projection semantics and `app.tests.services.test_anime_franchise_ui_pipeline` for promoted continuity + section placement flow) + `test_media_details`.
 - Changed import profiles/state/task/schedule/command:
   - run import/state/task/schedule/command tests.
 - Changed entry-added notification behavior:
