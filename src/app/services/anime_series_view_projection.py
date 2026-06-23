@@ -546,11 +546,11 @@ class AnimeSeriesViewProjectionBuilder:
     def _candidate_sort_key(self, candidate, snapshot):
         node = snapshot.nodes_by_media_id[candidate.media_id]
         return (
+            0 if candidate.is_in_series_line else 1,
             0 if candidate.relation_type in SERIES_VIEW_STRONG_REROOT_RELATIONS else 1,
             SERIES_VIEW_REROOT_RELATION_PRIORITY[candidate.relation_type],
             self._media_type_rank(node.media_type),
             node.start_date or date.max,
-            0 if candidate.is_in_series_line else 1,
             self._media_id_sort_key(candidate.media_id),
         )
 
