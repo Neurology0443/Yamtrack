@@ -125,33 +125,12 @@ def _build_non_tv_seed_to_tv_context(
     }
 
 
-def _build_local_continuity(snapshot, seed_media_id: str) -> dict | None:
-    payload = _build_non_tv_seed_to_tv_context(snapshot, seed_media_id=seed_media_id)
-    if payload is None:
-        return None
-    payload = dict(payload)
-    payload["detail_payload_kind"] = (
-        anime_franchise_cache.DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY
-    )
-    payload["rule_key"] = "local_continuity_v1"
-    return payload
-
-
 DETAIL_PAYLOAD_RULES = (
     DetailPayloadRule(
         rule_key="non_tv_seed_to_tv_context_v1",
         detail_payload_kind=anime_franchise_cache.DETAIL_PAYLOAD_KIND_SEED_CONTEXT,
         priority=10,
         build=lambda snapshot, seed_media_id: _build_non_tv_seed_to_tv_context(
-            snapshot,
-            seed_media_id=seed_media_id,
-        ),
-    ),
-    DetailPayloadRule(
-        rule_key="local_continuity_v1",
-        detail_payload_kind=anime_franchise_cache.DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY,
-        priority=20,
-        build=lambda snapshot, seed_media_id: _build_local_continuity(
             snapshot,
             seed_media_id=seed_media_id,
         ),

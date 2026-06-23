@@ -38,10 +38,8 @@ PAYLOAD_ROLE_GLOBAL = "global"
 PAYLOAD_ROLE_DETAIL_SCOPED = "detail_scoped"
 PAYLOAD_KIND_CANONICAL_FRANCHISE = "canonical_franchise"
 DETAIL_PAYLOAD_KIND_SEED_CONTEXT = "seed_context"
-DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY = "local_continuity"
 VALID_DETAIL_PAYLOAD_KINDS = {
     DETAIL_PAYLOAD_KIND_SEED_CONTEXT,
-    DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY,
 }
 
 
@@ -83,7 +81,6 @@ class FranchisePayloadLookup:
     canonical_media_id: str
     payload: dict | None
     meta: dict
-    alias_hit: bool = False
 
 
 @dataclass(frozen=True)
@@ -108,6 +105,11 @@ def get_queue_lock_key(media_id) -> str:
 def get_task_lock_key(media_id) -> str:
     """Return the worker execution deduplication lock key."""
     return f"{get_global_payload_key(media_id)}:task_lock"
+
+
+def get_build_meta_key(media_id) -> str:
+    """Return build/scheduling metadata key for media_id."""
+    return f"mal_anime_franchise_build_{media_id}:meta"
 
 
 def get_ttl_seconds() -> int:
@@ -367,9 +369,6 @@ def default_meta(**overrides) -> dict:
         "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
         "fetched_at": None,
         "last_accessed_at": timezone.now().isoformat(),
-        "last_attempt_at": None,
-        "last_error_at": None,
-        "last_error_message": "",
         "node_count": 0,
         "build_duration_seconds": None,
         "truncated": False,
@@ -379,11 +378,7 @@ def default_meta(**overrides) -> dict:
     meta.update(overrides)
     meta["fetched_at"] = _serialize_datetime(meta.get("fetched_at"))
     meta["last_accessed_at"] = _serialize_datetime(meta.get("last_accessed_at"))
-    meta["last_attempt_at"] = _serialize_datetime(meta.get("last_attempt_at"))
-    meta["last_error_at"] = _serialize_datetime(meta.get("last_error_at"))
     meta["last_success_at"] = _serialize_datetime(meta.get("last_success_at"))
-    if meta["last_error_message"] is None:
-        meta["last_error_message"] = ""
     if meta["truncation_reason"] is None:
         meta["truncation_reason"] = ""
     meta["truncated"] = bool(meta.get("truncated"))
@@ -405,7 +400,6 @@ def normalize_meta(meta) -> dict:
         normalized["schema_version"] = settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
     if not normalized.get("last_accessed_at"):
         normalized["last_accessed_at"] = timezone.now().isoformat()
-    normalized["last_error_message"] = normalized.get("last_error_message") or ""
     normalized["truncation_reason"] = normalized.get("truncation_reason") or ""
     normalized["node_count"] = _safe_int(normalized.get("node_count"), 0)
     normalized["truncated"] = bool(normalized.get("truncated"))
@@ -588,7 +582,6 @@ def _load_payload_from_keys(
         canonical_media_id=str(payload.get("canonical_root_media_id") or media_id),
         payload=dict(payload),
         meta=meta,
-        alias_hit=False,
     )
 
 
@@ -728,9 +721,7 @@ def replace_aliases(
         if str(old_media_id) not in new_alias_ids:
             _delete_alias_if_owned_by(old_media_id, canonical_media_id)
     for aliased_media_id in sorted(new_alias_ids):
-        direct = cache.get(get_global_payload_key(aliased_media_id))
-        if direct is not None and not is_valid_global_payload(direct):
-            delete_global_payload(aliased_media_id)
+        delete_global_payload(aliased_media_id)
         cache.set(
             get_alias_key(aliased_media_id),
             _build_alias_record(
@@ -784,7 +775,6 @@ def load_valid_alias_payload_for_media(media_id) -> FranchisePayloadLookup | Non
         canonical_media_id=canonical_media_id,
         payload=lookup.payload,
         meta=lookup.meta,
-        alias_hit=True,
     )
 
 
@@ -870,7 +860,7 @@ def save_scoped_payload(media_id, payload, *, timeout=None, meta=None) -> dict:
     )
 
 
-def _build_save_meta(
+def build_payload_meta(
     payload,
     *,
     fetched_at=None,
@@ -879,13 +869,12 @@ def _build_save_meta(
     truncated=False,
     truncation_reason="",
 ):
+    """Build normalized display payload metadata for a saved payload."""
     now = fetched_at or timezone.now()
     return default_meta(
         schema_version=settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
         fetched_at=now,
         last_accessed_at=now,
-        last_error_at=None,
-        last_error_message="",
         node_count=node_count if node_count is not None else _count_nodes(payload),
         build_duration_seconds=build_duration_seconds,
         truncated=truncated,
@@ -913,24 +902,63 @@ def _is_within_cooldown(value, hours) -> bool:
     return parsed > timezone.now() - timedelta(hours=hours)
 
 
-def can_schedule_build(meta, *, has_payload=False) -> bool:
-    """Return whether a background build/refresh may be queued."""
-    meta = normalize_meta(meta)
-    if has_payload and is_fresh(meta):
-        return False
+def default_build_meta(**overrides) -> dict:
+    """Return normalized metadata for build scheduling state."""
+    meta = {
+        "schema_version": settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "last_attempt_at": None,
+        "last_error_at": None,
+        "last_error_message": "",
+        "last_success_at": None,
+    }
+    meta.update(overrides)
+    meta["last_attempt_at"] = _serialize_datetime(meta.get("last_attempt_at"))
+    meta["last_error_at"] = _serialize_datetime(meta.get("last_error_at"))
+    meta["last_success_at"] = _serialize_datetime(meta.get("last_success_at"))
+    meta["last_error_message"] = meta.get("last_error_message") or ""
+    return meta
+
+
+def normalize_build_meta(meta) -> dict:
+    """Return normalized build/scheduling metadata."""
+    base = default_build_meta()
+    if isinstance(meta, dict):
+        for key in base:
+            if key in meta:
+                base[key] = meta[key]
+    return default_build_meta(**base)
+
+
+def load_build_meta(media_id) -> dict:
+    """Load normalized build/scheduling metadata for media_id."""
+    return normalize_build_meta(cache.get(get_build_meta_key(media_id)))
+
+
+def update_build_meta(media_id, updates) -> dict:
+    """Update build/scheduling metadata for media_id."""
+    meta = load_build_meta(media_id)
+    meta.update(updates)
+    meta = normalize_build_meta(meta)
+    cache.set(get_build_meta_key(media_id), meta, timeout=get_ttl_seconds())
+    return meta
+
+
+def can_schedule_build(build_meta) -> bool:
+    """Return whether build cooldowns allow a background build/refresh."""
+    build_meta = normalize_build_meta(build_meta)
     if _is_within_cooldown(
-        meta.get("last_error_at"),
+        build_meta.get("last_error_at"),
         settings.ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS,
     ):
         return False
     return not _is_within_cooldown(
-        meta.get("last_attempt_at"),
+        build_meta.get("last_attempt_at"),
         settings.ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS,
     )
 
 
 def update_meta(media_id, updates) -> dict:
-    """Update sidecar metadata while preserving any existing payload."""
+    """Update global payload metadata while preserving any existing global payload."""
     ttl = get_ttl_seconds()
     payload = cache.get(get_global_payload_key(media_id))
     meta = normalize_meta(cache.get(get_global_meta_key(media_id)))
@@ -943,13 +971,13 @@ def update_meta(media_id, updates) -> dict:
 
 
 def mark_attempt(media_id) -> dict:
-    """Record a franchise build attempt."""
-    return update_meta(media_id, {"last_attempt_at": timezone.now().isoformat()})
+    """Record a franchise build attempt in build metadata."""
+    return update_build_meta(media_id, {"last_attempt_at": timezone.now().isoformat()})
 
 
 def mark_error(media_id, error_message) -> dict:
-    """Record a franchise build error without deleting any previous payload."""
-    return update_meta(
+    """Record a franchise build error in build metadata."""
+    return update_build_meta(
         media_id,
         {
             "last_error_at": timezone.now().isoformat(),
@@ -958,13 +986,12 @@ def mark_error(media_id, error_message) -> dict:
     )
 
 
-def maybe_schedule_build(media_id, meta=None, *, has_payload=False) -> bool:
-    """Queue a franchise build if cooldown and queue-lock checks permit."""
+def maybe_schedule_build(media_id, payload_meta=None, *, has_payload=False) -> bool:
+    """Queue a franchise build if freshness and build cooldowns permit."""
     media_id = str(media_id)
-    if meta is None:
-        meta = cache.get(get_global_meta_key(media_id))
-    meta = normalize_meta(meta)
-    if not can_schedule_build(meta, has_payload=has_payload):
+    if has_payload and is_fresh(payload_meta):
+        return False
+    if not can_schedule_build(load_build_meta(media_id)):
         return False
 
     lock_key = get_queue_lock_key(media_id)

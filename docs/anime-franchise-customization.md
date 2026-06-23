@@ -249,3 +249,11 @@ Rendering, task, and view changes should normally update:
 ## Scoped detail payload rules
 
 Detail-specific payloads are selected by ordered rules in `anime_franchise_scoped_payload.py`. The first valid rule result is saved under `mal_anime_franchise_scoped_<seed_id>` with `payload_role = "detail_scoped"`, `detail_payload_kind`, `rule_key`, `build_seed_media_id`, and `global_canonical_root_media_id`. Rules must not write Redis or include user-specific data.
+
+## Detail-scoped rules
+
+The detail-scoped rule system currently ships with one implemented rule:
+
+- `non_tv_seed_to_tv_context_v1`, which produces `detail_payload_kind = "seed_context"` for supported non-TV seeds.
+
+Do not add placeholder rules. New detail-scoped rules should only be introduced when they have distinct behavior and dedicated tests.

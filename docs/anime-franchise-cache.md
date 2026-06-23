@@ -20,7 +20,7 @@ A normal lifecycle looks like this:
 ```text
 detail page opened
  -> cache lookup by current media ID
- -> global/scoped payload or canonical alias resolved
+ -> scoped payload, global canonical payload, or canonical alias resolved
  -> payload validated
  -> request-specific user data added
  -> page rendered
@@ -222,7 +222,7 @@ After import-created entries commit, `schedule_mal_anime_franchise_cache_warm()`
 
 ## Detail-page behavior
 
-- `load_detail_franchise_payload()` resolves global/scoped payloads and aliases.
+- `load_detail_franchise_payload()` resolves scoped payloads, global canonical payloads, and aliases.
 - Valid payloads are prepared with current-user data by `prepare_anime_franchise_context()`.
 - Stale payloads can render and queue refresh.
 - Misses and invalid payloads keep the normal related-anime fallback visible for that request.
@@ -241,12 +241,14 @@ After import-created entries commit, `schedule_mal_anime_franchise_cache_warm()`
 
 Exact key helpers in `anime_franchise_cache.py`:
 
-- Payload: `mal_anime_franchise_<media_id>`
-- Metadata: `mal_anime_franchise_<media_id>:meta`
+- Global payload: `mal_anime_franchise_<canonical_id>`
+- Global metadata: `mal_anime_franchise_<canonical_id>:meta`
+- Scoped payload: `mal_anime_franchise_scoped_<seed_id>`
+- Scoped metadata: `mal_anime_franchise_scoped_<seed_id>:meta`
 - Alias: `mal_anime_franchise_alias_<media_id>`
 - Alias index: `mal_anime_franchise_<canonical_media_id>:aliases`
-- Queue lock: `mal_anime_franchise_<media_id>:queue_lock`
-- Task lock: `mal_anime_franchise_<media_id>:task_lock`
+- Queue lock: `mal_anime_franchise_<canonical_or_seed_id>:queue_lock`
+- Task lock: `mal_anime_franchise_<canonical_or_seed_id>:task_lock`
 - Import task lock: `anime-franchise-import:<profile>`
 
 ## Commands

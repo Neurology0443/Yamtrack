@@ -6,7 +6,7 @@ from django.test import SimpleTestCase, override_settings
 
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_scoped_payload import (
-    build_scoped_seed_payload_from_snapshot,
+    build_detail_scoped_payload_from_snapshot,
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -67,7 +67,7 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
             "39597": self._node("39597", title="Sequel"),
         }
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             self._snapshot(seed=seed, nodes=nodes, relations=relations),
             seed_media_id="40489",
         )
@@ -76,15 +76,23 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
         self.assertEqual(payload["root_media_id"], "40489")
         self.assertEqual(payload["canonical_root_media_id"], "40489")
         self.assertEqual(payload["series"]["entries"], [])
+        self.assertEqual(
+            payload["payload_role"], anime_franchise_cache.PAYLOAD_ROLE_DETAIL_SCOPED
+        )
+        self.assertEqual(
+            payload["detail_payload_kind"],
+            anime_franchise_cache.DETAIL_PAYLOAD_KIND_SEED_CONTEXT,
+        )
+        self.assertEqual(payload["rule_key"], "non_tv_seed_to_tv_context_v1")
         related_ids = [entry["media_id"] for entry in payload["sections"][0]["entries"]]
         self.assertEqual(related_ids, ["36474", "39597"])
-        self.assertTrue(anime_franchise_cache.is_valid_payload(payload))
+        self.assertTrue(anime_franchise_cache.is_valid_scoped_payload(payload))
 
     def test_returns_none_for_canonical_seed(self):
         seed = self._node("11757", media_type="tv_special")
         snapshot = self._snapshot(seed=seed, nodes={"11757": seed}, canonical="11757")
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             snapshot,
             seed_media_id="11757",
         )
@@ -95,7 +103,7 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
         seed = self._node("40489", media_type="tv")
         snapshot = self._snapshot(seed=seed, nodes={"40489": seed})
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             snapshot,
             seed_media_id="40489",
         )
@@ -110,7 +118,7 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
             "50000": self._node("50000", media_type="movie"),
         }
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             self._snapshot(seed=seed, nodes=nodes, relations=[relation]),
             seed_media_id="40489",
         )
@@ -128,7 +136,7 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
             "36474": self._node("36474", title="Main Story"),
         }
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             self._snapshot(seed=seed, nodes=nodes, relations=relations),
             seed_media_id="40489",
         )
@@ -145,13 +153,13 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
             "36474": self._node("36474", title="Prequel", start_date=date(2019, 1, 1)),
         }
 
-        payload = build_scoped_seed_payload_from_snapshot(
+        payload = build_detail_scoped_payload_from_snapshot(
             self._snapshot(seed=seed, nodes=nodes, relations=[relation]),
             seed_media_id="40489",
         )
 
         json.dumps(payload)
-        self.assertTrue(anime_franchise_cache.is_valid_payload(payload))
+        self.assertTrue(anime_franchise_cache.is_valid_scoped_payload(payload))
         entry = payload["sections"][0]["entries"][0]
         self.assertEqual(entry["start_date"], "2019-01-01")
         self.assertEqual(entry["runtime_minutes"], 24)

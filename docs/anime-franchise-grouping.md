@@ -50,15 +50,15 @@ MAL anime franchise payloads are cached as display-ready read models.
 
 Cache keys:
 
-- `mal_anime_franchise_<media_id>` stores a global/scoped payload.
+- `mal_anime_franchise_<canonical_id>` stores only a global canonical payload.
 - `mal_anime_franchise_alias_<media_id>` stores a lightweight alias to a canonical payload.
 
 Expected states for a media id:
 
-- `DIRECT`: a global/scoped payload exists and no alias exists.
-- `ALIAS`: no global/scoped payload exists and an alias points to a canonical payload.
-- `MISS`: no global/scoped payload and no alias exist.
-- `DIRECT + ALIAS`: invalid state; the global/scoped payload would shadow alias resolution.
+- `GLOBAL`: a canonical global payload exists.
+- `ALIAS`: a lightweight alias points to a canonical global payload.
+- `MISS`: no scoped/global payload and no alias exist.
+- `GLOBAL + ALIAS for a non-canonical id`: invalid conflict cleaned by alias replacement.
 
 Direct payloads are valid for canonical roots, local mini-franchises, and non-aliasable satellites that need their own detail-page context. An alias is not required for every entry that appears in a franchise payload.
 

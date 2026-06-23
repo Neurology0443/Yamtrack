@@ -330,8 +330,7 @@ def media_search(request):
 def media_details(request, source, media_type, media_id, title):  # noqa: ARG001, C901, PLR0912
     """Return the details page for a media item."""
     use_mal_anime_stale_cache = (
-        source == Sources.MAL.value
-        and media_type == MediaTypes.ANIME.value
+        source == Sources.MAL.value and media_type == MediaTypes.ANIME.value
     )
     media_metadata = services.get_media_metadata(
         media_type,
@@ -401,7 +400,7 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                 franchise_refresh_considered = True
                 anime_franchise_cache.maybe_schedule_build(
                     franchise_cache_media_id,
-                    franchise_meta,
+                    payload_meta=None,
                     has_payload=False,
                 )
             else:
@@ -411,13 +410,12 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
                         media_metadata["related"].pop("related_anime", None)
                 else:
                     anime_franchise = None
-            if (
-                not franchise_refresh_considered
-                and not anime_franchise_cache.is_fresh(franchise_meta)
+            if not franchise_refresh_considered and not anime_franchise_cache.is_fresh(
+                franchise_meta
             ):
                 anime_franchise_cache.maybe_schedule_build(
                     franchise_cache_media_id,
-                    franchise_meta,
+                    payload_meta=franchise_meta,
                     has_payload=True,
                 )
         else:
@@ -428,7 +426,9 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
             )
             related_anime = media_metadata.get("related", {}).get("related_anime")
             if (
-                anime_franchise_cache.maybe_schedule_build(media_id, franchise_meta)
+                anime_franchise_cache.maybe_schedule_build(
+                    media_id, payload_meta=None, has_payload=False
+                )
                 and related_anime
             ):
                 messages.info(

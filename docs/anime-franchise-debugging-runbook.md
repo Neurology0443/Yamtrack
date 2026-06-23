@@ -169,7 +169,7 @@ If an alias does not resolve:
 
 ## Franchise payload cache alias audit
 
-A healthy franchise cache state must not contain both a global/scoped payload and an alias for the same MAL anime media id. `load_detail_franchise_payload(media_id)` checks the global/scoped payload first, so a stale global/scoped payload would shadow an alias that should resolve to the canonical payload.
+A healthy franchise cache state must not contain both a non-canonical global payload and an alias for the same MAL anime media id. `load_detail_franchise_payload(media_id)` checks scoped, global, then alias, so a stale non-canonical global payload would shadow an alias that should resolve to the canonical payload.
 
 Run this compact audit from the repository root in Docker dev:
 
@@ -195,7 +195,7 @@ for media_id in media_ids:
 print(f"checked_media_ids: {len(media_ids)}")
 print(f"conflicts: {len(conflicts)}")
 for media_id in conflicts:
-    print(f"CONFLICT_DIRECT_AND_ALIAS {media_id}")
+    print(f"CONFLICT_GLOBAL_AND_ALIAS {media_id}")
 '
 ```
 
@@ -207,10 +207,10 @@ conflicts: 0
 
 State meanings:
 
-- `DIRECT`: global/scoped payload only.
+- `GLOBAL`: canonical global payload only.
 - `ALIAS`: alias only.
 - `MISS`: no payload and no alias.
-- `CONFLICT_DIRECT_AND_ALIAS`: invalid; the global/scoped payload would shadow alias resolution.
+- `CONFLICT_GLOBAL_AND_ALIAS`: invalid; the non-canonical global payload would shadow alias resolution.
 
 For an expanded inspection, include the canonical payload metadata behind aliases:
 
@@ -229,7 +229,7 @@ for media_id in Item.objects.filter(
     if payload and alias:
         print(
             media_id,
-            "CONFLICT_DIRECT_AND_ALIAS",
+            "CONFLICT_GLOBAL_AND_ALIAS",
             "direct_root=",
             payload.get("root_media_id"),
             "alias=",
@@ -238,7 +238,7 @@ for media_id in Item.objects.filter(
     elif payload:
         print(
             media_id,
-            "DIRECT",
+            "GLOBAL",
             "covered=",
             payload.get("covered_media_ids", []),
             "aliasable=",
@@ -314,7 +314,7 @@ docker compose exec yamtrack celery -A config inspect active
 
 ## Cache state names
 
-Recommended state labels are `GLOBAL`, `SCOPED`, `ALIAS`, `MISS`, `INVALID_LEGACY_DELETED`, and `ALIAS_TARGET_INVALID_DELETED`. `DIRECT + ALIAS` is not a normal state for global payloads; `ALIAS + SCOPED` is allowed because scoped payloads live under `mal_anime_franchise_scoped_<seed_id>`.
+Recommended state labels are `GLOBAL`, `SCOPED`, `ALIAS`, `MISS`, `INVALID_LEGACY_DELETED`, and `ALIAS_TARGET_INVALID_DELETED`. `GLOBAL + ALIAS for the same non-canonical id` is not a normal state; `ALIAS + SCOPED` is allowed because scoped payloads live under `mal_anime_franchise_scoped_<seed_id>`.
 
 Run cleanup in dry-run first:
 

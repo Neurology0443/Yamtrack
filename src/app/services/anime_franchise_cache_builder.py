@@ -26,7 +26,7 @@ class AnimeFranchiseCacheBuildService:
         """Create the builder with an optional shared build session."""
         self.build_session = build_session or AnimeFranchiseBuildSession()
 
-    def build_and_save(  # noqa: PLR0915
+    def build_and_save(
         self,
         media_id,
         *,
@@ -104,7 +104,7 @@ class AnimeFranchiseCacheBuildService:
                 anime_franchise_cache.save_global_payload(
                     canonical_media_id,
                     canonical_payload,
-                    meta=anime_franchise_cache._build_save_meta(
+                    meta=anime_franchise_cache.build_payload_meta(
                         canonical_payload,
                         fetched_at=timezone.now(),
                         node_count=node_count,
@@ -128,11 +128,6 @@ class AnimeFranchiseCacheBuildService:
                     if existing_canonical_lookup
                     else None
                 )
-                existing_canonical_meta = (
-                    existing_canonical_lookup.meta
-                    if existing_canonical_lookup
-                    else anime_franchise_cache.normalize_meta(None)
-                )
                 existing_aliasable_ids = set()
                 if existing_canonical_payload:
                     existing_aliasable_ids = {
@@ -151,7 +146,7 @@ class AnimeFranchiseCacheBuildService:
                 else:
                     anime_franchise_cache.maybe_schedule_build(
                         canonical_media_id,
-                        existing_canonical_meta,
+                        payload_meta=None,
                         has_payload=False,
                     )
                 seed_is_aliasable_in_existing_canonical = (
@@ -184,7 +179,7 @@ class AnimeFranchiseCacheBuildService:
                 anime_franchise_cache.save_scoped_payload(
                     media_id,
                     scoped_payload,
-                    meta=anime_franchise_cache._build_save_meta(
+                    meta=anime_franchise_cache.build_payload_meta(
                         scoped_payload,
                         fetched_at=timezone.now(),
                         node_count=scoped_node_count,
