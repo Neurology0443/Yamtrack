@@ -9,13 +9,16 @@ SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
         "full_story",
         "side_story",
         "spin_off",
+        "alternative_setting",
+        "alternative_version",
     }
 )
 
 SERIES_VIEW_ROOT_MEDIA_TYPES = frozenset({"tv", "ona", "movie", "ova"})
 SERIES_VIEW_ALTERNATIVE_RELATIONS = frozenset(
     {
-
+        "alternative_version",
+        "alternative_setting",
     }
 )
 SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS = frozenset(
