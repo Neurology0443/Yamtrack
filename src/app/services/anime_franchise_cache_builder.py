@@ -31,7 +31,7 @@ class AnimeFranchiseCacheBuildService:
         media_id,
         *,
         refresh_cache=False,
-        force_cache_rebuild=False,
+        force_cache_rebuild=False,  # noqa: ARG002
     ) -> dict:
         """Build and save UI cache payloads.
 
@@ -66,28 +66,12 @@ class AnimeFranchiseCacheBuildService:
             )
             is_canonical_build = media_id == canonical_media_id
             duration = time.monotonic() - started_at
-            existing_alias_lookup = (
-                None
-                if force_cache_rebuild
-                else anime_franchise_cache.load_valid_alias_payload_for_media(media_id)
-            )
-            if existing_alias_lookup is not None:
+            if not is_canonical_build:
+                # A valid alias is a canonical fallback, not a reason to skip
+                # rebuilding/replacing the scoped detail payload for this seed.
                 anime_franchise_cache.delete_global_payload(media_id)
-                return {
-                    "media_id": media_id,
-                    "canonical_media_id": existing_alias_lookup.canonical_media_id,
-                    "built": True,
-                    "skipped_direct_write": True,
-                    "reason": "valid_alias_exists",
-                    "node_count": node_count,
-                    "duration": duration,
-                    "truncated": truncated,
-                    "truncation_reason": truncation_reason,
-                    "alias_count": 0,
-                }
 
             alias_count = 0
-            seed_is_aliasable_in_existing_canonical = False
             if is_canonical_build:
                 canonical_payload.update(
                     {
@@ -128,15 +112,7 @@ class AnimeFranchiseCacheBuildService:
                     if existing_canonical_lookup
                     else None
                 )
-                existing_aliasable_ids = set()
                 if existing_canonical_payload:
-                    existing_aliasable_ids = {
-                        str(aliasable_media_id)
-                        for aliasable_media_id in existing_canonical_payload.get(
-                            "aliasable_media_ids",
-                            [],
-                        )
-                    }
                     if can_use_aliases:
                         alias_count = anime_franchise_cache.replace_aliases(
                             canonical_media_id,
@@ -149,21 +125,11 @@ class AnimeFranchiseCacheBuildService:
                         payload_meta=None,
                         has_payload=False,
                     )
-                seed_is_aliasable_in_existing_canonical = (
-                    media_id in existing_aliasable_ids
-                )
-
             scoped_payload = build_detail_scoped_payload_from_snapshot(
                 snapshot,
                 seed_media_id=media_id,
             )
-            if not is_canonical_build and seed_is_aliasable_in_existing_canonical:
-                anime_franchise_cache.delete_global_payload(media_id)
-            if (
-                scoped_payload is not None
-                and not is_canonical_build
-                and not seed_is_aliasable_in_existing_canonical
-            ):
+            if scoped_payload is not None and not is_canonical_build:
                 scoped_node_count = len(
                     anime_franchise_cache.extract_payload_media_ids(scoped_payload),
                 )
@@ -186,6 +152,8 @@ class AnimeFranchiseCacheBuildService:
                         build_duration_seconds=duration,
                     ),
                 )
+            elif not is_canonical_build:
+                anime_franchise_cache.delete_scoped_payload(media_id)
 
             return {  # noqa: TRY300
                 "media_id": media_id,
