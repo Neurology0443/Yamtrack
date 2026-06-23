@@ -24,6 +24,7 @@ SERIES_VIEW_ALTERNATIVE_RELATIONS = frozenset(
 SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS = frozenset(
     {
         "alternative_version",
+        "alternative_setting",
     }
 )
 SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
