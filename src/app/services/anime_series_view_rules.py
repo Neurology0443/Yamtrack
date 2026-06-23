@@ -35,8 +35,6 @@ SERIES_VIEW_STRONG_REROOT_RELATIONS = frozenset(
     {
         "parent_story",
         "full_story",
-        "alternative_version",
-        "alternative_setting",
     }
 )
 SERIES_VIEW_WEAK_REROOT_RELATIONS = frozenset(
