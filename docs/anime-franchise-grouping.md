@@ -50,15 +50,15 @@ MAL anime franchise payloads are cached as display-ready read models.
 
 Cache keys:
 
-- `mal_anime_franchise_<media_id>` stores a direct payload.
+- `mal_anime_franchise_<media_id>` stores a global/scoped payload.
 - `mal_anime_franchise_alias_<media_id>` stores a lightweight alias to a canonical payload.
 
 Expected states for a media id:
 
-- `DIRECT`: a direct payload exists and no alias exists.
-- `ALIAS`: no direct payload exists and an alias points to a canonical payload.
-- `MISS`: no direct payload and no alias exist.
-- `DIRECT + ALIAS`: invalid state; the direct payload would shadow alias resolution.
+- `DIRECT`: a global/scoped payload exists and no alias exists.
+- `ALIAS`: no global/scoped payload exists and an alias points to a canonical payload.
+- `MISS`: no global/scoped payload and no alias exist.
+- `DIRECT + ALIAS`: invalid state; the global/scoped payload would shadow alias resolution.
 
 Direct payloads are valid for canonical roots, local mini-franchises, and non-aliasable satellites that need their own detail-page context. An alias is not required for every entry that appears in a franchise payload.
 
@@ -503,7 +503,7 @@ Current coarse policy:
 
 ## Cache interaction
 
-The view uses `anime_franchise_cache.load_payload_for_media(media_id)`:
+The view uses `anime_franchise_cache.load_detail_franchise_payload(media_id)`:
 
 - fresh valid payload: render prepared franchise context;
 - stale valid payload: render it and queue refresh if cooldown allows;
@@ -559,3 +559,7 @@ When changing grouping behavior:
 - Do not mix import profile rules with UI placement rules.
 - Do not duplicate MAL relation normalization in UI code.
 - Do not write user-specific status/progress into cached payloads.
+
+## Franchise cache roles
+
+The franchise UI continues to consume `series` and `sections`, but Redis storage is split by role. `mal_anime_franchise_<canonical_id>` is global-only, `mal_anime_franchise_scoped_<seed_id>` is detail-scoped-only, and `mal_anime_franchise_alias_<seed_id>` is a lightweight alias. `payload_role` is mandatory, and scoped payloads also require `detail_payload_kind`.

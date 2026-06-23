@@ -20,7 +20,7 @@ A normal lifecycle looks like this:
 ```text
 detail page opened
  -> cache lookup by current media ID
- -> direct payload or canonical alias resolved
+ -> global/scoped payload or canonical alias resolved
  -> payload validated
  -> request-specific user data added
  -> page rendered
@@ -222,7 +222,7 @@ After import-created entries commit, `schedule_mal_anime_franchise_cache_warm()`
 
 ## Detail-page behavior
 
-- `load_payload_for_media()` resolves direct payloads and aliases.
+- `load_detail_franchise_payload()` resolves global/scoped payloads and aliases.
 - Valid payloads are prepared with current-user data by `prepare_anime_franchise_context()`.
 - Stale payloads can render and queue refresh.
 - Misses and invalid payloads keep the normal related-anime fallback visible for that request.
@@ -275,3 +275,15 @@ docker compose exec yamtrack python manage.py shell -c "from app.tasks import bu
 | `ANIME_FRANCHISE_TASK_LOCK_MINUTES` | Worker-side lock that prevents concurrent builds for the same media ID. |
 | `ANIME_FRANCHISE_MAX_NODES` | Maximum franchise graph size to hydrate before treating the build as truncated/scoped. Values `<= 0` are treated as unlimited by the graph builder. |
 | `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` | Payload schema version. Changing it invalidates incompatible cached payload shapes. |
+
+## Redis namespace split: global / scoped / alias
+
+MAL anime franchise cache keys are role-specific:
+
+- `mal_anime_franchise_<canonical_id>` stores only canonical global payloads with `payload_role = "global"` and `payload_kind = "canonical_franchise"`.
+- `mal_anime_franchise_scoped_<seed_id>` stores only detail-page scoped payloads with `payload_role = "detail_scoped"` and a valid `detail_payload_kind`.
+- `mal_anime_franchise_alias_<seed_id>` stores only a lightweight alias record to a canonical global payload.
+
+Detail pages resolve cache entries in this order: scoped exact, global exact, then alias. Legacy global keys without `payload_role = "global"` are deleted and rebuilt through normal scheduling; they are never rendered as compatibility payloads.
+
+Use `python manage.py cleanup_mal_anime_franchise_cache --verbose` for dry-run inspection and `python manage.py cleanup_mal_anime_franchise_cache --apply --schedule-rebuild --verbose` to delete legacy ambiguous global keys and enqueue rebuilds.

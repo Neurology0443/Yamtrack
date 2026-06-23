@@ -53,7 +53,7 @@ class AnimeFranchiseCacheTests(TestCase):
 
     def _assert_no_direct_payload_alias_conflict(self, media_ids):
         for media_id in media_ids:
-            direct = cache.get(anime_franchise_cache.get_payload_key(media_id))
+            direct = cache.get(anime_franchise_cache.get_global_payload_key(media_id))
             alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
             self.assertFalse(direct and alias, media_id)
 
@@ -534,10 +534,10 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertNotIn("997", prepared["aliasable_media_ids"])
         self.assertNotIn("997", aliasable_ids)
 
-    def test_replace_aliases_creates_lightweight_records_after_save_payload(self):
+    def test_replace_aliases_creates_lightweight_records_after_save_global_payload(self):
         payload = self._dragon_ball_payload()
         payload["aliasable_media_ids"] = ["223", "813", "269"]
-        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.save_global_payload("223", payload)
 
         count = anime_franchise_cache.replace_aliases("223", payload, truncated=False)
 
@@ -561,7 +561,7 @@ class AnimeFranchiseCacheTests(TestCase):
                 aliases_enabled=True,
             )
         )
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
 
         count = anime_franchise_cache.replace_aliases(canonical_id, prepared)
 
@@ -587,14 +587,14 @@ class AnimeFranchiseCacheTests(TestCase):
                 aliases_enabled=True,
             )
         )
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
         anime_franchise_cache.replace_aliases(canonical_id, prepared)
 
         alias = cache.get(anime_franchise_cache.get_alias_key("225"))
         self.assertIsNotNone(alias)
         self.assertEqual(alias["canonical_media_id"], "223")
 
-        lookup = anime_franchise_cache.load_payload_for_media("225")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("225")
         self.assertTrue(lookup.alias_hit)
         self.assertEqual(lookup.canonical_media_id, "223")
         self.assertEqual(lookup.payload["root_media_id"], "223")
@@ -606,7 +606,7 @@ class AnimeFranchiseCacheTests(TestCase):
         direct_payload["root_media_id"] = "999"
         direct_payload["display_title"] = "Dragon Ball Special"
         direct_payload["series"]["entries"][0]["media_id"] = "999"
-        anime_franchise_cache.save_payload("999", direct_payload)
+        anime_franchise_cache.save_global_payload("999", direct_payload)
 
         prepared, canonical_id, _aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
@@ -616,13 +616,13 @@ class AnimeFranchiseCacheTests(TestCase):
                 aliases_enabled=True,
             )
         )
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
         anime_franchise_cache.replace_aliases(canonical_id, prepared)
 
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("999")))
-        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("999")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_global_payload_key("999")))
 
-        lookup = anime_franchise_cache.load_payload_for_media("999")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("999")
         self.assertFalse(lookup.alias_hit)
         self.assertEqual(lookup.canonical_media_id, "999")
         self.assertEqual(lookup.payload["root_media_id"], "999")
@@ -634,7 +634,7 @@ class AnimeFranchiseCacheTests(TestCase):
         direct_payload["root_media_id"] = "269"
         direct_payload["display_title"] = "Dragon Ball GT"
         direct_payload["series"]["entries"][0]["media_id"] = "269"
-        anime_franchise_cache.save_payload("269", direct_payload)
+        anime_franchise_cache.save_global_payload("269", direct_payload)
         payload = self._dragon_ball_payload()
         prepared, canonical_id, _aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
@@ -644,15 +644,15 @@ class AnimeFranchiseCacheTests(TestCase):
                 aliases_enabled=True,
             )
         )
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
 
         anime_franchise_cache.replace_aliases(canonical_id, prepared)
 
-        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("269")))
-        self.assertIsNone(cache.get(anime_franchise_cache.get_meta_key("269")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_global_payload_key("269")))
+        self.assertIsNone(cache.get(anime_franchise_cache.get_global_meta_key("269")))
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("269")))
-        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("223")))
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_global_payload_key("223")))
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
         self.assertTrue(lookup.alias_hit)
         self.assertEqual(lookup.canonical_media_id, canonical_id)
         self.assertEqual(lookup.payload["root_media_id"], canonical_id)
@@ -669,7 +669,7 @@ class AnimeFranchiseCacheTests(TestCase):
             )
         )
         prepared["aliasable_media_ids"] = [canonical_id, "269"]
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
 
         anime_franchise_cache.replace_aliases(canonical_id, prepared)
 
@@ -714,12 +714,12 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertEqual(count, 0)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
 
-    def test_load_payload_for_media_prefers_direct_payload_over_alias(self):
+    def test_load_detail_franchise_payload_prefers_direct_payload_over_alias(self):
         direct_payload = deepcopy(self.payload)
         direct_payload["root_media_id"] = "269"
         direct_payload["display_title"] = "Dragon Ball GT"
         direct_payload["series"]["entries"][0]["media_id"] = "269"
-        anime_franchise_cache.save_payload("269", direct_payload)
+        anime_franchise_cache.save_global_payload("269", direct_payload)
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -728,16 +728,16 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
         )
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertFalse(lookup.alias_hit)
         self.assertEqual(lookup.canonical_media_id, "269")
         self.assertEqual(lookup.payload["root_media_id"], "269")
 
-    def test_save_payload_deletes_stale_alias_and_updates_canonical_index(self):
+    def test_save_global_payload_deletes_stale_alias_and_updates_canonical_index(self):
         canonical_payload = self._dragon_ball_payload()
         canonical_payload["aliasable_media_ids"] = ["223", "269"]
-        anime_franchise_cache.save_payload("223", canonical_payload)
+        anime_franchise_cache.save_global_payload("223", canonical_payload)
         anime_franchise_cache.replace_aliases("223", canonical_payload)
 
         direct_payload = deepcopy(self.payload)
@@ -745,24 +745,24 @@ class AnimeFranchiseCacheTests(TestCase):
         direct_payload["display_title"] = "Dragon Ball GT"
         direct_payload["series"]["entries"][0]["media_id"] = "269"
 
-        anime_franchise_cache.save_payload("269", direct_payload)
+        anime_franchise_cache.save_global_payload("269", direct_payload)
 
-        saved_payload = cache.get(anime_franchise_cache.get_payload_key("269"))
+        saved_payload = cache.get(anime_franchise_cache.get_global_payload_key("269"))
         self.assertTrue(anime_franchise_cache.is_valid_payload(saved_payload))
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
         self.assertIsNone(
             cache.get(anime_franchise_cache.get_alias_index_key("223"))
         )
 
-    def test_save_payload_is_idempotent_without_existing_alias(self):
+    def test_save_global_payload_is_idempotent_without_existing_alias(self):
         direct_payload = deepcopy(self.payload)
         direct_payload["root_media_id"] = "50360"
         direct_payload["series"]["entries"][0]["media_id"] = "50360"
 
-        anime_franchise_cache.save_payload("50360", direct_payload)
+        anime_franchise_cache.save_global_payload("50360", direct_payload)
 
         self.assertIsNotNone(
-            cache.get(anime_franchise_cache.get_payload_key("50360"))
+            cache.get(anime_franchise_cache.get_global_payload_key("50360"))
         )
         self.assertIsNone(
             cache.get(anime_franchise_cache.get_alias_key("50360"))
@@ -782,7 +782,7 @@ class AnimeFranchiseCacheTests(TestCase):
         invalid_payload["series"]["entries"] = {}
 
         with self.assertRaises(ValueError):
-            anime_franchise_cache.save_payload("269", invalid_payload)
+            anime_franchise_cache.save_global_payload("269", invalid_payload)
 
         self.assertEqual(
             cache.get(anime_franchise_cache.get_alias_key("269")),
@@ -793,7 +793,7 @@ class AnimeFranchiseCacheTests(TestCase):
             ["269"],
         )
 
-    def test_save_payload_deletes_malformed_alias_without_crashing(self):
+    def test_save_global_payload_deletes_malformed_alias_without_crashing(self):
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             {"bad": "alias"},
@@ -802,12 +802,12 @@ class AnimeFranchiseCacheTests(TestCase):
         direct_payload["root_media_id"] = "269"
         direct_payload["series"]["entries"][0]["media_id"] = "269"
 
-        anime_franchise_cache.save_payload("269", direct_payload)
+        anime_franchise_cache.save_global_payload("269", direct_payload)
 
-        self.assertIsNotNone(cache.get(anime_franchise_cache.get_payload_key("269")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_global_payload_key("269")))
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
 
-    def test_save_payload_preserves_other_canonical_aliases(self):
+    def test_save_global_payload_preserves_other_canonical_aliases(self):
         for media_id in ("813", "269", "225"):
             cache.set(
                 anime_franchise_cache.get_alias_key(media_id),
@@ -824,7 +824,7 @@ class AnimeFranchiseCacheTests(TestCase):
         direct_payload["root_media_id"] = "269"
         direct_payload["series"]["entries"][0]["media_id"] = "269"
 
-        anime_franchise_cache.save_payload("269", direct_payload)
+        anime_franchise_cache.save_global_payload("269", direct_payload)
 
         self.assertEqual(
             cache.get(anime_franchise_cache.get_alias_index_key("223")),
@@ -833,20 +833,20 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("813")))
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("225")))
 
-    def test_load_payload_for_media_alias_hit_loads_canonical_payload(self):
+    def test_load_detail_franchise_payload_alias_hit_loads_canonical_payload(self):
         payload = self._dragon_ball_payload()
         payload["aliasable_media_ids"] = ["223", "269"]
-        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.save_global_payload("223", payload)
         anime_franchise_cache.replace_aliases("223", payload)
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertTrue(lookup.alias_hit)
         self.assertEqual(lookup.requested_media_id, "269")
         self.assertEqual(lookup.canonical_media_id, "223")
         self.assertEqual(lookup.payload["root_media_id"], "223")
 
-    def test_load_payload_for_media_deletes_broken_alias_without_payload(self):
+    def test_load_detail_franchise_payload_deletes_broken_alias_without_payload(self):
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -855,19 +855,19 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
         )
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
         self._assert_no_direct_payload_alias_conflict(["269"])
 
-    def test_load_payload_for_media_deletes_alias_when_payload_does_not_cover_request(
+    def test_load_detail_franchise_payload_deletes_alias_when_payload_does_not_cover_request(
         self,
     ):
         payload = self._dragon_ball_payload()
         payload["aliasable_media_ids"] = ["223"]
-        anime_franchise_cache.save_payload("223", payload)
+        anime_franchise_cache.save_global_payload("223", payload)
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -876,14 +876,14 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
         )
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
         self._assert_no_direct_payload_alias_conflict(["269"])
 
-    def test_load_payload_for_media_deletes_alias_with_mismatched_aliased_media_id(
+    def test_load_detail_franchise_payload_deletes_alias_with_mismatched_aliased_media_id(
         self,
     ):
         cache.set(
@@ -894,14 +894,14 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
         )
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
         self.assertIsNone(cache.get(anime_franchise_cache.get_alias_key("269")))
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=False)
-    def test_load_payload_for_media_ignores_alias_when_disabled(self):
+    def test_load_detail_franchise_payload_ignores_alias_when_disabled(self):
         prepared, canonical_id, _aliasable_ids = (
             anime_franchise_cache.prepare_payload_for_aliasing(
                 self._dragon_ball_payload(),
@@ -910,7 +910,7 @@ class AnimeFranchiseCacheTests(TestCase):
                 aliases_enabled=True,
             )
         )
-        anime_franchise_cache.save_payload(canonical_id, prepared)
+        anime_franchise_cache.save_global_payload(canonical_id, prepared)
         cache.set(
             anime_franchise_cache.get_alias_key("269"),
             anime_franchise_cache._build_alias_record(
@@ -919,15 +919,15 @@ class AnimeFranchiseCacheTests(TestCase):
             ),
         )
 
-        lookup = anime_franchise_cache.load_payload_for_media("269")
+        lookup = anime_franchise_cache.load_detail_franchise_payload("269")
 
         self.assertIsNone(lookup.payload)
         self.assertFalse(lookup.alias_hit)
 
     def test_save_and_load_payload_updates_access_metadata(self):
-        anime_franchise_cache.save_payload("100", self.payload, node_count=1)
+        anime_franchise_cache.save_global_payload("100", self.payload, node_count=1)
 
-        payload, meta = anime_franchise_cache.load_payload("100")
+        payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertEqual(payload["root_media_id"], "100")
         self.assertEqual(meta["schema_version"], 1)
@@ -936,17 +936,17 @@ class AnimeFranchiseCacheTests(TestCase):
 
     def test_incompatible_schema_is_ignored_but_meta_is_returned(self):
         bad_payload = {**self.payload, "schema_version": 999}
-        cache.set(anime_franchise_cache.get_payload_key("100"), bad_payload)
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), bad_payload)
 
-        payload, meta = anime_franchise_cache.load_payload("100")
+        payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNone(payload)
         self.assertEqual(meta["schema_version"], 1)
 
     def test_stale_payload_is_displayable_but_schedulable(self):
         stale_time = timezone.now() - timedelta(days=31)
-        anime_franchise_cache.save_payload("100", self.payload, fetched_at=stale_time)
-        payload, meta = anime_franchise_cache.load_payload("100")
+        anime_franchise_cache.save_global_payload("100", self.payload, fetched_at=stale_time)
+        payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNotNone(payload)
         self.assertFalse(anime_franchise_cache.is_fresh(meta))
@@ -955,15 +955,15 @@ class AnimeFranchiseCacheTests(TestCase):
         )
 
     def test_missing_payload_returns_empty_meta(self):
-        payload, meta = anime_franchise_cache.load_payload("404")
+        payload, meta = anime_franchise_cache.load_global_payload("404")
 
         self.assertIsNone(payload)
         self.assertIsNone(meta["fetched_at"])
         self.assertEqual(meta["last_error_message"], "")
 
     def test_fresh_payload_with_has_payload_blocks_scheduling(self):
-        anime_franchise_cache.save_payload("100", self.payload)
-        _payload, meta = anime_franchise_cache.load_payload("100")
+        anime_franchise_cache.save_global_payload("100", self.payload)
+        _payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertTrue(anime_franchise_cache.is_fresh(meta))
         self.assertFalse(
@@ -983,11 +983,11 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertIsNone(cache.get(anime_franchise_cache.get_queue_lock_key("100")))
 
     def test_mark_error_preserves_existing_payload_metadata(self):
-        anime_franchise_cache.save_payload("100", self.payload)
-        before_payload, before_meta = anime_franchise_cache.load_payload("100")
+        anime_franchise_cache.save_global_payload("100", self.payload)
+        before_payload, before_meta = anime_franchise_cache.load_global_payload("100")
 
         meta = anime_franchise_cache.mark_error("100", "boom")
-        after_payload, _after_meta = anime_franchise_cache.load_payload("100")
+        after_payload, _after_meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertEqual(after_payload, before_payload)
         self.assertEqual(meta["fetched_at"], before_meta["fetched_at"])
@@ -1033,9 +1033,9 @@ class AnimeFranchiseCacheTests(TestCase):
             with self.subTest(payload=payload):
                 self.assertFalse(anime_franchise_cache.is_valid_payload(payload))
                 with self.assertRaises(ValueError):
-                    anime_franchise_cache.save_payload("bad", payload)
+                    anime_franchise_cache.save_global_payload("bad", payload)
 
-    def test_save_payload_rejects_non_json_safe_payload(self):
+    def test_save_global_payload_rejects_non_json_safe_payload(self):
         payload = deepcopy(self.payload)
         payload["series"]["entries"].append(
             {
@@ -1048,28 +1048,28 @@ class AnimeFranchiseCacheTests(TestCase):
         )
 
         with self.assertRaises(ValueError):
-            anime_franchise_cache.save_payload("100", payload)
-        self.assertIsNone(cache.get(anime_franchise_cache.get_payload_key("100")))
+            anime_franchise_cache.save_global_payload("100", payload)
+        self.assertIsNone(cache.get(anime_franchise_cache.get_global_payload_key("100")))
 
-    def test_save_payload_rejects_user_specific_keys(self):
+    def test_save_global_payload_rejects_user_specific_keys(self):
         for forbidden_key in ("media", "item", "progress", "status", "user_id", "html"):
             payload = deepcopy(self.payload)
             payload["series"]["entries"][0][forbidden_key] = "bad"
 
             with self.subTest(forbidden_key=forbidden_key):
                 with self.assertRaises(ValueError):
-                    anime_franchise_cache.save_payload("100", payload)
+                    anime_franchise_cache.save_global_payload("100", payload)
                 self.assertIsNone(
-                    cache.get(anime_franchise_cache.get_payload_key("100"))
+                    cache.get(anime_franchise_cache.get_global_payload_key("100"))
                 )
 
     def test_invalid_payload_load_returns_none_and_normalized_meta(self):
         cache.set(
-            anime_franchise_cache.get_payload_key("100"),
+            anime_franchise_cache.get_global_payload_key("100"),
             {"schema_version": 1, "root_media_id": "100"},
         )
 
-        payload, meta = anime_franchise_cache.load_payload("100")
+        payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNone(payload)
         self.assertEqual(meta["schema_version"], 1)
@@ -1083,14 +1083,14 @@ class AnimeFranchiseCacheTests(TestCase):
         self.assertTrue(meta["last_accessed_at"])
 
     def test_load_payload_with_corrupt_meta_node_count_does_not_crash(self):
-        anime_franchise_cache.save_payload("100", self.payload)
+        anime_franchise_cache.save_global_payload("100", self.payload)
         meta = anime_franchise_cache.normalize_meta(
-            cache.get(anime_franchise_cache.get_meta_key("100")),
+            cache.get(anime_franchise_cache.get_global_meta_key("100")),
         )
         meta["node_count"] = "abc"
-        cache.set(anime_franchise_cache.get_meta_key("100"), meta)
+        cache.set(anime_franchise_cache.get_global_meta_key("100"), meta)
 
-        payload, loaded_meta = anime_franchise_cache.load_payload("100")
+        payload, loaded_meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNotNone(payload)
         self.assertEqual(loaded_meta["node_count"], 0)
@@ -1098,13 +1098,13 @@ class AnimeFranchiseCacheTests(TestCase):
     def test_load_payload_rejects_cached_payload_with_user_specific_keys(self):
         payload = deepcopy(self.payload)
         payload["series"]["entries"][0]["progress"] = 4
-        cache.set(anime_franchise_cache.get_payload_key("100"), payload)
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), payload)
         cache.set(
-            anime_franchise_cache.get_meta_key("100"),
+            anime_franchise_cache.get_global_meta_key("100"),
             anime_franchise_cache.default_meta(),
         )
 
-        loaded_payload, meta = anime_franchise_cache.load_payload("100")
+        loaded_payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNone(loaded_payload)
         self.assertEqual(meta["schema_version"], 1)
@@ -1112,13 +1112,13 @@ class AnimeFranchiseCacheTests(TestCase):
     def test_load_payload_rejects_cached_section_payload_with_user_specific_keys(self):
         payload = deepcopy(self.payload)
         payload["sections"][0]["entries"][0]["media"] = {"id": 1}
-        cache.set(anime_franchise_cache.get_payload_key("100"), payload)
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), payload)
         cache.set(
-            anime_franchise_cache.get_meta_key("100"),
+            anime_franchise_cache.get_global_meta_key("100"),
             anime_franchise_cache.default_meta(),
         )
 
-        loaded_payload, meta = anime_franchise_cache.load_payload("100")
+        loaded_payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNone(loaded_payload)
         self.assertEqual(meta["schema_version"], 1)
@@ -1126,13 +1126,13 @@ class AnimeFranchiseCacheTests(TestCase):
     def test_load_payload_rejects_cached_non_json_safe_payload(self):
         payload = deepcopy(self.payload)
         payload["series"]["entries"][0]["bad"] = object()
-        cache.set(anime_franchise_cache.get_payload_key("100"), payload)
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), payload)
         cache.set(
-            anime_franchise_cache.get_meta_key("100"),
+            anime_franchise_cache.get_global_meta_key("100"),
             anime_franchise_cache.default_meta(),
         )
 
-        loaded_payload, meta = anime_franchise_cache.load_payload("100")
+        loaded_payload, meta = anime_franchise_cache.load_global_payload("100")
 
         self.assertIsNone(loaded_payload)
         self.assertEqual(meta["schema_version"], 1)

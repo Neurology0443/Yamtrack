@@ -12,7 +12,7 @@ from app.services import anime_franchise_cache
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_scoped_payload import (
-    build_scoped_seed_payload_from_snapshot,
+    build_detail_scoped_payload_from_snapshot,
 )
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 
@@ -26,7 +26,7 @@ class AnimeFranchiseCacheBuildService:
         """Create the builder with an optional shared build session."""
         self.build_session = build_session or AnimeFranchiseBuildSession()
 
-    def build_and_save(
+    def build_and_save(  # noqa: PLR0915
         self,
         media_id,
         *,
@@ -72,7 +72,7 @@ class AnimeFranchiseCacheBuildService:
                 else anime_franchise_cache.load_valid_alias_payload_for_media(media_id)
             )
             if existing_alias_lookup is not None:
-                anime_franchise_cache.delete_direct_payload(media_id)
+                anime_franchise_cache.delete_global_payload(media_id)
                 return {
                     "media_id": media_id,
                     "canonical_media_id": existing_alias_lookup.canonical_media_id,
@@ -89,14 +89,29 @@ class AnimeFranchiseCacheBuildService:
             alias_count = 0
             seed_is_aliasable_in_existing_canonical = False
             if is_canonical_build:
-                anime_franchise_cache.save_payload(
+                canonical_payload.update(
+                    {
+                        "payload_role": anime_franchise_cache.PAYLOAD_ROLE_GLOBAL,
+                        "payload_kind": (
+                            anime_franchise_cache.PAYLOAD_KIND_CANONICAL_FRANCHISE
+                        ),
+                        "build_seed_media_id": media_id,
+                        "node_count": node_count,
+                        "truncated": truncated,
+                        "truncation_reason": truncation_reason,
+                    }
+                )
+                anime_franchise_cache.save_global_payload(
                     canonical_media_id,
                     canonical_payload,
-                    fetched_at=timezone.now(),
-                    node_count=node_count,
-                    build_duration_seconds=duration,
-                    truncated=truncated,
-                    truncation_reason=truncation_reason,
+                    meta=anime_franchise_cache._build_save_meta(
+                        canonical_payload,
+                        fetched_at=timezone.now(),
+                        node_count=node_count,
+                        build_duration_seconds=duration,
+                        truncated=truncated,
+                        truncation_reason=truncation_reason,
+                    ),
                 )
                 if can_use_aliases:
                     alias_count = anime_franchise_cache.replace_aliases(
@@ -105,8 +120,18 @@ class AnimeFranchiseCacheBuildService:
                         truncated=False,
                     )
             else:
-                existing_canonical_payload, existing_canonical_meta = (
-                    anime_franchise_cache.load_payload(canonical_media_id)
+                existing_canonical_lookup = anime_franchise_cache.load_global_payload(
+                    canonical_media_id
+                )
+                existing_canonical_payload = (
+                    existing_canonical_lookup.payload
+                    if existing_canonical_lookup
+                    else None
+                )
+                existing_canonical_meta = (
+                    existing_canonical_lookup.meta
+                    if existing_canonical_lookup
+                    else anime_franchise_cache.normalize_meta(None)
                 )
                 existing_aliasable_ids = set()
                 if existing_canonical_payload:
@@ -133,12 +158,12 @@ class AnimeFranchiseCacheBuildService:
                     media_id in existing_aliasable_ids
                 )
 
-            scoped_payload = build_scoped_seed_payload_from_snapshot(
+            scoped_payload = build_detail_scoped_payload_from_snapshot(
                 snapshot,
                 seed_media_id=media_id,
             )
             if not is_canonical_build and seed_is_aliasable_in_existing_canonical:
-                anime_franchise_cache.delete_direct_payload(media_id)
+                anime_franchise_cache.delete_global_payload(media_id)
             if (
                 scoped_payload is not None
                 and not is_canonical_build
@@ -147,14 +172,24 @@ class AnimeFranchiseCacheBuildService:
                 scoped_node_count = len(
                     anime_franchise_cache.extract_payload_media_ids(scoped_payload),
                 )
-                anime_franchise_cache.save_payload(
+                scoped_payload.update(
+                    {
+                        "build_seed_media_id": media_id,
+                        "global_canonical_root_media_id": canonical_media_id,
+                        "node_count": scoped_node_count,
+                        "truncated": False,
+                        "truncation_reason": "",
+                    }
+                )
+                anime_franchise_cache.save_scoped_payload(
                     media_id,
                     scoped_payload,
-                    fetched_at=timezone.now(),
-                    node_count=scoped_node_count,
-                    build_duration_seconds=duration,
-                    truncated=False,
-                    truncation_reason="",
+                    meta=anime_franchise_cache._build_save_meta(
+                        scoped_payload,
+                        fetched_at=timezone.now(),
+                        node_count=scoped_node_count,
+                        build_duration_seconds=duration,
+                    ),
                 )
 
             return {  # noqa: TRY300

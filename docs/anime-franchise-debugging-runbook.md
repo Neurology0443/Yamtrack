@@ -169,7 +169,7 @@ If an alias does not resolve:
 
 ## Franchise payload cache alias audit
 
-A healthy franchise cache state must not contain both a direct payload and an alias for the same MAL anime media id. `load_payload_for_media(media_id)` checks the direct payload first, so a stale direct payload would shadow an alias that should resolve to the canonical payload.
+A healthy franchise cache state must not contain both a global/scoped payload and an alias for the same MAL anime media id. `load_detail_franchise_payload(media_id)` checks the global/scoped payload first, so a stale global/scoped payload would shadow an alias that should resolve to the canonical payload.
 
 Run this compact audit from the repository root in Docker dev:
 
@@ -187,7 +187,7 @@ media_ids = list(
 )
 conflicts = []
 for media_id in media_ids:
-    direct = cache.get(anime_franchise_cache.get_payload_key(media_id))
+    direct = cache.get(anime_franchise_cache.get_global_payload_key(media_id))
     alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
     if direct and alias:
         conflicts.append(str(media_id))
@@ -207,10 +207,10 @@ conflicts: 0
 
 State meanings:
 
-- `DIRECT`: direct payload only.
+- `DIRECT`: global/scoped payload only.
 - `ALIAS`: alias only.
 - `MISS`: no payload and no alias.
-- `CONFLICT_DIRECT_AND_ALIAS`: invalid; the direct payload would shadow alias resolution.
+- `CONFLICT_DIRECT_AND_ALIAS`: invalid; the global/scoped payload would shadow alias resolution.
 
 For an expanded inspection, include the canonical payload metadata behind aliases:
 
@@ -224,7 +224,7 @@ for media_id in Item.objects.filter(
     source=Sources.MAL.value,
     media_type=MediaTypes.ANIME.value,
 ).values_list("media_id", flat=True).distinct():
-    payload = cache.get(anime_franchise_cache.get_payload_key(media_id))
+    payload = cache.get(anime_franchise_cache.get_global_payload_key(media_id))
     alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
     if payload and alias:
         print(
@@ -246,7 +246,7 @@ for media_id in Item.objects.filter(
         )
     elif alias:
         canonical_id = alias.get("canonical_media_id")
-        canonical = cache.get(anime_franchise_cache.get_payload_key(canonical_id))
+        canonical = cache.get(anime_franchise_cache.get_global_payload_key(canonical_id))
         print(
             media_id,
             "ALIAS ->",
@@ -310,4 +310,20 @@ docker compose exec redis redis-cli keys '*anime*franchise*'
 docker compose exec yamtrack python manage.py import_anime_franchise --profile continuity --dry-run
 docker compose exec yamtrack python manage.py shell -c "from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay('34161')"
 docker compose exec yamtrack celery -A config inspect active
+```
+
+## Cache state names
+
+Recommended state labels are `GLOBAL`, `SCOPED`, `ALIAS`, `MISS`, `INVALID_LEGACY_DELETED`, and `ALIAS_TARGET_INVALID_DELETED`. `DIRECT + ALIAS` is not a normal state for global payloads; `ALIAS + SCOPED` is allowed because scoped payloads live under `mal_anime_franchise_scoped_<seed_id>`.
+
+Run cleanup in dry-run first:
+
+```bash
+python manage.py cleanup_mal_anime_franchise_cache --verbose
+```
+
+Then apply and schedule rebuilds if the dry-run is expected:
+
+```bash
+python manage.py cleanup_mal_anime_franchise_cache --apply --schedule-rebuild --verbose
 ```

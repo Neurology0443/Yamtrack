@@ -9,7 +9,7 @@ from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildS
 
 class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
-    @patch("app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot")
+    @patch("app.services.anime_franchise_cache_builder.build_detail_scoped_payload_from_snapshot")
     @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
     @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
     @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
@@ -18,7 +18,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
         mock_cache,
         mock_serialize,
         mock_pipeline_class,
-        mock_build_scoped_payload,
+        mock_build_detail_scoped_payload,
     ):
         snapshot = SimpleNamespace()
         graph_builder = SimpleNamespace(
@@ -43,7 +43,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
         )
         mock_cache.load_valid_alias_payload_for_media.return_value = None
         mock_cache.replace_aliases.return_value = 1
-        mock_build_scoped_payload.return_value = None
+        mock_build_detail_scoped_payload.return_value = None
 
         result = AnimeFranchiseCacheBuildService(
             build_session=build_session,
@@ -58,9 +58,9 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             truncated=False,
             aliases_enabled=True,
         )
-        mock_cache.save_payload.assert_called_once()
+        mock_cache.save_global_payload.assert_called_once()
         self.assertEqual(
-            mock_cache.save_payload.call_args.args[:2],
+            mock_cache.save_global_payload.call_args.args[:2],
             ("100", canonical_payload),
         )
         mock_cache.replace_aliases.assert_called_once_with(

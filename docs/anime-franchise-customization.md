@@ -245,3 +245,7 @@ Rendering, task, and view changes should normally update:
 - User-specific data is not written to complete franchise cache.
 - Settings docs are updated if defaults/settings change.
 - Runbook commands remain valid.
+
+## Scoped detail payload rules
+
+Detail-specific payloads are selected by ordered rules in `anime_franchise_scoped_payload.py`. The first valid rule result is saved under `mal_anime_franchise_scoped_<seed_id>` with `payload_role = "detail_scoped"`, `detail_payload_kind`, `rule_key`, `build_seed_media_id`, and `global_canonical_root_media_id`. Rules must not write Redis or include user-specific data.

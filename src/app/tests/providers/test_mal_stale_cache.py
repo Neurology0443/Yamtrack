@@ -53,7 +53,7 @@ class MALAnimeStaleCacheTests(TestCase):
             "related": {},
         }
 
-    def _save_payload_with_meta(self, *, fetched_delta):
+    def _save_global_payload_with_meta(self, *, fetched_delta):
         fetched_at = timezone.now() - fetched_delta
         mal_cache.save_anime_cache(self.media_id, self.payload, fetched_at=fetched_at)
         return cache.get(mal_cache.get_anime_cache_meta_key(self.media_id))
@@ -65,7 +65,7 @@ class MALAnimeStaleCacheTests(TestCase):
         mock_api_request,
         mock_schedule,
     ):
-        self._save_payload_with_meta(fetched_delta=timedelta(days=1))
+        self._save_global_payload_with_meta(fetched_delta=timedelta(days=1))
 
         result = mal.anime(
             self.media_id,
@@ -86,7 +86,7 @@ class MALAnimeStaleCacheTests(TestCase):
         mock_api_request,
         mock_schedule,
     ):
-        self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
 
         result = mal.anime(
             self.media_id,
@@ -102,7 +102,7 @@ class MALAnimeStaleCacheTests(TestCase):
     def test_stale_anime_cache_without_allow_stale_fetches_synchronously(
         self, mock_api_request
     ):
-        old_meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        old_meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
 
         result = mal.anime(self.media_id, allow_stale=False)
 
@@ -145,7 +145,7 @@ class MALAnimeStaleCacheTests(TestCase):
 
     @patch("app.providers.mal.services.api_request", return_value=API_RESPONSE)
     def test_refresh_cache_bypasses_cache_and_clears_error_meta(self, mock_api_request):
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
         meta["last_refresh_error_at"] = timezone.now().isoformat()
         meta["last_error_message"] = "timeout"
         cache.set(mal_cache.get_anime_cache_meta_key(self.media_id), meta)
@@ -186,7 +186,7 @@ class MALAnimeStaleCacheTests(TestCase):
     @patch("app.tasks.refresh_mal_anime_metadata")
     def test_enqueue_failure_deletes_queue_lock(self, mock_task):
         mock_task.delay.side_effect = RuntimeError("broker down")
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
 
         scheduled = mal_cache.maybe_schedule_refresh(self.media_id, meta=meta)
 
@@ -199,7 +199,7 @@ class MALAnimeStaleCacheTests(TestCase):
         self, mock_task, mock_mark_attempt
     ):
         mock_mark_attempt.side_effect = RuntimeError("cache down")
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
 
         scheduled = mal_cache.maybe_schedule_refresh(self.media_id, meta=meta)
 
@@ -209,7 +209,7 @@ class MALAnimeStaleCacheTests(TestCase):
 
     @patch("app.tasks.refresh_mal_anime_metadata")
     def test_successful_enqueue_marks_attempt_and_keeps_queue_lock(self, mock_task):
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
 
         scheduled = mal_cache.maybe_schedule_refresh(self.media_id, meta=meta)
 
@@ -263,7 +263,7 @@ class MALAnimeStaleCacheTests(TestCase):
 
     @patch("app.tasks.refresh_mal_anime_metadata")
     def test_recent_refresh_attempt_prevents_duplicate_schedule(self, mock_task):
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
         meta["last_refresh_attempt_at"] = (
             timezone.now() - timedelta(hours=1)
         ).isoformat()
@@ -276,7 +276,7 @@ class MALAnimeStaleCacheTests(TestCase):
 
     @patch("app.tasks.refresh_mal_anime_metadata")
     def test_recent_refresh_error_prevents_schedule(self, mock_task):
-        meta = self._save_payload_with_meta(fetched_delta=timedelta(days=10))
+        meta = self._save_global_payload_with_meta(fetched_delta=timedelta(days=10))
         meta["last_refresh_error_at"] = (
             timezone.now() - timedelta(hours=1)
         ).isoformat()

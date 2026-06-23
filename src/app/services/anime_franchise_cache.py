@@ -6,11 +6,15 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +34,35 @@ _FORBIDDEN_ENTRY_KEYS = {
 }
 
 
-def get_payload_key(media_id) -> str:
-    """Return the complete franchise payload cache key."""
+PAYLOAD_ROLE_GLOBAL = "global"
+PAYLOAD_ROLE_DETAIL_SCOPED = "detail_scoped"
+PAYLOAD_KIND_CANONICAL_FRANCHISE = "canonical_franchise"
+DETAIL_PAYLOAD_KIND_SEED_CONTEXT = "seed_context"
+DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY = "local_continuity"
+VALID_DETAIL_PAYLOAD_KINDS = {
+    DETAIL_PAYLOAD_KIND_SEED_CONTEXT,
+    DETAIL_PAYLOAD_KIND_LOCAL_CONTINUITY,
+}
+
+
+def get_global_payload_key(media_id) -> str:
+    """Return the canonical global franchise payload cache key."""
     return f"mal_anime_franchise_{media_id}"
 
 
-def get_meta_key(media_id) -> str:
-    """Return the sidecar metadata cache key for a franchise payload."""
-    return f"{get_payload_key(media_id)}:meta"
+def get_global_meta_key(media_id) -> str:
+    """Return the global payload sidecar metadata cache key."""
+    return f"{get_global_payload_key(media_id)}:meta"
+
+
+def get_scoped_payload_key(media_id) -> str:
+    """Return the detail-scoped franchise payload cache key."""
+    return f"mal_anime_franchise_scoped_{media_id}"
+
+
+def get_scoped_meta_key(media_id) -> str:
+    """Return the scoped payload sidecar metadata cache key."""
+    return f"{get_scoped_payload_key(media_id)}:meta"
 
 
 def get_alias_key(media_id) -> str:
@@ -47,12 +72,12 @@ def get_alias_key(media_id) -> str:
 
 def get_alias_index_key(canonical_media_id) -> str:
     """Return the index key listing aliases for a canonical payload."""
-    return f"{get_payload_key(canonical_media_id)}:aliases"
+    return f"{get_global_payload_key(canonical_media_id)}:aliases"
 
 
 @dataclass(frozen=True)
 class FranchisePayloadLookup:
-    """Resolved complete franchise payload lookup result."""
+    """Resolved role-specific franchise payload lookup result."""
 
     requested_media_id: str
     canonical_media_id: str
@@ -61,14 +86,28 @@ class FranchisePayloadLookup:
     alias_hit: bool = False
 
 
+@dataclass(frozen=True)
+class DetailFranchisePayloadLookup:
+    """Resolved detail-page franchise payload lookup result."""
+
+    requested_media_id: str
+    cache_media_id: str
+    canonical_media_id: str
+    payload: dict[str, Any]
+    meta: dict[str, Any]
+    hit_kind: str
+    payload_role: str
+    detail_payload_kind: str | None = None
+
+
 def get_queue_lock_key(media_id) -> str:
     """Return the enqueue deduplication lock key."""
-    return f"{get_payload_key(media_id)}:queue_lock"
+    return f"{get_global_payload_key(media_id)}:queue_lock"
 
 
 def get_task_lock_key(media_id) -> str:
     """Return the worker execution deduplication lock key."""
-    return f"{get_payload_key(media_id)}:task_lock"
+    return f"{get_global_payload_key(media_id)}:task_lock"
 
 
 def get_ttl_seconds() -> int:
@@ -478,45 +517,143 @@ def _contains_forbidden_user_data(value) -> bool:
     return False
 
 
-def load_payload(media_id) -> tuple[dict | None, dict]:
-    """Load a valid franchise payload and metadata, updating access metadata."""
-    payload = cache.get(get_payload_key(media_id))
-    meta = normalize_meta(cache.get(get_meta_key(media_id)))
-    if payload is None:
-        return None, meta
-    if not is_valid_payload(payload):
-        logger.warning(
-            "Ignoring invalid MAL anime franchise payload for media_id=%s",
-            media_id,
-        )
-        return None, meta
-    if _contains_forbidden_user_data(payload):
-        logger.warning(
-            "Ignoring user-specific MAL anime franchise payload for media_id=%s",
-            media_id,
-        )
-        return None, meta
+def _has_required_role_fields(payload: Mapping[str, Any], role: str) -> bool:
+    if payload.get("payload_role") != role:
+        return False
+    if not _is_non_empty_string(payload.get("build_seed_media_id")):
+        return False
+    if role == PAYLOAD_ROLE_GLOBAL:
+        return payload.get("payload_kind") == PAYLOAD_KIND_CANONICAL_FRANCHISE
+    return (
+        payload.get("detail_payload_kind") in VALID_DETAIL_PAYLOAD_KINDS
+        and _is_non_empty_string(payload.get("rule_key"))
+        and _is_non_empty_string(payload.get("global_canonical_root_media_id"))
+    )
+
+
+def is_valid_global_payload(payload: Mapping[str, Any]) -> bool:
+    """Return whether payload is a valid canonical global franchise payload."""
+    return (
+        is_valid_payload(payload)
+        and _has_required_role_fields(payload, PAYLOAD_ROLE_GLOBAL)
+        and not _contains_forbidden_user_data(payload)
+    )
+
+
+def is_valid_scoped_payload(payload: Mapping[str, Any]) -> bool:
+    """Return whether payload is a valid detail-scoped franchise payload."""
+    return (
+        is_valid_payload(payload)
+        and _has_required_role_fields(payload, PAYLOAD_ROLE_DETAIL_SCOPED)
+        and not _contains_forbidden_user_data(payload)
+    )
+
+
+def _validate_json_safe(payload: Mapping[str, Any]) -> bool:
     try:
-        assert_json_safe_payload(payload)
+        assert_json_safe_payload(dict(payload))
     except ValueError:
+        return False
+    return True
+
+
+def _load_payload_from_keys(
+    *,
+    media_id: str,
+    payload_key: str,
+    meta_key: str,
+    expected_role: str,
+    validator: Callable[[Mapping[str, Any]], bool],
+    delete_invalid: Callable[[], None],
+) -> FranchisePayloadLookup | None:
+    payload = cache.get(payload_key)
+    meta = normalize_meta(cache.get(meta_key))
+    if payload is None:
+        return None
+    if not validator(payload) or not _validate_json_safe(payload):
         logger.warning(
-            "Ignoring non JSON-safe MAL anime franchise payload for media_id=%s",
+            "Deleting invalid MAL anime franchise %s payload for media_id=%s",
+            expected_role,
             media_id,
         )
-        return None, meta
+        delete_invalid()
+        return None
 
     ttl = get_ttl_seconds()
     meta["last_accessed_at"] = timezone.now().isoformat()
-    _touch_or_set(get_payload_key(media_id), payload, ttl)
-    cache.set(get_meta_key(media_id), meta, timeout=ttl)
-    return payload, meta
+    _touch_or_set(payload_key, payload, ttl)
+    cache.set(meta_key, meta, timeout=ttl)
+    return FranchisePayloadLookup(
+        requested_media_id=str(media_id),
+        canonical_media_id=str(payload.get("canonical_root_media_id") or media_id),
+        payload=dict(payload),
+        meta=meta,
+        alias_hit=False,
+    )
 
 
-def delete_direct_payload(media_id) -> None:
-    """Delete any direct cached payload and metadata for media_id."""
+def _write_payload_to_keys(
+    *,
+    payload_key: str,
+    meta_key: str,
+    payload: Mapping[str, Any],
+    expected_role: str,
+    validator: Callable[[Mapping[str, Any]], bool],
+    timeout: int,
+    meta: Mapping[str, Any] | None = None,
+) -> dict:
+    payload = dict(payload)
+    payload["schema_version"] = settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+    if payload.get("payload_role") != expected_role:
+        message = f"Invalid MAL anime franchise payload role: {expected_role}"
+        raise ValueError(message)
+    if not validator(payload) or not _validate_json_safe(payload):
+        message = "Invalid MAL anime franchise payload"
+        raise ValueError(message)
+    saved_meta = normalize_meta(meta)
+    cache.set(payload_key, payload, timeout=timeout)
+    cache.set(meta_key, saved_meta, timeout=timeout)
+    return saved_meta
+
+
+def load_global_payload(media_id) -> FranchisePayloadLookup | None:
+    """Load only a canonical global payload for media_id."""
     media_id = str(media_id)
-    cache.delete(get_payload_key(media_id))
-    cache.delete(get_meta_key(media_id))
+    return _load_payload_from_keys(
+        media_id=media_id,
+        payload_key=get_global_payload_key(media_id),
+        meta_key=get_global_meta_key(media_id),
+        expected_role=PAYLOAD_ROLE_GLOBAL,
+        validator=is_valid_global_payload,
+        delete_invalid=lambda: delete_global_payload(media_id),
+    )
+
+
+def load_scoped_payload(media_id) -> FranchisePayloadLookup | None:
+    """Load only a detail-scoped payload for media_id."""
+    media_id = str(media_id)
+    return _load_payload_from_keys(
+        media_id=media_id,
+        payload_key=get_scoped_payload_key(media_id),
+        meta_key=get_scoped_meta_key(media_id),
+        expected_role=PAYLOAD_ROLE_DETAIL_SCOPED,
+        validator=is_valid_scoped_payload,
+        delete_invalid=lambda: delete_scoped_payload(media_id),
+    )
+
+
+def delete_global_payload(media_id) -> None:
+    """Delete a canonical global cached payload and metadata for media_id."""
+    media_id = str(media_id)
+    cache.delete(get_global_payload_key(media_id))
+    cache.delete(get_global_meta_key(media_id))
+
+
+def delete_scoped_payload(media_id) -> None:
+    """Delete a detail-scoped cached payload and metadata for media_id."""
+    media_id = str(media_id)
+    cache.delete(get_scoped_payload_key(media_id))
+    cache.delete(get_scoped_meta_key(media_id))
 
 
 def delete_alias_for_media(media_id) -> None:
@@ -524,53 +661,35 @@ def delete_alias_for_media(media_id) -> None:
     media_id = str(media_id)
     alias_key = get_alias_key(media_id)
     alias = _normalize_alias_record(cache.get(alias_key))
-
     cache.delete(alias_key)
-
     if alias is None:
         return
-
-    canonical_media_id = alias.get("canonical_media_id")
-    if not canonical_media_id:
-        return
-
-    alias_index_key = get_alias_index_key(canonical_media_id)
+    alias_index_key = get_alias_index_key(alias["canonical_media_id"])
     alias_ids = cache.get(alias_index_key)
     if not isinstance(alias_ids, list):
         return
-
-    remaining_alias_ids = [
-        str(alias_id) for alias_id in alias_ids if str(alias_id) != media_id
-    ]
-    if remaining_alias_ids:
-        cache.set(
-            alias_index_key,
-            remaining_alias_ids,
-            timeout=get_ttl_seconds(),
-        )
+    remaining = [str(alias_id) for alias_id in alias_ids if str(alias_id) != media_id]
+    if remaining:
+        cache.set(alias_index_key, remaining, timeout=get_ttl_seconds())
     else:
         cache.delete(alias_index_key)
 
 
 def _delete_alias_if_owned_by(media_id, canonical_media_id) -> bool:
-    """Delete alias only if it currently points to canonical_media_id."""
     media_id = str(media_id)
     canonical_media_id = str(canonical_media_id)
-
     alias = _normalize_alias_record(cache.get(get_alias_key(media_id)))
     if alias is None:
         cache.delete(get_alias_key(media_id))
         return True
-
     if alias["canonical_media_id"] != canonical_media_id:
         return False
-
     cache.delete(get_alias_key(media_id))
     return True
 
 
 def delete_aliases_for_canonical(canonical_media_id) -> None:
-    """Delete all aliases currently indexed for a canonical payload."""
+    """Delete every alias owned by canonical_media_id."""
     canonical_media_id = str(canonical_media_id)
     alias_ids = cache.get(get_alias_index_key(canonical_media_id))
     if isinstance(alias_ids, list):
@@ -580,65 +699,48 @@ def delete_aliases_for_canonical(canonical_media_id) -> None:
 
 
 def replace_aliases(
-    canonical_media_id,
-    payload: dict,
-    *,
-    truncated: bool = False,
+    canonical_media_id, payload: dict, *, truncated: bool = False
 ) -> int:
-    """Replace lightweight alias records for a canonical franchise payload."""
+    """Replace lightweight alias records for a canonical global franchise payload."""
     canonical_media_id = str(canonical_media_id)
-
     if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
         return 0
-
     if truncated:
         delete_aliases_for_canonical(canonical_media_id)
         return 0
-
     payload = dict(payload)
     payload.setdefault(
-        "schema_version",
-        settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
+        "schema_version", settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
     )
-    if not is_valid_payload(payload):
+    if not is_valid_global_payload(payload):
         return 0
-
     aliasable_media_ids = payload.get("aliasable_media_ids")
     if not isinstance(aliasable_media_ids, list):
         return 0
-
     new_alias_ids = {
-        str(media_id)
-        for media_id in aliasable_media_ids
-        if str(media_id) != canonical_media_id
+        str(mid) for mid in aliasable_media_ids if str(mid) != canonical_media_id
     }
-
     ttl = get_ttl_seconds()
     old_alias_ids = cache.get(get_alias_index_key(canonical_media_id))
     if not isinstance(old_alias_ids, list):
         old_alias_ids = []
-
     for old_media_id in old_alias_ids:
         if str(old_media_id) not in new_alias_ids:
             _delete_alias_if_owned_by(old_media_id, canonical_media_id)
-
     for aliased_media_id in sorted(new_alias_ids):
-        delete_direct_payload(aliased_media_id)
+        direct = cache.get(get_global_payload_key(aliased_media_id))
+        if direct is not None and not is_valid_global_payload(direct):
+            delete_global_payload(aliased_media_id)
         cache.set(
             get_alias_key(aliased_media_id),
             _build_alias_record(
-                canonical_media_id=canonical_media_id,
-                aliased_media_id=aliased_media_id,
+                canonical_media_id=canonical_media_id, aliased_media_id=aliased_media_id
             ),
             timeout=ttl,
         )
-
     cache.set(
-        get_alias_index_key(canonical_media_id),
-        sorted(new_alias_ids),
-        timeout=ttl,
+        get_alias_index_key(canonical_media_id), sorted(new_alias_ids), timeout=ttl
     )
-
     return len(new_alias_ids)
 
 
@@ -653,102 +755,122 @@ def _load_alias_for_media(media_id) -> dict | None:
     return alias
 
 
-def _empty_lookup(requested_media_id: str, meta: dict) -> FranchisePayloadLookup:
-    return FranchisePayloadLookup(
-        requested_media_id=requested_media_id,
-        canonical_media_id=requested_media_id,
-        payload=None,
-        meta=meta,
-        alias_hit=False,
-    )
-
-
 def load_valid_alias_payload_for_media(media_id) -> FranchisePayloadLookup | None:
-    """Load a valid alias target for media_id without reading direct payload first."""
+    """Load alias target only if it resolves to a valid global payload."""
     requested_media_id = str(media_id)
-
     if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
         return None
-
     alias = _load_alias_for_media(requested_media_id)
     if alias is None:
         return None
-
     canonical_media_id = alias["canonical_media_id"]
     if canonical_media_id == requested_media_id:
         cache.delete(get_alias_key(requested_media_id))
         return None
-
-    canonical_payload, canonical_meta = load_payload(canonical_media_id)
-    if canonical_payload is None or not payload_covers_media_id(
-        canonical_payload,
-        requested_media_id,
+    lookup = load_global_payload(canonical_media_id)
+    if lookup is None or not payload_covers_media_id(
+        lookup.payload, requested_media_id
     ):
+        logger.warning(
+            "Deleting invalid MAL anime franchise alias for media_id=%s "
+            "canonical_media_id=%s",
+            requested_media_id,
+            canonical_media_id,
+        )
         cache.delete(get_alias_key(requested_media_id))
         return None
-
     return FranchisePayloadLookup(
         requested_media_id=requested_media_id,
         canonical_media_id=canonical_media_id,
-        payload=canonical_payload,
-        meta=canonical_meta,
+        payload=lookup.payload,
+        meta=lookup.meta,
         alias_hit=True,
     )
 
 
-def load_payload_for_media(media_id) -> FranchisePayloadLookup:
-    """Load a complete payload for media_id, resolving canonical aliases safely."""
+def load_detail_franchise_payload(media_id) -> DetailFranchisePayloadLookup | None:
+    """Resolve detail payload with strict scoped -> global -> alias priority."""
     requested_media_id = str(media_id)
-
-    direct_payload, direct_meta = load_payload(requested_media_id)
-    if direct_payload is not None:
-        return FranchisePayloadLookup(
+    scoped = load_scoped_payload(requested_media_id)
+    if scoped and scoped.payload is not None:
+        return DetailFranchisePayloadLookup(
             requested_media_id=requested_media_id,
-            canonical_media_id=requested_media_id,
-            payload=direct_payload,
-            meta=direct_meta,
-            alias_hit=False,
+            cache_media_id=requested_media_id,
+            canonical_media_id=str(
+                scoped.payload.get("global_canonical_root_media_id")
+                or scoped.canonical_media_id
+            ),
+            payload=scoped.payload,
+            meta=scoped.meta,
+            hit_kind="scoped_exact",
+            payload_role=PAYLOAD_ROLE_DETAIL_SCOPED,
+            detail_payload_kind=scoped.payload.get("detail_payload_kind"),
         )
+    global_lookup = load_global_payload(requested_media_id)
+    if global_lookup and global_lookup.payload is not None:
+        return DetailFranchisePayloadLookup(
+            requested_media_id=requested_media_id,
+            cache_media_id=requested_media_id,
+            canonical_media_id=global_lookup.canonical_media_id,
+            payload=global_lookup.payload,
+            meta=global_lookup.meta,
+            hit_kind="global_exact",
+            payload_role=PAYLOAD_ROLE_GLOBAL,
+        )
+    alias_lookup = load_valid_alias_payload_for_media(requested_media_id)
+    if alias_lookup and alias_lookup.payload is not None:
+        return DetailFranchisePayloadLookup(
+            requested_media_id=requested_media_id,
+            cache_media_id=alias_lookup.canonical_media_id,
+            canonical_media_id=alias_lookup.canonical_media_id,
+            payload=alias_lookup.payload,
+            meta=alias_lookup.meta,
+            hit_kind="alias",
+            payload_role=PAYLOAD_ROLE_GLOBAL,
+        )
+    return None
 
-    if not settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED:
-        return _empty_lookup(requested_media_id, direct_meta)
 
-    alias = _load_alias_for_media(requested_media_id)
-    if alias is None:
-        return _empty_lookup(requested_media_id, direct_meta)
+def save_global_payload(media_id, payload, *, timeout=None, meta=None) -> dict:
+    """Persist a canonical global franchise payload."""
+    media_id = str(media_id)
+    payload = dict(payload)
+    payload.setdefault(
+        "schema_version", settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+    )
+    ttl = timeout or get_ttl_seconds()
+    saved_meta = _write_payload_to_keys(
+        payload_key=get_global_payload_key(media_id),
+        meta_key=get_global_meta_key(media_id),
+        payload=payload,
+        expected_role=PAYLOAD_ROLE_GLOBAL,
+        validator=is_valid_global_payload,
+        timeout=ttl,
+        meta=meta,
+    )
+    delete_alias_for_media(media_id)
+    return saved_meta
 
-    canonical_media_id = alias["canonical_media_id"]
-    canonical_payload = None
-    canonical_meta = direct_meta
-    if canonical_media_id != requested_media_id:
-        canonical_payload, canonical_meta = load_payload(canonical_media_id)
-        if canonical_payload is not None and not payload_covers_media_id(
-            canonical_payload,
-            requested_media_id,
-        ):
-            canonical_payload = None
 
-    if canonical_payload is None:
-        cache.delete(get_alias_key(requested_media_id))
-        return _empty_lookup(requested_media_id, direct_meta)
-
-    logger.info(
-        "MAL anime franchise alias hit for media_id=%s canonical_media_id=%s",
-        requested_media_id,
-        canonical_media_id,
+def save_scoped_payload(media_id, payload, *, timeout=None, meta=None) -> dict:
+    """Persist a detail-scoped franchise payload."""
+    media_id = str(media_id)
+    payload = dict(payload)
+    payload.setdefault(
+        "schema_version", settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
+    )
+    return _write_payload_to_keys(
+        payload_key=get_scoped_payload_key(media_id),
+        meta_key=get_scoped_meta_key(media_id),
+        payload=payload,
+        expected_role=PAYLOAD_ROLE_DETAIL_SCOPED,
+        validator=is_valid_scoped_payload,
+        timeout=timeout or get_ttl_seconds(),
+        meta=meta,
     )
 
-    return FranchisePayloadLookup(
-        requested_media_id=requested_media_id,
-        canonical_media_id=canonical_media_id,
-        payload=canonical_payload,
-        meta=canonical_meta,
-        alias_hit=True,
-    )
 
-
-def save_payload(
-    media_id,
+def _build_save_meta(
     payload,
     *,
     fetched_at=None,
@@ -756,44 +878,20 @@ def save_payload(
     node_count=None,
     truncated=False,
     truncation_reason="",
-) -> dict:
-    """Persist a complete franchise payload and fresh metadata."""
-    media_id = str(media_id)
-    payload = dict(payload)
-    payload["schema_version"] = settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
-    payload["truncated"] = bool(truncated)
-    payload["truncation_reason"] = truncation_reason or ""
-    payload["node_count"] = (
-        node_count if node_count is not None else _count_nodes(payload)
-    )
-    if not is_valid_payload(payload):
-        message = "Invalid MAL anime franchise payload"
-        raise ValueError(message)
-    if _contains_forbidden_user_data(payload):
-        message = "MAL anime franchise payload contains user-specific data"
-        raise ValueError(message)
-    assert_json_safe_payload(payload)
-
+):
     now = fetched_at or timezone.now()
-    previous_meta = normalize_meta(cache.get(get_meta_key(media_id)))
-    meta = default_meta(
+    return default_meta(
         schema_version=settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION,
         fetched_at=now,
         last_accessed_at=now,
-        last_attempt_at=previous_meta.get("last_attempt_at"),
         last_error_at=None,
         last_error_message="",
-        node_count=payload["node_count"],
+        node_count=node_count if node_count is not None else _count_nodes(payload),
         build_duration_seconds=build_duration_seconds,
         truncated=truncated,
         truncation_reason=truncation_reason,
         last_success_at=now,
     )
-    ttl = get_ttl_seconds()
-    delete_alias_for_media(media_id)
-    cache.set(get_payload_key(media_id), payload, timeout=ttl)
-    cache.set(get_meta_key(media_id), meta, timeout=ttl)
-    return meta
 
 
 def is_fresh(meta) -> bool:
@@ -834,13 +932,13 @@ def can_schedule_build(meta, *, has_payload=False) -> bool:
 def update_meta(media_id, updates) -> dict:
     """Update sidecar metadata while preserving any existing payload."""
     ttl = get_ttl_seconds()
-    payload = cache.get(get_payload_key(media_id))
-    meta = normalize_meta(cache.get(get_meta_key(media_id)))
+    payload = cache.get(get_global_payload_key(media_id))
+    meta = normalize_meta(cache.get(get_global_meta_key(media_id)))
     meta.update(updates)
     meta = normalize_meta(meta)
-    cache.set(get_meta_key(media_id), meta, timeout=ttl)
+    cache.set(get_global_meta_key(media_id), meta, timeout=ttl)
     if payload is not None:
-        _touch_or_set(get_payload_key(media_id), payload, ttl)
+        _touch_or_set(get_global_payload_key(media_id), payload, ttl)
     return meta
 
 
@@ -864,7 +962,7 @@ def maybe_schedule_build(media_id, meta=None, *, has_payload=False) -> bool:
     """Queue a franchise build if cooldown and queue-lock checks permit."""
     media_id = str(media_id)
     if meta is None:
-        meta = cache.get(get_meta_key(media_id))
+        meta = cache.get(get_global_meta_key(media_id))
     meta = normalize_meta(meta)
     if not can_schedule_build(meta, has_payload=has_payload):
         return False

@@ -369,10 +369,16 @@ def media_details(request, source, media_type, media_id, title):  # noqa: ARG001
     )
     if is_anime_franchise_enabled:
         franchise_refresh_considered = False
-        franchise_lookup = anime_franchise_cache.load_payload_for_media(media_id)
-        franchise_payload = franchise_lookup.payload
-        franchise_meta = franchise_lookup.meta
-        franchise_cache_media_id = franchise_lookup.canonical_media_id
+        franchise_lookup = anime_franchise_cache.load_detail_franchise_payload(media_id)
+        franchise_payload = franchise_lookup.payload if franchise_lookup else None
+        franchise_meta = (
+            franchise_lookup.meta
+            if franchise_lookup
+            else anime_franchise_cache.normalize_meta(None)
+        )
+        franchise_cache_media_id = (
+            franchise_lookup.cache_media_id if franchise_lookup else media_id
+        )
         if franchise_payload is not None:
             logger.info("MAL anime franchise cache hit for media_id=%s", media_id)
             try:
