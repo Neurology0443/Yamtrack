@@ -9,8 +9,6 @@ SERIES_VIEW_GROUPABLE_RELATIONS = frozenset(
         "full_story",
         "side_story",
         "spin_off",
-        "alternative_setting",
-        "alternative_version",
     }
 )
 
@@ -23,7 +21,6 @@ SERIES_VIEW_ALTERNATIVE_RELATIONS = frozenset(
 )
 SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS = frozenset(
     {
-        "alternative_version",
     }
 )
 SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES = frozenset(
