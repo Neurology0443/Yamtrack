@@ -101,7 +101,7 @@ The view does not synchronously build a large franchise on a cache miss. It keep
 Build MAL anime franchise payload task
  -> graph build
  -> snapshot build
- -> UI projection
+ -> detail-page UI projection
  -> serialize user-agnostic payload
  -> save canonical payload, metadata, and safe aliases
 ```
@@ -165,6 +165,29 @@ AnimeFranchiseSnapshot
  -> LayoutCompiler
  -> ViewModelAdapter
 ```
+
+## Anime Series View projection
+
+Anime Series View is a separate list/read-model projection from the franchise snapshot. It is not the same as the anime detail-page UI projection.
+
+The projection is built by `AnimeSeriesViewProjectionBuilder` and persists a stable grouping root plus member IDs for the user's tracked MAL anime. Its grouping policy is intentionally narrower than the detail-page franchise layout.
+
+Current Series View groupable relations are:
+
+- `prequel`
+- `sequel`
+- `parent_story`
+- `full_story`
+- `side_story`
+- `spin_off`
+
+`alternative_version` and `alternative_setting` are intentionally not groupable for Anime Series View. They must not merge alternative continuities into the same card and must not trigger reroots.
+
+Strong reroot relations (`parent_story`, `full_story`) are trusted as canonical parent-story signals for Anime Series View. When a non-root-compatible seed such as a special, recap, or other secondary entry points directly to a root-compatible parent through one of those relations, the projection reroots to that parent and keeps the original seed as a member.
+
+Weak secondary relations (`side_story`, `spin_off`) remain conservative and require confirmation before they can become a confident reroot.
+
+This does not remove alternatives from MAL data, detail-page sections, import-profile decisions, or cache payloads. It only defines the Series View card grouping policy.
 
 ## Import projection
 

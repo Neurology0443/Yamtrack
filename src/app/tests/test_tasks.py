@@ -154,12 +154,57 @@ class ImportAnimeFranchiseTaskTests(TestCase):
                     {"media_id": "200", "kind": "root", "component_root_mal_id": "200"},
                 ],
                 "cache_warm_scheduled": 2,
+                "cache_warm_built": 0,
+                "cache_warm_skipped": 0,
                 "cache_warm_roots": ["100", "200"],
                 "cache_warm_errors": 0,
+                "series_view_refreshes": 0,
+                "series_view_refresh_errors": 0,
                 "discovery_errors": 2,
             },
         )
         mock_cache.delete.assert_called_once_with("anime-franchise-import:satellites")
+
+    @patch("app.tasks.cache")
+    @patch("app.tasks.AnimeFranchiseImportService")
+    @patch("app.tasks.AnimeSeriesViewFranchiseRefreshService")
+    @patch("app.tasks.AnimeSeriesViewProjectionBuilder")
+    @patch("app.tasks.AnimeFranchiseCacheBuildService")
+    @patch("app.tasks.AnimeFranchiseBuildSession")
+    def test_import_task_wires_single_build_session(
+        self,
+        build_session_class,
+        cache_build_service_class,
+        projection_builder_class,
+        refresh_service_class,
+        import_service_class,
+        mock_cache,
+    ):
+        mock_cache.add.return_value = True
+        build_session = build_session_class.return_value
+        series_snapshot_service = (
+            build_session.build_series_view_snapshot_service.return_value
+        )
+        import_service_class.return_value.run.return_value = FranchiseImportStats()
+
+        import_anime_franchise(refresh_cache=True)
+
+        build_session_class.assert_called_once_with(refresh_cache=True)
+        projection_builder_class.assert_called_once_with(
+            snapshot_service=series_snapshot_service,
+        )
+        cache_build_service_class.assert_called_once_with(
+            build_session=build_session,
+        )
+        refresh_service_class.assert_called_once_with(
+            projection_builder=projection_builder_class.return_value,
+        )
+        import_service_class.assert_called_once_with(
+            build_session=build_session,
+            snapshot_service=build_session.snapshot_service.return_value,
+            cache_build_service=cache_build_service_class.return_value,
+            series_view_refresh_service=refresh_service_class.return_value,
+        )
 
     @patch("app.tasks.cache")
     @patch("app.tasks.AnimeFranchiseImportService")
@@ -173,8 +218,12 @@ class ImportAnimeFranchiseTaskTests(TestCase):
 
         self.assertEqual(result["cache_warm_targets"], [])
         self.assertEqual(result["cache_warm_scheduled"], 0)
+        self.assertEqual(result["cache_warm_built"], 0)
+        self.assertEqual(result["cache_warm_skipped"], 0)
         self.assertEqual(result["cache_warm_roots"], [])
         self.assertEqual(result["cache_warm_errors"], 0)
+        self.assertEqual(result["series_view_refreshes"], 0)
+        self.assertEqual(result["series_view_refresh_errors"], 0)
         self.assertEqual(result["discovery_errors"], 0)
 
     @patch("app.tasks.cache")

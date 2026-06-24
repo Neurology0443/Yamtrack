@@ -13,10 +13,8 @@ from app.anime_series_view_constants import (
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_series_view_rules import (
-    SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS,
     SERIES_VIEW_CONTINUITY_RELATIONS,
     SERIES_VIEW_GROUPABLE_RELATIONS,
-    SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES,
     SERIES_VIEW_REROOT_RELATION_PRIORITY,
     SERIES_VIEW_ROOT_MEDIA_TYPES,
     SERIES_VIEW_STRONG_REROOT_RELATIONS,
@@ -32,6 +30,7 @@ class AnimeSeriesViewProjectionRoot:
     image: str
     media_type: str
     start_date: date | None
+    alternative_title_en: str = ""
 
 
 @dataclass(frozen=True)
@@ -77,20 +76,13 @@ class AnimeSeriesViewProjectionBuilder:
             refresh_cache=refresh_cache,
             include_series_view_branch_continuations=True,
         )
-        initial_boundary_keys = self._alternative_continuity_boundary_relation_keys(
-            initial_snapshot
-        )
-        initial_component = self._groupable_component(
-            initial_snapshot,
-            seed_media_id,
-            excluded_relation_keys=initial_boundary_keys,
-        )
-        local_root = self._component_root(initial_snapshot, initial_component)
+        initial_component = self._groupable_component(initial_snapshot, seed_media_id)
+        local_root = self._component_local_root(initial_snapshot, initial_component)
+        component_root = self._component_root(initial_snapshot, initial_component)
         candidate = self._select_best_root_candidate(
             initial_snapshot,
             initial_component,
             local_root_media_id=local_root.media_id if local_root else None,
-            excluded_relation_keys=initial_boundary_keys,
         )
 
         if self._should_reroot(
@@ -107,22 +99,20 @@ class AnimeSeriesViewProjectionBuilder:
                 refresh_cache=refresh_cache,
             )
 
-        if local_root is not None and self._local_projection_is_confident(
+        if component_root is not None and self._local_projection_is_confident(
             initial_snapshot,
             initial_component,
-            local_root,
-            excluded_relation_keys=initial_boundary_keys,
+            component_root,
         ):
             return self._franchise_projection(
                 seed_media_id=seed_media_id,
-                root_node=local_root,
+                root_node=component_root,
                 member_media_ids=initial_component,
             )
 
         if not self._has_groupable_evidence(
             initial_snapshot,
             initial_component,
-            excluded_relation_keys=initial_boundary_keys,
         ):
             return self._singleton_projection(initial_snapshot, seed_media_id)
 
@@ -146,26 +136,37 @@ class AnimeSeriesViewProjectionBuilder:
             refresh_cache=refresh_cache,
             include_series_view_branch_continuations=True,
         )
-        canonical_boundary_keys = self._alternative_continuity_boundary_relation_keys(
-            canonical_snapshot
-        )
         canonical_root = self._local_root(canonical_snapshot)
         canonical_component = self._groupable_component(
             canonical_snapshot,
             canonical_root.media_id if canonical_root else candidate.media_id,
-            excluded_relation_keys=canonical_boundary_keys,
         )
         is_strong = candidate.relation_type in SERIES_VIEW_STRONG_REROOT_RELATIONS
         has_clear_continuity = self._has_clear_continuity(
             canonical_snapshot,
             canonical_component,
-            excluded_relation_keys=canonical_boundary_keys,
         )
         weak_snapshot_is_truncated = (
             bool(getattr(canonical_snapshot, "is_truncated", False)) and not is_strong
         )
 
         component_root = self._component_root(canonical_snapshot, canonical_component)
+        weak_has_confirmation = (
+            bool(getattr(canonical_snapshot, "series_line", ()))
+            or has_clear_continuity
+        )
+
+        if not is_strong and (
+            weak_snapshot_is_truncated or not weak_has_confirmation
+        ):
+            return self._unresolved_projection(
+                seed_media_id=seed_media_id,
+                member_media_ids=initial_component,
+                reason="weak_reroot_unconfirmed",
+                is_rerooted=True,
+                reroot_from_media_id=candidate.media_id,
+                reroot_relation_type=candidate.relation_type,
+            )
 
         if component_root is not None:
             root_node = component_root
@@ -174,7 +175,7 @@ class AnimeSeriesViewProjectionBuilder:
                 candidate.media_id,
                 initial_snapshot.nodes_by_media_id.get(candidate.media_id),
             )
-        elif has_clear_continuity and not weak_snapshot_is_truncated:
+        elif has_clear_continuity:
             root_node = self._oldest_root_node(
                 canonical_snapshot,
                 canonical_component,
@@ -215,8 +216,6 @@ class AnimeSeriesViewProjectionBuilder:
         self,
         snapshot,
         seed_media_id,
-        *,
-        excluded_relation_keys=frozenset(),
     ):
         seed_media_id = str(seed_media_id)
         nodes_by_media_id = snapshot.nodes_by_media_id
@@ -226,8 +225,6 @@ class AnimeSeriesViewProjectionBuilder:
         adjacency = {str(media_id): set() for media_id in nodes_by_media_id}
         for relation in self._candidate_relations(snapshot):
             if relation.relation_type not in SERIES_VIEW_GROUPABLE_RELATIONS:
-                continue
-            if self._relation_key(relation) in excluded_relation_keys:
                 continue
             source_id = str(relation.source_media_id)
             target_id = str(relation.target_media_id)
@@ -252,7 +249,6 @@ class AnimeSeriesViewProjectionBuilder:
         component_media_ids,
         *,
         local_root_media_id=None,
-        excluded_relation_keys=frozenset(),
     ):
         series_line_ids = {
             node.media_id for node in getattr(snapshot, "series_line", ())
@@ -261,7 +257,6 @@ class AnimeSeriesViewProjectionBuilder:
         for relation in self._component_relations(
             snapshot,
             component_media_ids,
-            excluded_relation_keys=excluded_relation_keys,
         ):
             for media_id in (
                 str(relation.source_media_id),
@@ -309,7 +304,7 @@ class AnimeSeriesViewProjectionBuilder:
         if candidate is None:
             return False
         if local_root is None:
-            return True
+            return candidate.relation_type in SERIES_VIEW_STRONG_REROOT_RELATIONS
         if candidate.media_id == local_root.media_id:
             return False
 
@@ -334,8 +329,6 @@ class AnimeSeriesViewProjectionBuilder:
         snapshot,
         component_media_ids,
         local_root,
-        *,
-        excluded_relation_keys=frozenset(),
     ):
         if snapshot.series_line:
             return True
@@ -344,7 +337,6 @@ class AnimeSeriesViewProjectionBuilder:
             and self._has_clear_continuity(
                 snapshot,
                 component_media_ids,
-                excluded_relation_keys=excluded_relation_keys,
             )
         )
 
@@ -352,15 +344,12 @@ class AnimeSeriesViewProjectionBuilder:
         self,
         snapshot,
         component_media_ids,
-        *,
-        excluded_relation_keys=frozenset(),
     ):
         return any(
             relation.relation_type in SERIES_VIEW_CONTINUITY_RELATIONS
             for relation in self._component_relations(
                 snapshot,
                 component_media_ids,
-                excluded_relation_keys=excluded_relation_keys,
             )
         )
 
@@ -368,14 +357,11 @@ class AnimeSeriesViewProjectionBuilder:
         self,
         snapshot,
         component_media_ids,
-        *,
-        excluded_relation_keys=frozenset(),
     ):
         return any(
             self._component_relations(
                 snapshot,
                 component_media_ids,
-                excluded_relation_keys=excluded_relation_keys,
             )
         )
 
@@ -395,127 +381,33 @@ class AnimeSeriesViewProjectionBuilder:
         root_node = snapshot.root_node
         return root_node if self._is_root_compatible(root_node) else None
 
-    def _component_root(self, snapshot, component_media_ids):
-        root_node = self._oldest_root_node(snapshot, component_media_ids)
-        if root_node is not None:
-            return root_node
-
+    def _component_local_root(self, snapshot, component_media_ids):
         component_media_ids = {str(media_id) for media_id in component_media_ids}
         local_root = self._local_root(snapshot)
         if local_root is not None and str(local_root.media_id) in component_media_ids:
             return local_root
-
         return None
+
+    def _component_root(self, snapshot, component_media_ids):
+        local_root = self._component_local_root(snapshot, component_media_ids)
+        if local_root is not None:
+            return local_root
+
+        return self._oldest_root_node(snapshot, component_media_ids)
 
     def _component_relations(
         self,
         snapshot,
         component_media_ids,
-        *,
-        excluded_relation_keys=frozenset(),
     ):
         component_media_ids = {str(media_id) for media_id in component_media_ids}
         return [
             relation
             for relation in self._candidate_relations(snapshot)
             if relation.relation_type in SERIES_VIEW_GROUPABLE_RELATIONS
-            and self._relation_key(relation) not in excluded_relation_keys
             and str(relation.source_media_id) in component_media_ids
             and str(relation.target_media_id) in component_media_ids
         ]
-
-    def _alternative_continuity_boundary_relation_keys(self, snapshot):
-        relations = self._candidate_relations(snapshot)
-        direct_boundaries = [
-            relation
-            for relation in relations
-            if self._is_independent_alternative_continuity_boundary(
-                snapshot,
-                relation,
-            )
-        ]
-        external_serial_ids = set()
-        series_line_ids = {
-            str(node.media_id) for node in getattr(snapshot, "series_line", ())
-        }
-        for relation in direct_boundaries:
-            for media_id in (
-                str(relation.source_media_id),
-                str(relation.target_media_id),
-            ):
-                if media_id not in series_line_ids:
-                    external_serial_ids.add(media_id)
-
-        return {
-            self._relation_key(relation)
-            for relation in relations
-            if self._is_independent_alternative_continuity_boundary(
-                snapshot,
-                relation,
-            )
-            or (
-                relation.relation_type in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS
-                and self._relation_has_external_serial_endpoint(
-                    snapshot,
-                    relation,
-                    external_serial_ids,
-                )
-            )
-        }
-
-    def _relation_has_external_serial_endpoint(
-        self,
-        snapshot,
-        relation,
-        external_serial_ids,
-    ):
-        source = snapshot.nodes_by_media_id.get(str(relation.source_media_id))
-        target = snapshot.nodes_by_media_id.get(str(relation.target_media_id))
-        if source is None or target is None:
-            return False
-        if (
-            source.media_type.lower()
-            not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-            or target.media_type.lower()
-            not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-        ):
-            return False
-        return (
-            str(source.media_id) in external_serial_ids
-            or str(target.media_id) in external_serial_ids
-        )
-
-    def _is_independent_alternative_continuity_boundary(
-        self,
-        snapshot,
-        relation,
-    ):
-        if relation.relation_type not in SERIES_VIEW_BOUNDARY_ALTERNATIVE_RELATIONS:
-            return False
-
-        source = snapshot.nodes_by_media_id.get(str(relation.source_media_id))
-        target = snapshot.nodes_by_media_id.get(str(relation.target_media_id))
-        if source is None or target is None:
-            return False
-        if not self._is_root_compatible(source) or not self._is_root_compatible(target):
-            return False
-        if (
-            source.media_type.lower()
-            not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-            or target.media_type.lower()
-            not in SERIES_VIEW_INDEPENDENT_CONTINUITY_MEDIA_TYPES
-        ):
-            return False
-
-        series_line_ids = {
-            str(node.media_id) for node in getattr(snapshot, "series_line", ())
-        }
-        if not series_line_ids:
-            return False
-
-        source_in_line = str(source.media_id) in series_line_ids
-        target_in_line = str(target.media_id) in series_line_ids
-        return source_in_line != target_in_line
 
     @staticmethod
     def _candidate_relations(snapshot):
@@ -617,6 +509,7 @@ class AnimeSeriesViewProjectionBuilder:
             image=node.image,
             media_type=node.media_type,
             start_date=node.start_date,
+            alternative_title_en=node.alternative_title_en or "",
         )
 
     def _node_sort_key(self, node):

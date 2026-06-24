@@ -8,6 +8,8 @@ For MAL anime detail pages, the grouping behavior is:
 - dynamic secondary sections assigned by ordered rule packs:
   - `Main Story Extras`
   - `Specials`
+  - `Spin Offs`
+  - `Alternatives`
   - `Related Series`
 
 The feature is guarded by `ANIME_FRANCHISE_GROUPING_ENABLED` and only applies to MAL anime detail pages.
@@ -149,6 +151,16 @@ A visible section is the result of UI policy, not a canonical franchise fact.
 A franchise entry can appear in a visible UI section without being imported automatically. Import profiles decide what is useful enough to create in a user's library; UI grouping decides how already-known franchise entries should be displayed on a detail page.
 
 Do not use UI sections as direct import-profile input unless the import policy explicitly evolves to do so.
+
+## Detail-page grouping is not Anime Series View grouping
+
+The detail-page franchise layout and Anime Series View card grouping are separate projections.
+
+The detail page may show `alternative_version` or `alternative_setting` entries in the dynamic `Alternatives` section when the UI rule pipeline classifies them there.
+
+Anime Series View does not use those alternative relations to merge cards or choose canonical roots. For Series View grouping, alternatives remain separate unless they are connected through another groupable relation such as `prequel`, `sequel`, `parent_story`, `full_story`, `side_story`, or `spin_off`.
+
+Do not use the detail-page `Alternatives` section as proof that entries should share one Series View card.
 
 ## Badges and tooltips
 

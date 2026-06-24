@@ -12,7 +12,7 @@ from app.providers import mal_cache, services
 
 logger = logging.getLogger(__name__)
 base_url = "https://api.myanimelist.net/v2"
-base_fields = "title,main_picture,media_type,start_date,end_date,synopsis,status,genres,mean,num_scoring_users,recommendations"  # noqa: E501
+base_fields = "title,alternative_titles,main_picture,media_type,start_date,end_date,synopsis,status,genres,mean,num_scoring_users,recommendations"  # noqa: E501
 
 
 def handle_error(error):
@@ -108,6 +108,14 @@ def _fetch_anime_from_api(media_id):
         handle_error(error)
 
     num_episodes = get_number_of_episodes(response)
+    alternative_titles = response.get("alternative_titles")
+    if not isinstance(alternative_titles, dict):
+        alternative_titles = {}
+    alternative_title_en = alternative_titles.get("en")
+    if isinstance(alternative_title_en, str):
+        alternative_title_en = alternative_title_en.strip()
+    else:
+        alternative_title_en = ""
 
     return {
         "media_id": media_id,
@@ -115,6 +123,7 @@ def _fetch_anime_from_api(media_id):
         "source_url": f"https://myanimelist.net/anime/{media_id}",
         "media_type": MediaTypes.ANIME.value,
         "title": response["title"],
+        "alternative_title_en": alternative_title_en,
         "max_progress": num_episodes,
         "image": get_image_url(response),
         "synopsis": get_synopsis(response),

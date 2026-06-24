@@ -127,6 +127,7 @@ class AnimeFranchiseGraphBuilder:
             episode_count=self._parse_episode_count(
                 metadata["details"].get("episodes"),
             ),
+            alternative_title_en=metadata.get("alternative_title_en") or "",
         )
         self._node_cache[node.media_id] = node
         return node

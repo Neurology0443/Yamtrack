@@ -10,21 +10,19 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from app.models import Anime, Item, MediaTypes, Sources, Status
-from app.providers import mal
-from app.services.anime_franchise_cache_warmer import (
-    schedule_mal_anime_franchise_cache_warm,
-)
+from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
+from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryService
 from app.services.anime_franchise_import_profiles import get_import_profile
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_import_state import AnimeImportStateService
-from app.services.anime_series_view_refresh_triggers import (
-    AnimeSeriesViewRefreshTriggerService,
+from app.services.anime_series_view_franchise_refresh import (
+    AnimeSeriesViewFranchiseRefreshService,
 )
+from app.services.anime_series_view_projection import AnimeSeriesViewProjectionBuilder
 from events.notifications import notify_entry_added_after_commit
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +58,11 @@ class FranchiseImportStats:
     cache_warm_targets: list[CacheWarmTarget] = field(default_factory=list)
     cache_warm_roots: list[str] = field(default_factory=list)
     cache_warm_scheduled: int = 0
+    cache_warm_built: int = 0
+    cache_warm_skipped: int = 0
     cache_warm_errors: int = 0
+    series_view_refreshes: int = 0
+    series_view_refresh_errors: int = 0
     discovery_errors: int = 0
 
 
@@ -70,22 +72,36 @@ class AnimeFranchiseImportService:
     def __init__(
         self,
         *,
+        build_session: AnimeFranchiseBuildSession | None = None,
         snapshot_service: AnimeFranchiseSnapshotService | None = None,
         state_service: AnimeImportStateService | None = None,
-        cache_warm_scheduler: Callable[[str], None] | None = None,
+        cache_build_service: AnimeFranchiseCacheBuildService | None = None,
         discovery_service: AnimeFranchiseDiscoveryService | None = None,
-        series_view_refresh_trigger: AnimeSeriesViewRefreshTriggerService | None = None,
+        series_view_refresh_service: (
+            AnimeSeriesViewFranchiseRefreshService | None
+        ) = None,
     ):
         """Initialize the importer with optional testable dependencies."""
-        self.snapshot_service = snapshot_service or AnimeFranchiseSnapshotService()
+        self.build_session = build_session or AnimeFranchiseBuildSession()
+        self.snapshot_service = (
+            snapshot_service or self.build_session.snapshot_service()
+        )
         self.state_service = state_service or AnimeImportStateService()
-        self.cache_warm_scheduler = (
-            cache_warm_scheduler or schedule_mal_anime_franchise_cache_warm
+        self.cache_build_service = (
+            cache_build_service
+            or AnimeFranchiseCacheBuildService(
+                build_session=self.build_session,
+            )
         )
         self.discovery_service = discovery_service or AnimeFranchiseDiscoveryService()
-        self.series_view_refresh_trigger = (
-            series_view_refresh_trigger or AnimeSeriesViewRefreshTriggerService()
-        )
+        if series_view_refresh_service is None:
+            projection_builder = AnimeSeriesViewProjectionBuilder(
+                snapshot_service=self.build_session.build_series_view_snapshot_service(),
+            )
+            series_view_refresh_service = AnimeSeriesViewFranchiseRefreshService(
+                projection_builder=projection_builder,
+            )
+        self.series_view_refresh_service = series_view_refresh_service
 
     def run(  # noqa: C901, PLR0912, PLR0915
         self,
@@ -150,22 +166,6 @@ class AnimeFranchiseImportService:
                     )
                 return
 
-            try:
-                # The existing warm scheduler is intentionally reused with non-root
-                # media IDs so the build task can decide whether to create an alias,
-                # a canonical local payload, or a scoped payload.
-                self.cache_warm_scheduler(media_id)
-            except Exception:
-                stats.cache_warm_errors += 1
-                logger.exception(
-                    "Anime franchise import failed to register %s cache warm build "
-                    "for media_id=%s component_root_mal_id=%s",
-                    kind,
-                    media_id,
-                    component_root_mal_id,
-                )
-                return
-
             target: CacheWarmTarget = {
                 "media_id": media_id,
                 "kind": kind,
@@ -173,7 +173,30 @@ class AnimeFranchiseImportService:
             }
             scheduled_warm_targets_by_media_id[media_id] = target
             stats.cache_warm_targets.append(target)
-            stats.cache_warm_scheduled += 1
+
+            try:
+                cache_result = self.cache_build_service.build_and_save(
+                    media_id,
+                    refresh_cache=refresh_cache,
+                    force_cache_rebuild=True,
+                )
+            except Exception:
+                stats.cache_warm_errors += 1
+                logger.exception(
+                    "Anime franchise import failed to build %s cache warm payload "
+                    "for media_id=%s component_root_mal_id=%s",
+                    kind,
+                    media_id,
+                    component_root_mal_id,
+                )
+                return
+
+            if cache_result.get("built"):
+                stats.cache_warm_built += 1
+            else:
+                stats.cache_warm_skipped += 1
+                if cache_result.get("error"):
+                    stats.cache_warm_errors += 1
 
             if kind == "root":
                 stats.cache_warm_roots.append(media_id)
@@ -230,7 +253,7 @@ class AnimeFranchiseImportService:
                         imported_media_ids_for_snapshot.add(media_id)
                         continue
 
-                    metadata = mal.anime_minimal(
+                    metadata = self.build_session.anime_minimal(
                         media_id,
                         refresh_cache=refresh_cache,
                     )
@@ -271,13 +294,16 @@ class AnimeFranchiseImportService:
                         component_root_mal_id,
                     }
                     try:
-                        self.series_view_refresh_trigger.schedule_import_batch(
+                        self.series_view_refresh_service.refresh_for_media_ids(
                             user=user,
                             media_ids=refresh_media_ids,
+                            refresh_cache=refresh_cache,
                         )
+                        stats.series_view_refreshes += 1
                     except Exception:
+                        stats.series_view_refresh_errors += 1
                         logger.exception(
-                            "Failed to schedule Anime Series View refresh after import",
+                            "Failed to refresh Anime Series View after import",
                             extra={
                                 "user_id": user.id,
                                 "seed_media_id": due_seed.seed_mal_id,
