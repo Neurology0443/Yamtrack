@@ -139,6 +139,8 @@ Used by candidate assembly and UI rules to switch no-series behavior on or off. 
 - Rule packs classify assembled candidates into dynamic secondary sections.
 - UI code should not mutate the snapshot.
 
+Anime Series View is a separate projection from the same snapshot. It uses its own groupable-relation policy and intentionally does not treat `alternative_version` or `alternative_setting` as grouping/reroot signals.
+
 ## How import uses the snapshot
 
 - Import profiles read the snapshot directly.
