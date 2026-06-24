@@ -18,6 +18,9 @@ from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
+from app.services.anime_franchise_continuity_invalidation import (
+    AnimeFranchiseContinuityInvalidationService,
+)
 from app.services.anime_franchise_import import AnimeFranchiseImportService
 from app.services.anime_franchise_manual_add_triggers import manual_add_queue_lock_key
 from app.services.anime_franchise_task_names import (
@@ -175,10 +178,29 @@ def refresh_mal_anime_metadata(media_id):
                 "Failed to process anime release-date metadata refresh for %s",
                 media_id,
             )
+        try:
+            franchise_invalidation = (
+                AnimeFranchiseContinuityInvalidationService().process_metadata_refresh(
+                    media_id=media_id,
+                    old_metadata=old_metadata,
+                    new_metadata=new_metadata,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to process MAL anime franchise invalidation for %s",
+                media_id,
+            )
+            franchise_invalidation = {
+                "changed": False,
+                "scheduled": False,
+                "error": "franchise_invalidation_failed",
+            }
         return {
             "media_type": "anime",
             "media_id": str(media_id),
             "refreshed": True,
+            "franchise_invalidation": franchise_invalidation,
         }
     except (
         requests.exceptions.Timeout,
