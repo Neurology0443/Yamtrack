@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
 from app.services import anime_franchise_cache
 
 DISPLAYABLE_LOCAL_RELATIONS = {"full_story", "sequel", "prequel"}
+IGNORED_SECTION_KEYS = {"ignored"}
+RICH_LOCAL_SECTION_KEYS = {"continuity_extras"}
 
 
 @dataclass(frozen=True)
@@ -160,3 +163,105 @@ def build_detail_scoped_payload_from_snapshot(
             anime_franchise_cache.assert_json_safe_payload(payload)
             return payload
     return None
+
+
+def _entry_media_id(entry: Mapping[str, Any]) -> str | None:
+    media_id = entry.get("media_id")
+    if media_id in (None, ""):
+        return None
+    return str(media_id)
+
+
+def _is_non_tv_entry(entry: Mapping[str, Any]) -> bool:
+    media_type = entry.get("anime_media_type") or entry.get("media_type")
+    return str(media_type).lower() not in {"", "anime", "tv"}
+
+
+def _displayable_entry_groups(
+    payload: Mapping[str, Any],
+) -> list[tuple[str, list[dict]]]:
+    groups: list[tuple[str, list[dict]]] = []
+    series = payload.get("series")
+    if isinstance(series, Mapping):
+        entries = [
+            entry for entry in series.get("entries", []) if isinstance(entry, dict)
+        ]
+        if entries:
+            groups.append(("series", entries))
+
+    sections = payload.get("sections")
+    if not isinstance(sections, list):
+        return groups
+
+    for section in sections:
+        if not isinstance(section, Mapping):
+            continue
+        section_key = str(section.get("key") or "")
+        if section_key in IGNORED_SECTION_KEYS:
+            continue
+        if section.get("visible_in_ui", True) is False:
+            continue
+        entries = [
+            entry for entry in section.get("entries", []) if isinstance(entry, dict)
+        ]
+        if entries:
+            groups.append((section_key, entries))
+    return groups
+
+
+def _displayable_entry_count(payload: Mapping[str, Any]) -> int:
+    return sum(
+        len(entries) for _section_key, entries in _displayable_entry_groups(payload)
+    )
+
+
+def _group_contains_seed(entries: list[dict], seed_media_id: str) -> bool:
+    return any(_entry_media_id(entry) == seed_media_id for entry in entries)
+
+
+def _canonical_has_richer_seed_context(
+    *,
+    seed_media_id: str,
+    canonical_payload: Mapping[str, Any],
+    scoped_payload: Mapping[str, Any],
+) -> bool:
+    canonical_count = _displayable_entry_count(canonical_payload)
+    scoped_count = _displayable_entry_count(scoped_payload)
+    if canonical_count <= scoped_count:
+        return False
+
+    for section_key, entries in _displayable_entry_groups(canonical_payload):
+        if not _group_contains_seed(entries, seed_media_id):
+            continue
+        if section_key == "series" and len(entries) > 1:
+            return True
+        if section_key in RICH_LOCAL_SECTION_KEYS and len(entries) > 1:
+            return True
+        if len(entries) > 1 and any(_is_non_tv_entry(entry) for entry in entries):
+            return True
+    return False
+
+
+def should_prefer_alias_global_payload(
+    *,
+    seed_media_id: str,
+    canonical_payload: Mapping[str, Any] | None,
+    scoped_payload: Mapping[str, Any] | None,
+) -> bool:
+    """Return whether alias/global UI context is richer than a scoped candidate."""
+    seed_media_id = str(seed_media_id)
+    if canonical_payload is None or scoped_payload is None:
+        return False
+    if not anime_franchise_cache.is_valid_global_payload(canonical_payload):
+        return False
+    if not anime_franchise_cache.is_valid_scoped_payload(scoped_payload):
+        return False
+    if not anime_franchise_cache.payload_covers_media_id(
+        dict(canonical_payload), seed_media_id
+    ):
+        return False
+    return _canonical_has_richer_seed_context(
+        seed_media_id=seed_media_id,
+        canonical_payload=canonical_payload,
+        scoped_payload=scoped_payload,
+    )

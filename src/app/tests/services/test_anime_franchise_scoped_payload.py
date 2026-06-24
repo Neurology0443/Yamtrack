@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, override_settings
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_scoped_payload import (
     build_detail_scoped_payload_from_snapshot,
+    should_prefer_alias_global_payload,
 )
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
@@ -164,3 +165,134 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
         self.assertEqual(entry["start_date"], "2019-01-01")
         self.assertEqual(entry["runtime_minutes"], 24)
         self.assertEqual(entry["episode_count"], 12)
+
+    def _global_payload_for_alias_preference(self):
+        return {
+            "schema_version": 1,
+            "root_media_id": "34161",
+            "canonical_root_media_id": "34161",
+            "display_title": "Overlord Movies",
+            "payload_role": anime_franchise_cache.PAYLOAD_ROLE_GLOBAL,
+            "payload_kind": anime_franchise_cache.PAYLOAD_KIND_CANONICAL_FRANCHISE,
+            "build_seed_media_id": "34161",
+            "aliasable_media_ids": ["34161", "34428"],
+            "covered_media_ids": ["34161", "34428", "29803"],
+            "series": {
+                "key": "series",
+                "title": "Series",
+                "entries": [
+                    {
+                        "media_id": "29803",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "tv",
+                        "title": "Overlord",
+                    },
+                ],
+            },
+            "sections": [
+                {
+                    "key": "continuity_extras",
+                    "title": "Main Story Extras",
+                    "visible_in_ui": True,
+                    "entries": [
+                        {
+                            "media_id": "34161",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "movie",
+                            "title": "Overlord Movie 1",
+                        },
+                        {
+                            "media_id": "34428",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "movie",
+                            "title": "Overlord Movie 2",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def _scoped_payload_for_alias_preference(self):
+        return {
+            "schema_version": 1,
+            "root_media_id": "34428",
+            "canonical_root_media_id": "34428",
+            "display_title": "Overlord Movie 2",
+            "payload_role": anime_franchise_cache.PAYLOAD_ROLE_DETAIL_SCOPED,
+            "detail_payload_kind": (
+                anime_franchise_cache.DETAIL_PAYLOAD_KIND_SEED_CONTEXT
+            ),
+            "rule_key": "non_tv_seed_to_tv_context_v1",
+            "global_canonical_root_media_id": "34161",
+            "build_seed_media_id": "34428",
+            "series": {"key": "series", "title": "Series", "entries": []},
+            "sections": [
+                {
+                    "key": "related_series",
+                    "title": "Related Series",
+                    "visible_in_ui": True,
+                    "entries": [
+                        {
+                            "media_id": "29803",
+                            "source": "mal",
+                            "media_type": "anime",
+                            "anime_media_type": "tv",
+                            "title": "Overlord",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def test_prefers_alias_global_when_canonical_has_richer_seed_context(self):
+        self.assertTrue(
+            should_prefer_alias_global_payload(
+                seed_media_id="34428",
+                canonical_payload=self._global_payload_for_alias_preference(),
+                scoped_payload=self._scoped_payload_for_alias_preference(),
+            )
+        )
+
+    def test_does_not_prefer_alias_global_when_seed_is_not_aliasable(self):
+        canonical_payload = self._global_payload_for_alias_preference()
+        canonical_payload["aliasable_media_ids"] = ["34161"]
+
+        self.assertFalse(
+            should_prefer_alias_global_payload(
+                seed_media_id="34428",
+                canonical_payload=canonical_payload,
+                scoped_payload=self._scoped_payload_for_alias_preference(),
+            )
+        )
+
+    def test_does_not_prefer_alias_global_when_scoped_is_equally_rich(self):
+        scoped_payload = self._scoped_payload_for_alias_preference()
+        scoped_payload["sections"][0]["entries"].extend(
+            [
+                {
+                    "media_id": "34161",
+                    "source": "mal",
+                    "media_type": "anime",
+                    "anime_media_type": "movie",
+                    "title": "Overlord Movie 1",
+                },
+                {
+                    "media_id": "34428",
+                    "source": "mal",
+                    "media_type": "anime",
+                    "anime_media_type": "movie",
+                    "title": "Overlord Movie 2",
+                },
+            ]
+        )
+
+        self.assertFalse(
+            should_prefer_alias_global_payload(
+                seed_media_id="34428",
+                canonical_payload=self._global_payload_for_alias_preference(),
+                scoped_payload=scoped_payload,
+            )
+        )

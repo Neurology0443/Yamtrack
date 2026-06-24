@@ -54,8 +54,15 @@ class AnimeFranchiseCacheBuildServiceTests(TestCase):
         )
         return payload
 
-    def make_scoped_payload(self, *, seed_id="269", canonical_id="223", title="Scoped"):
-        payload = self.make_payload(root_id=seed_id, alias_ids=[seed_id])
+    def make_scoped_payload(
+        self,
+        *,
+        seed_id="269",
+        canonical_id="223",
+        title="Scoped",
+        entry_ids=None,
+    ):
+        payload = self.make_payload(root_id=seed_id, alias_ids=entry_ids or [seed_id])
         payload.update(
             {
                 "display_title": title,
@@ -181,15 +188,14 @@ class AnimeFranchiseCacheBuildServiceTests(TestCase):
         self.save_global("223", alias_ids=["223", "269"])
         legacy_seed = self.make_global_payload(media_id="269", alias_ids=["269"])
         anime_franchise_cache.save_global_payload("269", legacy_seed)
-        build_session, _snapshot = self.make_build_session(
-            canonical_id="223"
-        )
+        build_session, _snapshot = self.make_build_session(canonical_id="223")
         mock_pipeline_class.return_value.run.return_value = object()
         mock_serialize.return_value = self.make_payload(
             root_id="223", alias_ids=["223", "269"]
         )
         mock_build_detail_scoped_payload.return_value = self.make_scoped_payload(
-            canonical_id="223"
+            canonical_id="223",
+            entry_ids=["269", "270"],
         )
 
         AnimeFranchiseCacheBuildService(build_session=build_session).build_and_save(
@@ -210,6 +216,83 @@ class AnimeFranchiseCacheBuildServiceTests(TestCase):
     )
     @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
     @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    def test_non_canonical_build_skips_poor_scoped_when_alias_global_is_richer(
+        self,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_build_detail_scoped_payload,
+    ):
+        canonical = self.make_global_payload(media_id="34161", alias_ids=["34161"])
+        canonical["aliasable_media_ids"] = ["34161", "34428"]
+        canonical["covered_media_ids"] = ["34161", "34428", "29803"]
+        canonical["series"]["entries"] = [
+            {
+                "media_id": "29803",
+                "source": "mal",
+                "media_type": "anime",
+                "anime_media_type": "tv",
+                "title": "Overlord",
+            }
+        ]
+        canonical["sections"] = [
+            {
+                "key": "continuity_extras",
+                "title": "Main Story Extras",
+                "visible_in_ui": True,
+                "entries": [
+                    {
+                        "media_id": "34161",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "movie",
+                        "title": "Overlord Movie 1",
+                    },
+                    {
+                        "media_id": "34428",
+                        "source": "mal",
+                        "media_type": "anime",
+                        "anime_media_type": "movie",
+                        "title": "Overlord Movie 2",
+                    },
+                ],
+            }
+        ]
+        anime_franchise_cache.save_global_payload("34161", canonical)
+        anime_franchise_cache.replace_aliases("34161", canonical)
+        anime_franchise_cache.save_scoped_payload(
+            "34428",
+            self.make_scoped_payload(seed_id="34428", canonical_id="34161"),
+        )
+        build_session, _snapshot = self.make_build_session(canonical_id="34161")
+        mock_pipeline_class.return_value.run.return_value = object()
+        mock_serialize.return_value = self.make_payload(
+            root_id="34161", alias_ids=["34161", "34428"]
+        )
+        mock_build_detail_scoped_payload.return_value = self.make_scoped_payload(
+            seed_id="34428",
+            canonical_id="34161",
+        )
+
+        AnimeFranchiseCacheBuildService(build_session=build_session).build_and_save(
+            "34428"
+        )
+
+        self.assertIsNone(
+            cache.get(anime_franchise_cache.get_global_payload_key("34428"))
+        )
+        self.assertIsNone(
+            cache.get(anime_franchise_cache.get_scoped_payload_key("34428"))
+        )
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("34428")))
+        lookup = anime_franchise_cache.load_detail_franchise_payload("34428")
+        self.assertEqual(lookup.hit_kind, "alias")
+        self.assertEqual(lookup.canonical_media_id, "34161")
+
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_detail_scoped_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
     def test_non_canonical_build_without_scoped_deletes_old_scoped_and_keeps_alias(
         self,
         mock_serialize,
@@ -221,9 +304,7 @@ class AnimeFranchiseCacheBuildServiceTests(TestCase):
         anime_franchise_cache.save_scoped_payload(
             "269", self.make_scoped_payload(seed_id="269")
         )
-        build_session, _snapshot = self.make_build_session(
-            canonical_id="223"
-        )
+        build_session, _snapshot = self.make_build_session(canonical_id="223")
         mock_pipeline_class.return_value.run.return_value = object()
         mock_serialize.return_value = self.make_payload(
             root_id="223", alias_ids=["223", "269"]
@@ -253,9 +334,7 @@ class AnimeFranchiseCacheBuildServiceTests(TestCase):
         mock_pipeline_class,
         mock_build_detail_scoped_payload,
     ):
-        build_session, _snapshot = self.make_build_session(
-            canonical_id="223"
-        )
+        build_session, _snapshot = self.make_build_session(canonical_id="223")
         mock_pipeline_class.return_value.run.return_value = object()
         mock_serialize.return_value = self.make_payload(
             root_id="223", alias_ids=["223", "269"]

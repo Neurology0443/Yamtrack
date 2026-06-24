@@ -13,6 +13,7 @@ from app.services.anime_franchise_build_session import AnimeFranchiseBuildSessio
 from app.services.anime_franchise_context import serialize_franchise_payload
 from app.services.anime_franchise_scoped_payload import (
     build_detail_scoped_payload_from_snapshot,
+    should_prefer_alias_global_payload,
 )
 from app.services.anime_franchise_ui import AnimeFranchiseUiPipeline
 
@@ -128,7 +129,24 @@ class AnimeFranchiseCacheBuildService:
                 snapshot,
                 seed_media_id=media_id,
             )
-            if scoped_payload is not None and not is_canonical_build:
+            prefer_alias_global = (
+                not is_canonical_build
+                and should_prefer_alias_global_payload(
+                    seed_media_id=media_id,
+                    canonical_payload=existing_canonical_payload,
+                    scoped_payload=scoped_payload,
+                )
+            )
+            if prefer_alias_global:
+                logger.info(
+                    "Skipping MAL anime detail-scoped payload for media_id=%s because "
+                    "canonical alias payload for canonical_media_id=%s provides "
+                    "richer UI context",
+                    media_id,
+                    canonical_media_id,
+                )
+                anime_franchise_cache.delete_scoped_payload(media_id)
+            elif scoped_payload is not None and not is_canonical_build:
                 scoped_node_count = len(
                     anime_franchise_cache.extract_payload_media_ids(scoped_payload),
                 )

@@ -290,6 +290,8 @@ MAL anime franchise cache keys are role-specific:
 
 Detail pages resolve cache entries in this order: scoped exact, global exact, then alias. Legacy global keys without `payload_role = "global"` are deleted and rebuilt through normal scheduling; they are never rendered as compatibility payloads.
 
+A detail-scoped payload has priority over global/alias only when it provides seed-specific UI context that is not worse than the canonical alias payload. If a valid alias points to a canonical global payload that already covers the seed and provides richer local UI context, the builder skips/deletes the scoped payload so the resolver falls back to the alias.
+
 `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED = False` is a degraded mode: no alias
 records are created, old aliases are removed on canonical builds, and
 non-canonical seeds can render only if a valid detail-scoped payload exists.
