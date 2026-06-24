@@ -168,6 +168,10 @@ Current Series View groupable relations are:
 
 `alternative_version` and `alternative_setting` are intentionally not groupable for Anime Series View. They must not merge alternative continuities into the same card and must not trigger reroots.
 
+Strong reroot relations (`parent_story`, `full_story`) are trusted as canonical parent-story signals for Anime Series View. When a non-root-compatible seed such as a special, recap, or other secondary entry points directly to a root-compatible parent through one of those relations, the projection reroots to that parent and keeps the original seed as a member.
+
+Weak secondary relations (`side_story`, `spin_off`) remain conservative and require confirmation before they can become a confident reroot.
+
 This does not remove alternatives from MAL data, detail-page sections, import-profile decisions, or cache payloads. It only defines the Series View card grouping policy.
 
 ## Import projection

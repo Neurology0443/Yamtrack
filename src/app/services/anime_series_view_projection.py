@@ -77,7 +77,8 @@ class AnimeSeriesViewProjectionBuilder:
             include_series_view_branch_continuations=True,
         )
         initial_component = self._groupable_component(initial_snapshot, seed_media_id)
-        local_root = self._component_root(initial_snapshot, initial_component)
+        local_root = self._component_local_root(initial_snapshot, initial_component)
+        component_root = self._component_root(initial_snapshot, initial_component)
         candidate = self._select_best_root_candidate(
             initial_snapshot,
             initial_component,
@@ -98,14 +99,14 @@ class AnimeSeriesViewProjectionBuilder:
                 refresh_cache=refresh_cache,
             )
 
-        if local_root is not None and self._local_projection_is_confident(
+        if component_root is not None and self._local_projection_is_confident(
             initial_snapshot,
             initial_component,
-            local_root,
+            component_root,
         ):
             return self._franchise_projection(
                 seed_media_id=seed_media_id,
-                root_node=local_root,
+                root_node=component_root,
                 member_media_ids=initial_component,
             )
 
@@ -287,7 +288,7 @@ class AnimeSeriesViewProjectionBuilder:
         if candidate is None:
             return False
         if local_root is None:
-            return True
+            return candidate.relation_type in SERIES_VIEW_STRONG_REROOT_RELATIONS
         if candidate.media_id == local_root.media_id:
             return False
 
@@ -364,10 +365,16 @@ class AnimeSeriesViewProjectionBuilder:
         root_node = snapshot.root_node
         return root_node if self._is_root_compatible(root_node) else None
 
-    def _component_root(self, snapshot, component_media_ids):
+    def _component_local_root(self, snapshot, component_media_ids):
         component_media_ids = {str(media_id) for media_id in component_media_ids}
         local_root = self._local_root(snapshot)
         if local_root is not None and str(local_root.media_id) in component_media_ids:
+            return local_root
+        return None
+
+    def _component_root(self, snapshot, component_media_ids):
+        local_root = self._component_local_root(snapshot, component_media_ids)
+        if local_root is not None:
             return local_root
 
         return self._oldest_root_node(snapshot, component_media_ids)
