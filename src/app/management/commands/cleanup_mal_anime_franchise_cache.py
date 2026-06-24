@@ -60,20 +60,25 @@ class Command(BaseCommand):
             return
         yield from self._iter_raw_keys("mal_anime_franchise_*")
 
-    def _is_global_payload_key(self, key):
+    def _extract_media_id_from_global_key(self, key):
         key = str(key)
-        return (
-            key.startswith("mal_anime_franchise_")
-            and not key.startswith("mal_anime_franchise_scoped_")
-            and not key.startswith("mal_anime_franchise_alias_")
-            and not key.startswith("mal_anime_franchise_build_")
-            and not key.endswith(":meta")
-            and not key.endswith(":aliases")
-            and not key.endswith(":queue_lock")
-            and not key.endswith(":task_lock")
+        prefix = "mal_anime_franchise_"
+        ignored_prefixes = (
+            "mal_anime_franchise_scoped_",
+            "mal_anime_franchise_alias_",
+            "mal_anime_franchise_build_",
         )
+        ignored_suffixes = (":meta", ":aliases", ":queue_lock", ":task_lock")
+        if not key.startswith(prefix) or key.startswith(ignored_prefixes):
+            return None
+        if key.endswith(ignored_suffixes):
+            return None
+        media_id = key.removeprefix(prefix)
+        if not media_id or ":" in media_id or "/" in media_id:
+            return None
+        return media_id
 
-    def handle(self, *args, **options):  # noqa: ARG002,C901
+    def handle(self, *args, **options):  # noqa: ARG002,C901,PLR0912
         apply = options["apply"]
         schedule = options["schedule_rebuild"]
         limit = options.get("limit")
@@ -85,16 +90,24 @@ class Command(BaseCommand):
             "invalid_global_deleted": 0,
             "scheduled_rebuilds": 0,
             "skipped_locks_or_cooldowns": 0,
+            "missing_global_key": 0,
             "dry_run": not apply,
         }
         for key in self._iter_global_keys(options.get("media_id")):
-            if not self._is_global_payload_key(key):
+            media_id = self._extract_media_id_from_global_key(key)
+            if media_id is None:
+                if verbose:
+                    self.stderr.write(f"Skipping ambiguous cache key: {key}")
                 continue
             if limit is not None and summary["processed_global_keys"] >= limit:
                 break
-            summary["processed_global_keys"] += 1
-            media_id = str(key).replace("mal_anime_franchise_", "", 1)
             payload = cache.get(key)
+            if payload is None:
+                summary["missing_global_key"] += 1
+                if verbose:
+                    self.stdout.write(f"Missing {key}; nothing to delete")
+                continue
+            summary["processed_global_keys"] += 1
             if anime_franchise_cache.is_valid_global_payload(payload):
                 summary["global_valid"] += 1
                 continue
@@ -102,13 +115,15 @@ class Command(BaseCommand):
             if verbose:
                 reason = "legacy" if is_legacy else "invalid"
                 self.stdout.write(f"Would delete {key} ({reason})")
+            deleted = False
             if apply:
                 anime_franchise_cache.delete_global_payload(media_id)
+                deleted = True
             if is_legacy:
                 summary["legacy_global_deleted"] += 1
             else:
                 summary["invalid_global_deleted"] += 1
-            if apply and schedule:
+            if deleted and schedule:
                 if anime_franchise_cache.maybe_schedule_build(
                     media_id,
                     payload_meta=None,

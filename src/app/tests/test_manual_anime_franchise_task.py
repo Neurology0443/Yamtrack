@@ -50,7 +50,6 @@ class ProcessManualMALAnimeFranchiseTaskTests(TestCase):
         cache_service_class.return_value.build_and_save.assert_called_once_with(
             "100",
             refresh_cache=False,
-            force_cache_rebuild=True,
         )
         projection_builder_class.assert_called_once_with(
             snapshot_service=snapshot_service,

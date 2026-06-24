@@ -243,25 +243,27 @@ def prepare_payload_for_aliasing(
     payload: dict,
     *,
     build_seed_media_id,
+    canonical_media_id=None,
     truncated: bool,
     aliases_enabled: bool | None = None,
 ) -> tuple[dict, str, set[str]]:
     """Return payload with canonical root and explicit alias coverage metadata."""
     payload = dict(payload)
     build_seed_media_id = str(build_seed_media_id)
-    if aliases_enabled is None:
-        aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
+    _ = (
+        truncated,
+        settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
+        if aliases_enabled is None
+        else aliases_enabled,
+    )
 
-    if truncated or not aliases_enabled:
-        payload["root_media_id"] = build_seed_media_id
-        payload["canonical_root_media_id"] = build_seed_media_id
-        payload["aliasable_media_ids"] = [build_seed_media_id]
-        payload["covered_media_ids"] = sorted(extract_payload_media_ids(payload))
-        return payload, build_seed_media_id, {build_seed_media_id}
-
-    canonical_media_id = determine_canonical_media_id(
-        payload,
-        fallback_media_id=build_seed_media_id,
+    canonical_media_id = (
+        str(canonical_media_id)
+        if canonical_media_id not in (None, "")
+        else determine_canonical_media_id(
+            payload,
+            fallback_media_id=build_seed_media_id,
+        )
     )
 
     aliasable_media_ids = extract_aliasable_media_ids(payload)
@@ -735,6 +737,21 @@ def replace_aliases(
     return len(new_alias_ids)
 
 
+def sync_aliases_for_global_payload(
+    canonical_media_id,
+    payload: dict,
+    *,
+    aliases_enabled: bool,
+    truncated: bool,
+) -> int:
+    """Synchronize aliases for a canonical global payload or delete stale aliases."""
+    canonical_media_id = str(canonical_media_id)
+    if not aliases_enabled or truncated:
+        delete_aliases_for_canonical(canonical_media_id)
+        return 0
+    return replace_aliases(canonical_media_id, payload, truncated=False)
+
+
 def _load_alias_for_media(media_id) -> dict | None:
     media_id = str(media_id)
     alias = _normalize_alias_record(cache.get(get_alias_key(media_id)))
@@ -828,6 +845,14 @@ def save_global_payload(media_id, payload, *, timeout=None, meta=None) -> dict:
     payload.setdefault(
         "schema_version", settings.ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION
     )
+    if (
+        str(payload.get("root_media_id") or "") != media_id
+        or str(payload.get("canonical_root_media_id") or "") != media_id
+    ):
+        message = (
+            "Global MAL anime franchise payload must be saved under its canonical id"
+        )
+        raise ValueError(message)
     ttl = timeout or get_ttl_seconds()
     saved_meta = _write_payload_to_keys(
         payload_key=get_global_payload_key(media_id),

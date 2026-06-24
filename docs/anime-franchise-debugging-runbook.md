@@ -187,9 +187,9 @@ media_ids = list(
 )
 conflicts = []
 for media_id in media_ids:
-    direct = cache.get(anime_franchise_cache.get_global_payload_key(media_id))
+    global_payload = cache.get(anime_franchise_cache.get_global_payload_key(media_id))
     alias = cache.get(anime_franchise_cache.get_alias_key(media_id))
-    if direct and alias:
+    if global_payload and alias:
         conflicts.append(str(media_id))
 
 print(f"checked_media_ids: {len(media_ids)}")

@@ -1,4 +1,4 @@
-"""Build scoped direct MAL anime franchise payloads for non-canonical seeds."""
+"""Build detail-scoped MAL anime franchise payloads for non-canonical seeds."""
 
 from __future__ import annotations
 

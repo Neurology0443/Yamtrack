@@ -31,14 +31,8 @@ class AnimeFranchiseCacheBuildService:
         media_id,
         *,
         refresh_cache=False,
-        force_cache_rebuild=False,  # noqa: ARG002
     ) -> dict:
-        """Build and save UI cache payloads.
-
-        force_cache_rebuild only bypasses the existing-alias shortcut for the
-        user-agnostic UI cache. It does not force MAL API refreshes; MAL
-        freshness is controlled exclusively by refresh_cache.
-        """
+        """Build and save user-agnostic global/scoped franchise cache payloads."""
         media_id = str(media_id)
         started_at = time.monotonic()
         try:
@@ -49,7 +43,6 @@ class AnimeFranchiseCacheBuildService:
             franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
             truncated = bool(graph_builder.truncated)
             aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
-            can_use_aliases = aliases_enabled and not truncated
             truncation_reason = graph_builder.truncation_reason or ""
             node_count = graph_builder.node_count
             serialized_payload = serialize_franchise_payload(
@@ -60,6 +53,9 @@ class AnimeFranchiseCacheBuildService:
                 anime_franchise_cache.prepare_payload_for_aliasing(
                     serialized_payload,
                     build_seed_media_id=media_id,
+                    canonical_media_id=getattr(
+                        snapshot, "canonical_root_media_id", None
+                    ),
                     truncated=truncated,
                     aliases_enabled=aliases_enabled,
                 )
@@ -97,12 +93,12 @@ class AnimeFranchiseCacheBuildService:
                         truncation_reason=truncation_reason,
                     ),
                 )
-                if can_use_aliases:
-                    alias_count = anime_franchise_cache.replace_aliases(
-                        canonical_media_id,
-                        canonical_payload,
-                        truncated=False,
-                    )
+                alias_count = anime_franchise_cache.sync_aliases_for_global_payload(
+                    canonical_media_id,
+                    canonical_payload,
+                    aliases_enabled=aliases_enabled,
+                    truncated=truncated,
+                )
             else:
                 existing_canonical_lookup = anime_franchise_cache.load_global_payload(
                     canonical_media_id
@@ -113,12 +109,15 @@ class AnimeFranchiseCacheBuildService:
                     else None
                 )
                 if existing_canonical_payload:
-                    if can_use_aliases:
-                        alias_count = anime_franchise_cache.replace_aliases(
-                            canonical_media_id,
-                            existing_canonical_payload,
-                            truncated=False,
-                        )
+                    alias_count = anime_franchise_cache.sync_aliases_for_global_payload(
+                        canonical_media_id,
+                        existing_canonical_payload,
+                        aliases_enabled=aliases_enabled,
+                        truncated=bool(
+                            existing_canonical_payload.get("truncated")
+                            or existing_canonical_lookup.meta.get("truncated")
+                        ),
+                    )
                 else:
                     anime_franchise_cache.maybe_schedule_build(
                         canonical_media_id,

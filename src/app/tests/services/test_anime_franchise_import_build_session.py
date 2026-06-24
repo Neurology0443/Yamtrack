@@ -86,12 +86,10 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         cache_build_service.build_and_save.assert_any_call(
             "100",
             refresh_cache=False,
-            force_cache_rebuild=True,
         )
         cache_build_service.build_and_save.assert_any_call(
             "200",
             refresh_cache=False,
-            force_cache_rebuild=True,
         )
         series_view_refresh_service.refresh_for_media_ids.assert_called_once_with(
             user=user,
@@ -171,7 +169,6 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         cache_build_service.build_and_save.assert_called_once_with(
             "100",
             refresh_cache=True,
-            force_cache_rebuild=True,
         )
         series_view_refresh_service.refresh_for_media_ids.assert_called_once_with(
             user=user,

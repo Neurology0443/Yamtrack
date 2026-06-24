@@ -340,7 +340,6 @@ def process_manual_mal_anime_franchise(user_id, media_id):
             cache_result = cache_service.build_and_save(
                 media_id,
                 refresh_cache=False,
-                force_cache_rebuild=True,
             )
             result["cache_ui"].update(
                 {

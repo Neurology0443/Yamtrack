@@ -235,7 +235,9 @@ After import-created entries commit, `schedule_mal_anime_franchise_cache_warm()`
 - `mark_attempt()` updates metadata before a build.
 - `mark_error()` records failure metadata and preserves previous successful payload data.
 - Invalid build output is not saved as the active payload.
-- Truncated builds can save scoped payloads but avoid unsafe canonical alias replacement.
+- Truncated builds can save canonical global/scoped payloads, but they delete
+  previously generated aliases for the canonical payload rather than leaving
+  stale alias fallbacks behind.
 
 ## Redis keys
 
@@ -269,7 +271,7 @@ docker compose exec yamtrack python manage.py shell -c "from app.tasks import bu
 | Setting | Purpose |
 | --- | --- |
 | `ANIME_FRANCHISE_CACHE_TTL_DAYS` | Redis/cache lifetime for payload and metadata keys. After this, the cached entry can disappear. |
-| `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` | Enables alias keys from selected media IDs to the canonical franchise payload. |
+| `ANIME_FRANCHISE_CACHE_ALIASES_ENABLED` | Enables alias keys from selected media IDs to the canonical franchise payload. When disabled, canonical builds delete existing aliases, and non-canonical seeds never receive fallback global payloads under `mal_anime_franchise_<seed_id>`. |
 | `ANIME_FRANCHISE_CACHE_FRESH_DAYS` | Logical freshness window. Older valid payloads can still render, but should trigger background refresh. |
 | `ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS` | Minimum delay before scheduling another normal rebuild after a recent build attempt/success. |
 | `ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS` | Minimum delay before retrying a rebuild after an error. |
@@ -287,5 +289,11 @@ MAL anime franchise cache keys are role-specific:
 - `mal_anime_franchise_alias_<seed_id>` stores only a lightweight alias record to a canonical global payload.
 
 Detail pages resolve cache entries in this order: scoped exact, global exact, then alias. Legacy global keys without `payload_role = "global"` are deleted and rebuilt through normal scheduling; they are never rendered as compatibility payloads.
+
+`ANIME_FRANCHISE_CACHE_ALIASES_ENABLED = False` is a degraded mode: no alias
+records are created, old aliases are removed on canonical builds, and
+non-canonical seeds can render only if a valid detail-scoped payload exists.
+The builder must not compensate by writing a global payload under a
+non-canonical seed ID.
 
 Use `python manage.py cleanup_mal_anime_franchise_cache --verbose` for dry-run inspection and `python manage.py cleanup_mal_anime_franchise_cache --apply --schedule-rebuild --verbose` to delete legacy ambiguous global keys and enqueue rebuilds.

@@ -75,6 +75,28 @@ class CleanupMalAnimeFranchiseCacheCommandTests(TestCase):
         )
         self.assertIsNone(cache.get(anime_franchise_cache.get_global_meta_key("100")))
 
+    def test_apply_deletes_invalid_global_payload(self):
+        invalid = deepcopy(self.payload)
+        invalid["payload_role"] = anime_franchise_cache.PAYLOAD_ROLE_DETAIL_SCOPED
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), invalid)
+
+        output = self._run("--media-id", "100", "--apply")
+
+        self.assertIsNone(
+            cache.get(anime_franchise_cache.get_global_payload_key("100"))
+        )
+        self.assertIn("invalid_global_deleted: 1", output)
+
+    def test_apply_preserves_valid_global_payload(self):
+        anime_franchise_cache.save_global_payload("100", self.payload)
+
+        output = self._run("--media-id", "100", "--apply")
+
+        self.assertIsNotNone(
+            cache.get(anime_franchise_cache.get_global_payload_key("100"))
+        )
+        self.assertIn("global_valid: 1", output)
+
     def test_apply_preserves_scoped_and_alias(self):
         scoped = deepcopy(self.payload)
         scoped.update(
@@ -103,6 +125,27 @@ class CleanupMalAnimeFranchiseCacheCommandTests(TestCase):
         )
         self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("100")))
 
+    def test_apply_preserves_build_meta(self):
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), {"legacy": True})
+        anime_franchise_cache.update_build_meta("100", {"last_error_message": "boom"})
+
+        self._run("--media-id", "100", "--apply")
+
+        self.assertEqual(
+            cache.get(anime_franchise_cache.get_build_meta_key("100"))[
+                "last_error_message"
+            ],
+            "boom",
+        )
+
+    @patch("app.services.anime_franchise_cache.maybe_schedule_build")
+    def test_media_id_missing_key_does_not_schedule_rebuild(self, mock_schedule):
+        output = self._run("--media-id", "404", "--apply", "--schedule-rebuild")
+
+        mock_schedule.assert_not_called()
+        self.assertIn("processed_global_keys: 0", output)
+        self.assertIn("missing_global_key: 1", output)
+
     @patch("app.services.anime_franchise_cache.maybe_schedule_build")
     def test_schedule_rebuild_uses_scheduler(self, mock_schedule):
         mock_schedule.return_value = True
@@ -114,3 +157,59 @@ class CleanupMalAnimeFranchiseCacheCommandTests(TestCase):
             "100", payload_meta=None, has_payload=False
         )
         self.assertIn("scheduled_rebuilds: 1", output)
+
+    @patch("app.services.anime_franchise_cache.maybe_schedule_build")
+    def test_schedule_rebuild_only_after_actual_delete(self, mock_schedule):
+        anime_franchise_cache.save_global_payload("100", self.payload)
+
+        self._run("--media-id", "100", "--apply", "--schedule-rebuild")
+
+        mock_schedule.assert_not_called()
+
+    @patch(
+        "app.management.commands.cleanup_mal_anime_franchise_cache.Command._iter_raw_keys"
+    )
+    def test_scanner_ignores_non_global_keys(self, mock_iter_keys):
+        cache.set(anime_franchise_cache.get_global_payload_key("100"), {"legacy": True})
+        cache.set(
+            anime_franchise_cache.get_scoped_payload_key("100"), {"bad": "scoped"}
+        )
+        cache.set(anime_franchise_cache.get_alias_key("100"), {"bad": "alias"})
+        cache.set(anime_franchise_cache.get_build_meta_key("100"), {"bad": "build"})
+        cache.set(anime_franchise_cache.get_global_meta_key("100"), {"bad": "meta"})
+        cache.set(anime_franchise_cache.get_alias_index_key("100"), ["200"])
+        cache.set(anime_franchise_cache.get_queue_lock_key("100"), "1")
+        cache.set(anime_franchise_cache.get_task_lock_key("100"), "1")
+        mock_iter_keys.return_value = iter(
+            [
+                anime_franchise_cache.get_scoped_payload_key("100"),
+                anime_franchise_cache.get_alias_key("100"),
+                anime_franchise_cache.get_build_meta_key("100"),
+                anime_franchise_cache.get_global_meta_key("100"),
+                anime_franchise_cache.get_alias_index_key("100"),
+                anime_franchise_cache.get_queue_lock_key("100"),
+                anime_franchise_cache.get_task_lock_key("100"),
+                anime_franchise_cache.get_global_payload_key("100"),
+            ]
+        )
+
+        output = self._run("--apply")
+
+        self.assertIn("legacy_global_deleted: 1", output)
+        self.assertIsNotNone(
+            cache.get(anime_franchise_cache.get_scoped_payload_key("100"))
+        )
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_alias_key("100")))
+        self.assertIsNotNone(cache.get(anime_franchise_cache.get_build_meta_key("100")))
+
+    @patch(
+        "app.management.commands.cleanup_mal_anime_franchise_cache.Command._iter_raw_keys"
+    )
+    def test_ambiguous_prefixed_raw_key_is_skipped_safely(self, mock_iter_keys):
+        cache.set(":1:mal_anime_franchise_100", {"legacy": True})
+        mock_iter_keys.return_value = iter([":1:mal_anime_franchise_100"])
+
+        output = self._run("--apply", "--verbose")
+
+        self.assertIn("processed_global_keys: 0", output)
+        self.assertIsNotNone(cache.get(":1:mal_anime_franchise_100"))

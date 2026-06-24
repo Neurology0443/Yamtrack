@@ -178,7 +178,6 @@ class AnimeFranchiseImportService:
                 cache_result = self.cache_build_service.build_and_save(
                     media_id,
                     refresh_cache=refresh_cache,
-                    force_cache_rebuild=True,
                 )
             except Exception:
                 stats.cache_warm_errors += 1
