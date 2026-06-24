@@ -807,6 +807,39 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.skip_reason, "insufficient_groupable_evidence")
         snapshot_service.build.assert_called_once()
 
+    def test_truncated_weak_reroot_with_local_root_is_unresolved(self):
+        spin_off = self.node("710", start_date=date(2020, 1, 1))
+        main = self.node("711", start_date=date(2010, 1, 1))
+        sequel = self.node("712", start_date=date(2012, 1, 1))
+        relation = self.relation("710", "711", "spin_off")
+        initial = self.snapshot(
+            seed="710",
+            nodes={"710": spin_off, "711": main},
+            series_line=[spin_off],
+            relations=[relation],
+            direct_candidates=[relation],
+        )
+        canonical = self.snapshot(
+            seed="711",
+            nodes={"711": main, "712": sequel},
+            series_line=[main],
+            relations=[self.relation("711", "712", "sequel")],
+            is_truncated=True,
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [initial, canonical]
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("710")
+
+        self.assertFalse(projection.is_confident)
+        self.assertIsNone(projection.group_kind)
+        self.assertEqual(projection.skip_reason, "weak_reroot_unconfirmed")
+        self.assertTrue(projection.is_rerooted)
+        self.assertEqual(projection.reroot_relation_type, "spin_off")
+        self.assertEqual(snapshot_service.build.call_count, 2)
+
     def test_truncated_weak_reroot_is_unresolved_despite_partial_continuity(self):
         seed = self.node("710", media_type="special")
         candidate = self.node("711")

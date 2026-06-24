@@ -151,6 +151,22 @@ class AnimeSeriesViewProjectionBuilder:
         )
 
         component_root = self._component_root(canonical_snapshot, canonical_component)
+        weak_has_confirmation = (
+            bool(getattr(canonical_snapshot, "series_line", ()))
+            or has_clear_continuity
+        )
+
+        if not is_strong and (
+            weak_snapshot_is_truncated or not weak_has_confirmation
+        ):
+            return self._unresolved_projection(
+                seed_media_id=seed_media_id,
+                member_media_ids=initial_component,
+                reason="weak_reroot_unconfirmed",
+                is_rerooted=True,
+                reroot_from_media_id=candidate.media_id,
+                reroot_relation_type=candidate.relation_type,
+            )
 
         if component_root is not None:
             root_node = component_root
@@ -159,7 +175,7 @@ class AnimeSeriesViewProjectionBuilder:
                 candidate.media_id,
                 initial_snapshot.nodes_by_media_id.get(candidate.media_id),
             )
-        elif has_clear_continuity and not weak_snapshot_is_truncated:
+        elif has_clear_continuity:
             root_node = self._oldest_root_node(
                 canonical_snapshot,
                 canonical_component,
