@@ -596,9 +596,10 @@
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ↓
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Franchise Snapshot
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── UI Projection
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── Import Projection
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└── Cache Projection
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── Detail-page UI Projection
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── Anime Series View Projection
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>├── Import Projection
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>└── Cache Projection
 </span></code></pre></div>
 <p>The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.</p>
 <h2 id="mental-model">Mental model<a class="headerlink" href="#mental-model" title="Permanent link">&para;</a></h2>
@@ -655,7 +656,7 @@
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build MAL anime franchise payload task
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a> -&gt; graph build
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a> -&gt; snapshot build
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; UI projection
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; detail-page UI projection
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a> -&gt; serialize user-agnostic payload
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a> -&gt; save canonical payload, metadata, and safe aliases
 </span></code></pre></div>
@@ -697,6 +698,22 @@ backoff, and jitter.</p>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a> -&gt; LayoutCompiler
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a> -&gt; ViewModelAdapter
 </span></code></pre></div>
+<h2 id="anime-series-view-projection">Anime Series View projection<a class="headerlink" href="#anime-series-view-projection" title="Permanent link">&para;</a></h2>
+<p>Anime Series View is a separate list/read-model projection from the franchise snapshot. It is not the same as the anime detail-page UI projection.</p>
+<p>The projection is built by <code>AnimeSeriesViewProjectionBuilder</code> and persists a stable grouping root plus member IDs for the user's tracked MAL anime. Its grouping policy is intentionally narrower than the detail-page franchise layout.</p>
+<p>Current Series View groupable relations are:</p>
+<ul>
+<li><code>prequel</code></li>
+<li><code>sequel</code></li>
+<li><code>parent_story</code></li>
+<li><code>full_story</code></li>
+<li><code>side_story</code></li>
+<li><code>spin_off</code></li>
+</ul>
+<p><code>alternative_version</code> and <code>alternative_setting</code> are intentionally not groupable for Anime Series View. They must not merge alternative continuities into the same card and must not trigger reroots.</p>
+<p>Strong reroot relations (<code>parent_story</code>, <code>full_story</code>) are trusted as canonical parent-story signals for Anime Series View. When a non-root-compatible seed such as a special, recap, or other secondary entry points directly to a root-compatible parent through one of those relations, the projection reroots to that parent and keeps the original seed as a member.</p>
+<p>Weak secondary relations (<code>side_story</code>, <code>spin_off</code>) remain conservative and require confirmation before they can become a confident reroot.</p>
+<p>This does not remove alternatives from MAL data, detail-page sections, import-profile decisions, or cache payloads. It only defines the Series View card grouping policy.</p>
 <h2 id="import-projection">Import projection<a class="headerlink" href="#import-projection" title="Permanent link">&para;</a></h2>
 <p>The import projection also uses the snapshot, but it has its own policy:</p>
 <ul>

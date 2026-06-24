@@ -671,6 +671,7 @@
 <li>Rule packs classify assembled candidates into dynamic secondary sections.</li>
 <li>UI code should not mutate the snapshot.</li>
 </ul>
+<p>Anime Series View is a separate projection from the same snapshot. It uses its own groupable-relation policy and intentionally does not treat <code>alternative_version</code> or <code>alternative_setting</code> as grouping/reroot signals.</p>
 <h2 id="how-import-uses-the-snapshot">How import uses the snapshot<a class="headerlink" href="#how-import-uses-the-snapshot" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Import profiles read the snapshot directly.</li>

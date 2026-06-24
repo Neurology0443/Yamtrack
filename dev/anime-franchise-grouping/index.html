@@ -587,6 +587,8 @@
 <li>dynamic secondary sections assigned by ordered rule packs:</li>
 <li><code>Main Story Extras</code></li>
 <li><code>Specials</code></li>
+<li><code>Spin Offs</code></li>
+<li><code>Alternatives</code></li>
 <li><code>Related Series</code></li>
 </ul>
 <p>The feature is guarded by <code>ANIME_FRANCHISE_GROUPING_ENABLED</code> and only applies to MAL anime detail pages.</p>
@@ -698,6 +700,11 @@
 <p>A visible section is the result of UI policy, not a canonical franchise fact.</p>
 <p>A franchise entry can appear in a visible UI section without being imported automatically. Import profiles decide what is useful enough to create in a user's library; UI grouping decides how already-known franchise entries should be displayed on a detail page.</p>
 <p>Do not use UI sections as direct import-profile input unless the import policy explicitly evolves to do so.</p>
+<h2 id="detail-page-grouping-is-not-anime-series-view-grouping">Detail-page grouping is not Anime Series View grouping<a class="headerlink" href="#detail-page-grouping-is-not-anime-series-view-grouping" title="Permanent link">&para;</a></h2>
+<p>The detail-page franchise layout and Anime Series View card grouping are separate projections.</p>
+<p>The detail page may show <code>alternative_version</code> or <code>alternative_setting</code> entries in the dynamic <code>Alternatives</code> section when the UI rule pipeline classifies them there.</p>
+<p>Anime Series View does not use those alternative relations to merge cards or choose canonical roots. For Series View grouping, alternatives remain separate unless they are connected through another groupable relation such as <code>prequel</code>, <code>sequel</code>, <code>parent_story</code>, <code>full_story</code>, <code>side_story</code>, or <code>spin_off</code>.</p>
+<p>Do not use the detail-page <code>Alternatives</code> section as proof that entries should share one Series View card.</p>
 <h2 id="badges-and-tooltips">Badges and tooltips<a class="headerlink" href="#badges-and-tooltips" title="Permanent link">&para;</a></h2>
 <p>Franchise entries can display small badges that summarize useful relation and format information directly on the detail page.</p>
 <p>These badges are presentation helpers. They make entries easier to scan, but they do not decide section placement.</p>
