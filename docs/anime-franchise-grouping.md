@@ -50,17 +50,20 @@ MAL anime franchise payloads are cached as display-ready read models.
 
 Cache keys:
 
-- `mal_anime_franchise_<canonical_id>` stores only a global canonical payload.
-- `mal_anime_franchise_alias_<media_id>` stores a lightweight alias to a canonical payload.
+- `mal_anime_franchise_<canonical_id>` stores only a canonical global payload.
+- `mal_anime_franchise_scoped_<seed_id>` stores only a detail-scoped payload for a specific detail-page seed.
+- `mal_anime_franchise_alias_<seed_id>` stores only a lightweight alias to a canonical global payload.
 
-Expected states for a media id:
+Expected states for a detail-page media id:
 
-- `GLOBAL`: a canonical global payload exists.
-- `ALIAS`: a lightweight alias points to a canonical global payload.
+- `SCOPED`: a detail-scoped payload exists for this seed and is preferred for rendering.
+- `GLOBAL`: the media id is itself a canonical id and a canonical global payload exists.
+- `ALIAS`: the media id resolves to a canonical global payload through an alias.
+- `SCOPED + ALIAS`: valid; the scoped payload is preferred, and the alias remains as canonical fallback.
 - `MISS`: no scoped/global payload and no alias exist.
-- `GLOBAL + ALIAS for a non-canonical id`: invalid conflict cleaned by alias replacement.
+- `GLOBAL + ALIAS for the same non-canonical id`: invalid conflict; the global payload would shadow alias resolution and should be cleaned.
 
-Direct payloads are valid for canonical roots, local mini-franchises, and non-aliasable satellites that need their own detail-page context. An alias is not required for every entry that appears in a franchise payload.
+Canonical global payloads are only valid under their canonical id. Non-canonical detail-page context must use `mal_anime_franchise_scoped_<seed_id>`, not a global payload under the seed id.
 
 Aliases are only created for media ids explicitly listed in `aliasable_media_ids`.
 
