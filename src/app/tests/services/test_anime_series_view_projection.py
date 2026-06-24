@@ -149,7 +149,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
 
         self.assertEqual(projection.root.alternative_title_en, "")
 
-    def test_rezero_special_reroots_to_main_series_and_keeps_seed(self):
+    def test_parent_story_without_distinct_local_root_stays_unresolved(self):
         special = self.node("36286", media_type="special")
         candidate = self.node("31240", start_date=date(2016, 4, 4))
         relation = self.relation("36286", "31240", "parent_story")
@@ -159,23 +159,17 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             relations=[relation],
             secondary_candidates=[relation],
         )
-        canonical = self.snapshot(
-            seed="31240",
-            nodes={"31240": candidate},
-            series_line=[candidate],
-        )
         snapshot_service = Mock()
-        snapshot_service.build.side_effect = [initial, canonical]
+        snapshot_service.build.return_value = initial
 
         projection = AnimeSeriesViewProjectionBuilder(
             snapshot_service=snapshot_service
         ).build("36286")
 
-        self.assertEqual(projection.root.media_id, "31240")
-        self.assertIn("36286", projection.member_media_ids)
-        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
-        self.assertTrue(projection.is_rerooted)
-        self.assertEqual(projection.reroot_relation_type, "parent_story")
+        self.assertFalse(projection.is_confident)
+        self.assertIsNone(projection.group_kind)
+        self.assertEqual(projection.skip_reason, "insufficient_groupable_evidence")
+        snapshot_service.build.assert_called_once()
 
     def test_sao_progressive_alternative_setting_does_not_reroot_to_sao(self):
         progressive = self.node("50275", media_type="movie")
@@ -302,10 +296,10 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             snapshot_service=snapshot_service
         ).build("903")
 
-        self.assertTrue(projection.is_confident)
-        self.assertEqual(projection.root.media_id, "904")
-        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
-        self.assertEqual(snapshot_service.build.call_count, 2)
+        self.assertFalse(projection.is_confident)
+        self.assertIsNone(projection.group_kind)
+        self.assertEqual(projection.skip_reason, "insufficient_groupable_evidence")
+        snapshot_service.build.assert_called_once()
 
     def test_candidate_priority_prefers_parent_story(self):
         seed = self.node("905", media_type="special")
@@ -596,6 +590,92 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             ("2966", "5341", "6007", "6884"),
         )
 
+    def test_no_series_local_continuity_does_not_reroot_to_same_root(self):
+        movie_a = self.node(
+            "600",
+            media_type="movie",
+            start_date=date(2020, 1, 1),
+        )
+        movie_b = self.node(
+            "601",
+            media_type="movie",
+            start_date=date(2022, 1, 1),
+        )
+        relation = self.relation("600", "601", "sequel")
+        snapshot = self.snapshot(
+            seed="600",
+            nodes={"600": movie_a, "601": movie_b},
+            relations=[relation],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.return_value = snapshot
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("600")
+
+        self.assertEqual(projection.root.media_id, "600")
+        self.assertEqual(projection.member_media_ids, ("600", "601"))
+        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertFalse(projection.is_rerooted)
+        snapshot_service.build.assert_called_once()
+
+    def test_parent_story_parent_beats_local_series_line_child(self):
+        child = self.node("200", start_date=date(2020, 1, 1))
+        parent = self.node("100", start_date=date(2010, 1, 1))
+        relation = self.relation("200", "100", "parent_story")
+
+        initial = self.snapshot(
+            seed="200",
+            nodes={"100": parent, "200": child},
+            series_line=[child],
+            relations=[relation],
+            root_candidates=[relation],
+        )
+        canonical = self.snapshot(
+            seed="100",
+            nodes={"100": parent},
+            series_line=[parent],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [initial, canonical]
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("200")
+
+        self.assertEqual(projection.root.media_id, "100")
+        self.assertTrue(projection.is_rerooted)
+        self.assertEqual(projection.reroot_relation_type, "parent_story")
+
+    def test_full_story_parent_beats_local_series_line_child(self):
+        child = self.node("210", start_date=date(2020, 1, 1))
+        parent = self.node("110", start_date=date(2010, 1, 1))
+        relation = self.relation("210", "110", "full_story")
+
+        initial = self.snapshot(
+            seed="210",
+            nodes={"110": parent, "210": child},
+            series_line=[child],
+            relations=[relation],
+            root_candidates=[relation],
+        )
+        canonical = self.snapshot(
+            seed="110",
+            nodes={"110": parent},
+            series_line=[parent],
+        )
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [initial, canonical]
+
+        projection = AnimeSeriesViewProjectionBuilder(
+            snapshot_service=snapshot_service
+        ).build("210")
+
+        self.assertEqual(projection.root.media_id, "110")
+        self.assertTrue(projection.is_rerooted)
+        self.assertEqual(projection.reroot_relation_type, "full_story")
+
     def test_movie_only_continuity_projects_as_franchise(self):
         movie_a = self.node(
             "600",
@@ -665,7 +745,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
         self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
         self.assertEqual(projection.member_media_ids, ("620", "621"))
 
-    def test_side_story_reroots_to_confirmed_candidate(self):
+    def test_weak_side_story_without_confirmation_is_unresolved(self):
         special = self.node("700", media_type="special")
         candidate = self.node("701")
         relation = self.relation("700", "701", "side_story")
@@ -685,11 +765,12 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             snapshot_service=snapshot_service
         ).build("700")
 
-        self.assertTrue(projection.is_confident)
-        self.assertEqual(projection.root.media_id, "701")
-        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertFalse(projection.is_confident)
+        self.assertIsNone(projection.group_kind)
+        self.assertEqual(projection.skip_reason, "insufficient_groupable_evidence")
+        snapshot_service.build.assert_called_once()
 
-    def test_spin_off_reroots_to_confirmed_candidate_with_partial_continuity(self):
+    def test_truncated_weak_reroot_is_unresolved_despite_partial_continuity(self):
         seed = self.node("710", media_type="special")
         candidate = self.node("711")
         sequel = self.node("712")
@@ -712,6 +793,7 @@ class AnimeSeriesViewProjectionBuilderTests(SimpleTestCase):
             snapshot_service=snapshot_service
         ).build("710")
 
-        self.assertTrue(projection.is_confident)
-        self.assertEqual(projection.root.media_id, "711")
-        self.assertEqual(projection.group_kind, GROUP_KIND_FRANCHISE)
+        self.assertFalse(projection.is_confident)
+        self.assertIsNone(projection.group_kind)
+        self.assertEqual(projection.skip_reason, "insufficient_groupable_evidence")
+        snapshot_service.build.assert_called_once()

@@ -81,6 +81,7 @@ docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test event
 
 - Changed grouping graph/snapshot/assembler/rules/UI profile/UI pipeline:
   - run service tests (including `app.tests.services.test_anime_series_view_projection` for Anime Series View grouping/projection semantics and `app.tests.services.test_anime_franchise_ui_pipeline` for promoted continuity + section placement flow) + `test_media_details`.
+  - when changing Series View relation semantics, also verify the alternative-separation tests, weak-reroot safety tests, and parent/full-story reroot priority tests in `test_anime_series_view_projection`.
 - Changed import profiles/state/task/schedule/command:
   - run import/state/task/schedule/command tests.
 - Changed entry-added notification behavior:

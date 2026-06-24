@@ -289,7 +289,7 @@ class AnimeSeriesViewProjectionBuilder:
         if local_root is None:
             return True
         if candidate.media_id == local_root.media_id:
-            return not candidate.is_in_series_line
+            return False
 
         candidate_node = snapshot.nodes_by_media_id[candidate.media_id]
         if candidate.relation_type in SERIES_VIEW_STRONG_REROOT_RELATIONS:
@@ -365,16 +365,12 @@ class AnimeSeriesViewProjectionBuilder:
         return root_node if self._is_root_compatible(root_node) else None
 
     def _component_root(self, snapshot, component_media_ids):
-        root_node = self._oldest_root_node(snapshot, component_media_ids)
-        if root_node is not None:
-            return root_node
-
         component_media_ids = {str(media_id) for media_id in component_media_ids}
         local_root = self._local_root(snapshot)
         if local_root is not None and str(local_root.media_id) in component_media_ids:
             return local_root
 
-        return None
+        return self._oldest_root_node(snapshot, component_media_ids)
 
     def _component_relations(
         self,
