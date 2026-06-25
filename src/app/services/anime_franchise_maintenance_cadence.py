@@ -87,7 +87,7 @@ def summarize_franchise_activity(snapshot, *, now) -> FranchiseActivitySummary:
     )
 
 
-def compute_success_scan_window(  # noqa: PLR0911
+def compute_success_scan_window(  # noqa: C901, PLR0911
     *, activity_summary=None, snapshot=None, state, result, now
 ) -> ScanWindow:
     """Return the adaptive success scan window for a maintained franchise."""
@@ -104,7 +104,7 @@ def compute_success_scan_window(  # noqa: PLR0911
         return _window(HOT, "changed")
     if summary.has_airing or summary.has_upcoming or summary.has_future_start:
         return _window(HOT, "active_or_future")
-    if summary.newest_end_date is None or summary.has_unknown_end_dates:
+    if summary.newest_end_date is None:
         return _window(WARM, "unknown_end_date")
 
     age_days = (timezone.localtime(now).date() - summary.newest_end_date).days
@@ -114,6 +114,8 @@ def compute_success_scan_window(  # noqa: PLR0911
         return _window(COOL, "mature")
     if age_days < _deep_cold_min_age_years() * 365:
         return _window(COLD, "old")
+    if summary.has_unknown_end_dates:
+        return _window(COLD, "old_with_unknown_end_dates")
 
     if _deep_cold_allowed(summary=summary, state=state, result=result, now=now):
         return _window(DEEP_COLD, "deep_cold")
@@ -144,14 +146,17 @@ def _deep_cold_allowed(*, summary, state, result, now) -> bool:  # noqa: PLR0911
 
 
 def _window(profile: str, reason: str) -> ScanWindow:
+    if profile not in _ALLOWED_PROFILES:
+        message = f"Unsupported cadence profile: {profile}"
+        raise ValueError(message)
     if profile == HOT:
-        return ScanWindow(profile, reason, 6 * 60, 36 * 60, 30)
+        return ScanWindow(profile, reason, 6 * 60, 36 * 60, 15)
     if profile == WARM:
         return ScanWindow(profile, reason, 24 * 60, 3 * 24 * 60, 120)
     if profile == COOL:
         return ScanWindow(profile, reason, 3 * 24 * 60, 10 * 24 * 60, 240)
     if profile == COLD:
-        return ScanWindow(profile, reason, 14 * 24 * 60, 45 * 24 * 60, 360)
+        return ScanWindow(profile, reason, 10 * 24 * 60, 21 * 24 * 60, 360)
     if profile == DEEP_COLD:
         return ScanWindow(
             profile,
@@ -160,7 +165,7 @@ def _window(profile: str, reason: str) -> ScanWindow:
             _deep_cold_max_days() * 24 * 60,
             720,
         )
-    message = f"Unsupported cadence profile: {profile}"
+    message = f"Unsupported cadence profile without configured window: {profile}"
     raise ValueError(message)
 
 
@@ -195,15 +200,15 @@ def _deep_cold_min_change_age_days() -> int:
 
 
 def _deep_cold_min_days() -> int:
-    return max(60, _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS", 60))
+    return max(21, _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS", 21))
 
 
 def _deep_cold_max_days() -> int:
     min_days = _deep_cold_min_days()
     return min(
-        120,
+        30,
         max(
             min_days,
-            _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS", 120),
+            _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS", 30),
         ),
     )

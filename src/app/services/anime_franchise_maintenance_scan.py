@@ -342,12 +342,21 @@ class AnimeFranchiseMaintenanceScanService:
         else:
             state.consecutive_stable_scans += 1
         state.last_result_fingerprint = result.maintenance_fingerprint
-        window = compute_success_scan_window(
-            activity_summary=result.activity_summary,
-            state=state,
-            result=result,
-            now=now,
-        )
+        if changed or root_changed:
+            window = ScanWindow(
+                profile="HOT",
+                reason="covered_state_changed",
+                min_minutes=6 * 60,
+                max_minutes=36 * 60,
+                micro_jitter_minutes=15,
+            )
+        else:
+            window = compute_success_scan_window(
+                activity_summary=result.activity_summary,
+                state=state,
+                result=result,
+                now=now,
+            )
         result.scan_window = window
         result.cadence_profile = window.profile
         result.cadence_reason = window.reason
