@@ -486,6 +486,7 @@ class AnimeFranchiseMaintenanceScanService:
         )
 
     def _spread_minutes(self, user_id, key, purpose, min_minutes, max_minutes):
+        max_minutes = max(max_minutes, min_minutes)
         span = max_minutes - min_minutes + 1
         return timedelta(
             minutes=min_minutes + (self._hash_int(user_id, key, purpose) % span)

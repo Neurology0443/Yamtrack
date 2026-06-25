@@ -200,15 +200,17 @@ def _deep_cold_min_change_age_days() -> int:
 
 
 def _deep_cold_min_days() -> int:
-    return max(21, _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS", 21))
+    configured = _int_setting(
+        "ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS",
+        21,
+    )
+    return min(30, max(21, configured))
 
 
 def _deep_cold_max_days() -> int:
     min_days = _deep_cold_min_days()
-    return min(
+    configured = _int_setting(
+        "ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS",
         30,
-        max(
-            min_days,
-            _int_setting("ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS", 30),
-        ),
     )
+    return min(30, max(min_days, configured))
