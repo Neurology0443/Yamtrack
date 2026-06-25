@@ -30,6 +30,9 @@ class AnimeNode:
     image: str
     start_date: date | None
     relations: list[AnimeRelation] = field(default_factory=list)
+    mal_raw_status: str = ""
+    mal_status: str = ""
+    end_date: date | None = None
     runtime_minutes: int | None = None
     episode_count: int | None = None
     alternative_title_en: str = ""

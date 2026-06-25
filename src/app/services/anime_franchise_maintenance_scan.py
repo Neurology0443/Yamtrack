@@ -19,6 +19,10 @@ from app.models import (
     Status,
 )
 from app.services.anime_franchise_maintenance import AnimeFranchiseMaintenanceService
+from app.services.anime_franchise_maintenance_cadence import (
+    ScanWindow,
+    compute_success_scan_window,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -290,8 +294,20 @@ class AnimeFranchiseMaintenanceScanService:
         else:
             state.consecutive_stable_scans += 1
         state.last_result_fingerprint = result.maintenance_fingerprint
-        state.next_scan_at = self._next_success_scan_at(state, now=now)
+        window = compute_success_scan_window(
+            activity_summary=result.activity_summary,
+            state=state,
+            result=result,
+            now=now,
+        )
+        result.scan_window = window
+        result.cadence_profile = window.profile
+        result.cadence_reason = window.reason
+        state.next_scan_at = self._next_success_scan_at(
+            state, result=result, window=window, now=now
+        )
         state.save()
+        self._log_success_cadence(state, result=result, window=window)
 
     def _mark_partial_failure(self, state, *, result, now):
         state.last_scanned_at = now
@@ -307,22 +323,51 @@ class AnimeFranchiseMaintenanceScanService:
             state.next_scan_at = self._next_success_scan_at(state, now=now)
             state.save(update_fields=["last_scanned_at", "next_scan_at", "updated_at"])
             return
+        changed = bool(
+            state.last_result_fingerprint
+            and state.last_result_fingerprint != result.maintenance_fingerprint
+        )
+        root_changed = bool(state.component_root_mal_id) and (
+            state.component_root_mal_id != result.component_root_mal_id
+        )
         state.component_root_mal_id = result.component_root_mal_id
         state.last_scanned_at = now
         state.last_success_at = now
         state.last_error_at = None
         state.last_error = ""
-        state.last_result_fingerprint = result.maintenance_fingerprint
         state.consecutive_error_count = 0
-        state.next_scan_at = self._next_success_scan_at(state, now=now)
+        if changed or root_changed:
+            state.last_change_at = now
+            state.consecutive_stable_scans = 0
+        else:
+            state.consecutive_stable_scans += 1
+        state.last_result_fingerprint = result.maintenance_fingerprint
+        window = compute_success_scan_window(
+            activity_summary=result.activity_summary,
+            state=state,
+            result=result,
+            now=now,
+        )
+        result.scan_window = window
+        result.cadence_profile = window.profile
+        result.cadence_reason = window.reason
+        state.next_scan_at = self._next_success_scan_at(
+            state, result=result, window=window, now=now
+        )
         state.save()
+        self._log_success_cadence(state, result=result, window=window)
 
     def _push_state_forward(self, state, *, now):
-        state.next_scan_at = now + self._spread_delta(
-            state.user_id,
-            state.seed_mal_id,
-            "not-tracked",
-            settings.ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS,
+        state.next_scan_at = self._next_success_scan_at(
+            state,
+            window=ScanWindow(
+                profile="COOL",
+                reason="not_tracked",
+                min_minutes=3 * 24 * 60,
+                max_minutes=10 * 24 * 60,
+                micro_jitter_minutes=240,
+            ),
+            now=now,
         )
         state.save(update_fields=["next_scan_at", "updated_at"])
 
@@ -345,7 +390,12 @@ class AnimeFranchiseMaintenanceScanService:
                     user_id=state.user_id,
                     seed_mal_id=media_id,
                     defaults={
-                        "next_scan_at": self._next_success_scan_at(state, now=now)
+                        "next_scan_at": self._next_success_scan_at(
+                            state,
+                            result=result,
+                            window=getattr(result, "scan_window", None),
+                            now=now,
+                        )
                     },
                 )
             )
@@ -366,17 +416,45 @@ class AnimeFranchiseMaintenanceScanService:
             .values_list("item__media_id", flat=True)
         }
 
-    def _next_success_scan_at(self, state, *, now):
-        hours = settings.ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS
-        if settings.ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF:
-            days = min(
-                2 ** max(state.consecutive_stable_scans - 1, 0),
-                settings.ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS,
+    def _next_success_scan_at(self, state, *, result=None, window=None, now):
+        if window is None:
+            window = ScanWindow(
+                profile="WARM",
+                reason="fallback",
+                min_minutes=24 * 60,
+                max_minutes=3 * 24 * 60,
+                micro_jitter_minutes=120,
             )
-            hours = max(hours, days * 24)
-        return now + self._spread_delta(
-            state.user_id, state.seed_mal_id, "sweep", hours
+        key, has_root = self._schedule_key(state, result=result)
+        due_at = now + self._spread_minutes(
+            state.user_id,
+            key,
+            f"sweep:{window.profile}:{window.reason}",
+            window.min_minutes,
+            window.max_minutes,
         )
+        if has_root and window.micro_jitter_minutes > 0:
+            due_at += self._spread_signed_minutes(
+                state.user_id,
+                f"{key}:seed:{state.seed_mal_id}",
+                f"micro:{window.profile}:{window.reason}",
+                window.micro_jitter_minutes,
+            )
+        return self._clamp_datetime(
+            due_at,
+            minimum=now + timedelta(minutes=window.min_minutes),
+            maximum=now + timedelta(minutes=window.max_minutes),
+        )
+
+    def _schedule_key(self, state, *, result=None) -> tuple[str, bool]:
+        root_id = ""
+        if result is not None:
+            root_id = str(getattr(result, "component_root_mal_id", "") or "").strip()
+        if not root_id:
+            root_id = str(state.component_root_mal_id or "").strip()
+        if root_id:
+            return f"root:{root_id}", True
+        return f"seed:{state.seed_mal_id}", False
 
     def _next_error_scan_at(self, state, *, now):
         base_hours = settings.ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS
@@ -392,20 +470,49 @@ class AnimeFranchiseMaintenanceScanService:
             max_minutes,
         )
 
-    def _spread_delta(self, user_id, seed_mal_id, purpose, hours):
+    def _spread_delta(self, user_id, key, purpose, hours):
         minutes = max(1, int(hours * 60))
         return timedelta(
-            minutes=self._hash_int(user_id, seed_mal_id, purpose) % minutes
+            minutes=self._hash_int(user_id, key, purpose) % minutes
         )
 
-    def _spread_minutes(self, user_id, seed_mal_id, purpose, min_minutes, max_minutes):
+    def _spread_minutes(self, user_id, key, purpose, min_minutes, max_minutes):
         span = max_minutes - min_minutes + 1
         return timedelta(
-            minutes=min_minutes + (self._hash_int(user_id, seed_mal_id, purpose) % span)
+            minutes=min_minutes + (self._hash_int(user_id, key, purpose) % span)
         )
 
-    def _hash_int(self, user_id, seed_mal_id, purpose):
-        digest = hashlib.sha256(
-            f"{user_id}:{seed_mal_id}:{purpose}".encode()
-        ).hexdigest()
+    def _spread_signed_minutes(self, user_id, key, purpose, max_abs_minutes):
+        if max_abs_minutes <= 0:
+            return timedelta(0)
+        span = (max_abs_minutes * 2) + 1
+        offset = (self._hash_int(user_id, key, purpose) % span) - max_abs_minutes
+        return timedelta(minutes=offset)
+
+    @staticmethod
+    def _clamp_datetime(value, *, minimum, maximum):
+        return max(minimum, min(value, maximum))
+
+    def _log_success_cadence(self, state, *, result, window):
+        summary = getattr(result, "activity_summary", None)
+        logger.info(
+            "MAL anime franchise maintenance success cadence",
+            extra={
+                "user_id": state.user_id,
+                "seed_mal_id": state.seed_mal_id,
+                "component_root_mal_id": state.component_root_mal_id,
+                "cadence_profile": window.profile,
+                "cadence_reason": window.reason,
+                "window_min_minutes": window.min_minutes,
+                "window_max_minutes": window.max_minutes,
+                "micro_jitter_minutes": window.micro_jitter_minutes,
+                "consecutive_stable_scans": state.consecutive_stable_scans,
+                "newest_end_date": getattr(summary, "newest_end_date", None),
+                "newest_start_date": getattr(summary, "newest_start_date", None),
+                "next_scan_at": state.next_scan_at,
+            },
+        )
+
+    def _hash_int(self, user_id, key, purpose):
+        digest = hashlib.sha256(f"{user_id}:{key}:{purpose}".encode()).hexdigest()
         return int(digest[:12], 16)

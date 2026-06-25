@@ -7,10 +7,17 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from django.utils import timezone
+
 from app.models import Anime, MediaTypes, Sources
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryService
+from app.services.anime_franchise_maintenance_cadence import (
+    FranchiseActivitySummary,
+    ScanWindow,
+    summarize_franchise_activity,
+)
 from app.services.anime_series_view_franchise_refresh import (
     AnimeSeriesViewFranchiseRefreshService,
 )
@@ -39,6 +46,10 @@ class AnimeFranchiseMaintenanceResult:
     changed: bool = False
     root_changed: bool = False
     tracked_member_media_ids: tuple[str, ...] = ()
+    activity_summary: FranchiseActivitySummary | None = None
+    scan_window: ScanWindow | None = None
+    cadence_profile: str = ""
+    cadence_reason: str = ""
     critical_errors: list[str] = field(default_factory=list)
     non_critical_errors: list[str] = field(default_factory=list)
 
@@ -101,6 +112,9 @@ class AnimeFranchiseMaintenanceService:
         snapshot = snapshot_service.build(seed_mal_id, refresh_cache=refresh_cache)
         result.snapshot_built = True
         result.component_root_mal_id = str(snapshot.canonical_root_media_id)
+        result.activity_summary = summarize_franchise_activity(
+            snapshot, now=timezone.now()
+        )
         result.discovery_fingerprint = (
             self.discovery_service.build_snapshot_fingerprint(snapshot)
         )
