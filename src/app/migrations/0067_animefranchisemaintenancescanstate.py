@@ -8,7 +8,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("app", "0065_animeseriesviewmembership_display_alternative_title_en_and_v3"),
+        ("app", "0066_alter_animeseriesviewmembership_projection_version"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
