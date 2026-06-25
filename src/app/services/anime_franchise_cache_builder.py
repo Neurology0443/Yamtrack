@@ -80,7 +80,10 @@ class AnimeFranchiseCacheBuildService:
             if mark_attempt:
                 anime_franchise_cache.mark_attempt(media_id)
             if graph_builder is None:
-                graph_builder = self.build_session.graph_builder()
+                error_message = (
+                    "graph_builder is required when saving a prebuilt snapshot"
+                )
+                raise ValueError(error_message)  # noqa: TRY301
             franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
             truncated = bool(graph_builder.truncated)
             aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass, field
 
@@ -31,10 +33,24 @@ class AnimeFranchiseMaintenanceResult:
     discovery_processed: bool = False
     series_view_attempted: bool = False
     series_view_refreshed: bool = False
+    discovery_fingerprint: str = ""
+    maintenance_fingerprint: str = ""
+    first_observation: bool = False
     changed: bool = False
-    fingerprint: str = ""
+    root_changed: bool = False
     tracked_member_media_ids: tuple[str, ...] = ()
-    errors: list[str] = field(default_factory=list)
+    critical_errors: list[str] = field(default_factory=list)
+    non_critical_errors: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """Return whether the maintenance operation had no critical failures."""
+        return not self.critical_errors
+
+    @property
+    def has_errors(self) -> bool:
+        """Return whether any critical or non-critical errors were recorded."""
+        return bool(self.critical_errors or self.non_critical_errors)
 
 
 class AnimeFranchiseMaintenanceService:
@@ -66,12 +82,16 @@ class AnimeFranchiseMaintenanceService:
         process_discovery: bool = True,
         refresh_series_view: bool = False,
         refresh_series_view_on_change: bool = True,
+        refresh_series_view_on_success: bool = False,
         previous_fingerprint: str = "",
+        previous_component_root_mal_id: str = "",
+        last_success_at=None,
         imported_media_ids: set[str] | None = None,
         profile_key: str | None = None,
         force_baseline_suppression: bool = False,
     ) -> AnimeFranchiseMaintenanceResult:
         """Process one tracked seed through cache, discovery, and Series View paths."""
+        _ = last_success_at
         seed_mal_id = str(seed_mal_id).strip()
         result = AnimeFranchiseMaintenanceResult(
             user_id=user.id, seed_mal_id=seed_mal_id
@@ -81,11 +101,23 @@ class AnimeFranchiseMaintenanceService:
         snapshot = snapshot_service.build(seed_mal_id, refresh_cache=refresh_cache)
         result.snapshot_built = True
         result.component_root_mal_id = str(snapshot.canonical_root_media_id)
-        result.fingerprint = self.discovery_service.build_snapshot_fingerprint(snapshot)
-        result.changed = bool(
-            previous_fingerprint and previous_fingerprint != result.fingerprint
+        result.discovery_fingerprint = (
+            self.discovery_service.build_snapshot_fingerprint(snapshot)
         )
         result.tracked_member_media_ids = self._tracked_member_media_ids(user, snapshot)
+        result.maintenance_fingerprint = self._build_maintenance_fingerprint(
+            component_root_mal_id=result.component_root_mal_id,
+            discovery_fingerprint=result.discovery_fingerprint,
+            tracked_member_media_ids=result.tracked_member_media_ids,
+        )
+        result.first_observation = not previous_fingerprint
+        result.root_changed = bool(previous_component_root_mal_id) and (
+            previous_component_root_mal_id != result.component_root_mal_id
+        )
+        result.changed = bool(
+            previous_fingerprint
+            and previous_fingerprint != result.maintenance_fingerprint
+        )
 
         if update_ui_cache:
             result.cache_attempted = True
@@ -99,14 +131,16 @@ class AnimeFranchiseMaintenanceService:
                     force_cache_rebuild=True,
                 )
                 result.cache_built = bool(cache_result.get("built"))
-                if not result.cache_built and cache_result.get("error"):
-                    result.errors.append(str(cache_result.get("error"))[:250])
+                if not result.cache_built:
+                    result.critical_errors.append(
+                        str(cache_result.get("error") or "cache_build_failed")[:250]
+                    )
             except Exception as error:
                 logger.exception(
                     "Maintenance cache update failed",
                     extra={"user_id": user.id, "seed_mal_id": seed_mal_id},
                 )
-                result.errors.append(str(error)[:250])
+                result.critical_errors.append(str(error)[:250])
 
         if process_discovery:
             result.discovery_attempted = True
@@ -126,10 +160,14 @@ class AnimeFranchiseMaintenanceService:
                     "Maintenance discovery processing failed",
                     extra={"user_id": user.id, "seed_mal_id": seed_mal_id},
                 )
-                result.errors.append(str(error)[:250])
+                result.critical_errors.append(str(error)[:250])
 
-        should_refresh_series_view = refresh_series_view or (
-            refresh_series_view_on_change and result.changed
+        should_refresh_series_view = (
+            refresh_series_view
+            or refresh_series_view_on_success
+            or result.first_observation
+            or result.root_changed
+            or (refresh_series_view_on_change and result.changed)
         )
         if should_refresh_series_view:
             result.series_view_attempted = True
@@ -142,13 +180,13 @@ class AnimeFranchiseMaintenanceService:
                 )
                 result.series_view_refreshed = stats.errors == 0
                 if stats.errors:
-                    result.errors.append(f"series_view_errors={stats.errors}")
+                    result.critical_errors.append(f"series_view_errors={stats.errors}")
             except Exception as error:
                 logger.exception(
                     "Maintenance Series View refresh failed",
                     extra={"user_id": user.id, "seed_mal_id": seed_mal_id},
                 )
-                result.errors.append(str(error)[:250])
+                result.critical_errors.append(str(error)[:250])
 
         return result
 
@@ -163,13 +201,37 @@ class AnimeFranchiseMaintenanceService:
         )
 
     def _tracked_member_media_ids(self, user, snapshot) -> tuple[str, ...]:
-        component_ids = {str(node.media_id) for node in snapshot.continuity_component}
-        component_ids.add(str(snapshot.canonical_root_media_id))
-        component_ids.add(str(snapshot.root_node.media_id))
+        node_ids = set()
+        if hasattr(snapshot, "nodes_by_media_id"):
+            node_ids.update(str(media_id) for media_id in snapshot.nodes_by_media_id)
+        if hasattr(snapshot, "continuity_component"):
+            node_ids.update(
+                str(node.media_id) for node in snapshot.continuity_component
+            )
+        if getattr(snapshot, "canonical_root_media_id", None):
+            node_ids.add(str(snapshot.canonical_root_media_id))
+        if getattr(snapshot, "root_node", None):
+            node_ids.add(str(snapshot.root_node.media_id))
+        if not node_ids:
+            return ()
         tracked_ids = Anime.objects.filter(
             user=user,
             item__source=Sources.MAL.value,
             item__media_type=MediaTypes.ANIME.value,
-            item__media_id__in=component_ids,
+            item__media_id__in=node_ids,
         ).values_list("item__media_id", flat=True)
         return tuple(sorted({str(media_id) for media_id in tracked_ids}))
+
+    def _build_maintenance_fingerprint(
+        self,
+        *,
+        component_root_mal_id: str,
+        discovery_fingerprint: str,
+        tracked_member_media_ids: tuple[str, ...],
+    ) -> str:
+        payload = {
+            "component_root_mal_id": str(component_root_mal_id),
+            "discovery_fingerprint": discovery_fingerprint,
+            "tracked_member_media_ids": list(tracked_member_media_ids),
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
