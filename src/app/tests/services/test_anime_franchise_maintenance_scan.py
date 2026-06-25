@@ -1,5 +1,5 @@
 # ruff: noqa: D101,D102
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -97,3 +97,63 @@ class AnimeFranchiseMaintenanceScanServiceTests(TestCase):
         self.assertEqual(member_state.component_root_mal_id, "457")
         self.assertEqual(member_state.last_result_fingerprint, "fingerprint")
         self.assertEqual(member_state.consecutive_stable_scans, 1)
+
+    def test_scan_due_does_not_self_cover_processed_seed(self):
+        state = self._state(stable_scans=8)
+        result = self._result(("457",))
+        result.cache_built = True
+        result.discovery_processed = True
+        maintenance_service = Mock()
+        maintenance_service.process_seed.return_value = result
+        service = AnimeFranchiseMaintenanceScanService(
+            maintenance_service=maintenance_service
+        )
+
+        with patch.object(service, "_is_seed_tracked", return_value=True):
+            stats = service.scan_due(limit=1)
+
+        state.refresh_from_db()
+        self.assertEqual(stats.processed, 1)
+        self.assertEqual(stats.succeeded, 1)
+        self.assertEqual(stats.failed, 0)
+        self.assertEqual(stats.skipped_duplicate_root, 0)
+        maintenance_service.process_seed.assert_called_once()
+        self.assertEqual(state.consecutive_stable_scans, 9)
+        self.assertEqual(state.last_error, "")
+        self.assertGreater(state.next_scan_at, self.now)
+
+    def test_cover_tracked_member_states_does_not_mutate_processed_result_window(self):
+        state = self._state(stable_scans=3)
+        result = self._result(("457", "458"))
+        AnimeFranchiseMaintenanceScanState.objects.create(
+            user=self.user,
+            seed_mal_id="458",
+            component_root_mal_id="457",
+            next_scan_at=self.now,
+            last_result_fingerprint="old-fingerprint",
+            consecutive_stable_scans=5,
+        )
+
+        self.service._mark_success(state, result=result, now=self.now)
+        original_scan_window = result.scan_window
+        original_cadence_profile = result.cadence_profile
+        original_cadence_reason = result.cadence_reason
+
+        with patch.object(
+            self.service,
+            "_tracked_seed_ids_for_user",
+            return_value={"457", "458"},
+        ):
+            self.service._cover_tracked_member_states(
+                state, result=result, now=self.now
+            )
+
+        member_state = AnimeFranchiseMaintenanceScanState.objects.get(
+            user=self.user,
+            seed_mal_id="458",
+        )
+        self.assertGreater(member_state.next_scan_at, self.now)
+        self.assertEqual(member_state.last_result_fingerprint, "fingerprint")
+        self.assertIs(result.scan_window, original_scan_window)
+        self.assertEqual(result.cadence_profile, original_cadence_profile)
+        self.assertEqual(result.cadence_reason, original_cadence_reason)

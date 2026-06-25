@@ -357,9 +357,6 @@ class AnimeFranchiseMaintenanceScanService:
                 result=result,
                 now=now,
             )
-        result.scan_window = window
-        result.cadence_profile = window.profile
-        result.cadence_reason = window.reason
         state.next_scan_at = self._next_success_scan_at(
             state, result=result, window=window, now=now
         )
@@ -367,6 +364,9 @@ class AnimeFranchiseMaintenanceScanService:
         self._log_success_cadence(state, result=result, window=window)
 
     def _push_state_forward(self, state, *, now):
+        # Non-tracked states are not actionable until the user tracks the seed again.
+        # Keep them on a slow sweep to avoid repeatedly scanning seeds that are no
+        # longer in eligible user lists. Do not use the legacy stable backoff here.
         state.next_scan_at = self._next_success_scan_at(
             state,
             window=ScanWindow(

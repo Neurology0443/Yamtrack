@@ -53,8 +53,17 @@ def summarize_franchise_activity(snapshot, *, now) -> FranchiseActivitySummary:
 
     for node in getattr(snapshot, "nodes_by_media_id", {}).values():
         raw_status = str(getattr(node, "mal_raw_status", "") or "").strip().lower()
-        has_airing = has_airing or raw_status == "currently_airing"
-        has_upcoming = has_upcoming or raw_status == "not_yet_aired"
+        readable_status = str(getattr(node, "mal_status", "") or "").strip().lower()
+        has_airing = (
+            has_airing
+            or raw_status == "currently_airing"
+            or readable_status in {"airing", "currently airing"}
+        )
+        has_upcoming = (
+            has_upcoming
+            or raw_status == "not_yet_aired"
+            or readable_status in {"upcoming", "not yet aired"}
+        )
 
         start_date = getattr(node, "start_date", None)
         if start_date is not None:
