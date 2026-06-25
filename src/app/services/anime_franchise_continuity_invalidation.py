@@ -7,6 +7,9 @@ import logging
 from app.providers import mal
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_graph import CONTINUITY_RELATIONS
+from app.services.anime_franchise_maintenance_scan import (
+    AnimeFranchiseMaintenanceScanService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,16 @@ class AnimeFranchiseContinuityInvalidationService:
             canonical_media_id,
             scheduled,
         )
+
+        try:
+            AnimeFranchiseMaintenanceScanService().mark_component_root_due_soon(
+                component_root_mal_id=canonical_media_id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to nudge MAL anime franchise maintenance state due soon",
+                extra={"component_root_mal_id": canonical_media_id},
+            )
 
         return {
             "changed": True,

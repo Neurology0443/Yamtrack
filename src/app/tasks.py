@@ -22,6 +22,9 @@ from app.services.anime_franchise_continuity_invalidation import (
     AnimeFranchiseContinuityInvalidationService,
 )
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_maintenance_scan import (
+    AnimeFranchiseMaintenanceScanService,
+)
 from app.services.anime_franchise_manual_add_triggers import manual_add_queue_lock_key
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
@@ -303,6 +306,28 @@ def import_anime_franchise(
 
         logger.info("Anime franchise import completed: %s", result)
         return result
+    finally:
+        cache.delete(lock_key)
+
+
+@shared_task(name="Scan MAL anime franchise maintenance")
+def scan_mal_anime_franchise_maintenance():
+    """Run autonomous MAL anime franchise maintenance for due tracked seeds."""
+    if not settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED:
+        return {"enabled": False, "skipped": True, "reason": "disabled"}
+
+    lock_key = "anime-franchise-maintenance-scan"
+    acquired = cache.add(
+        lock_key,
+        "1",
+        timeout=settings.ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES * 60,
+    )
+    if not acquired:
+        return {"enabled": True, "skipped": True, "reason": "already_running"}
+
+    try:
+        stats = AnimeFranchiseMaintenanceScanService().scan_due()
+        return {"enabled": True, "skipped": False, **stats.to_dict()}
     finally:
         cache.delete(lock_key)
 
