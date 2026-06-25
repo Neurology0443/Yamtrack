@@ -393,7 +393,10 @@ class AnimeFranchiseMaintenanceScanService:
             user_id=state.user_id,
             media_ids=result.tracked_member_media_ids,
         )
+        current_seed_mal_id = str(state.seed_mal_id)
         for media_id in tracked_ids:
+            if str(media_id) == current_seed_mal_id:
+                continue
             member_state, _created = (
                 AnimeFranchiseMaintenanceScanState.objects.get_or_create(
                     user_id=state.user_id,
@@ -408,6 +411,8 @@ class AnimeFranchiseMaintenanceScanService:
                     },
                 )
             )
+            if member_state.pk == state.pk:
+                continue
             self._mark_duplicate_covered(member_state, result=result, now=now)
 
     def _tracked_seed_ids_for_user(self, *, user_id, media_ids):
