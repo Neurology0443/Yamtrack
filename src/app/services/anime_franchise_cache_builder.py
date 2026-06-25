@@ -45,7 +45,45 @@ class AnimeFranchiseCacheBuildService:
             anime_franchise_cache.mark_attempt(media_id)
             snapshot_service = self.build_session.snapshot_service()
             snapshot = snapshot_service.build(media_id, refresh_cache=refresh_cache)
-            graph_builder = snapshot_service.graph_builder
+            return self.build_and_save_from_snapshot(
+                media_id,
+                snapshot=snapshot,
+                graph_builder=snapshot_service.graph_builder,
+                force_cache_rebuild=force_cache_rebuild,
+                started_at=started_at,
+                mark_attempt=False,
+            )
+        except Exception as error:  # noqa: BLE001
+            error_message = str(error) or error.__class__.__name__
+            anime_franchise_cache.mark_error(media_id, error_message)
+            logger.warning(
+                "MAL anime franchise build failed for media_id=%s: %s",
+                media_id,
+                error_message,
+            )
+            return {"media_id": media_id, "built": False, "error": error_message[:250]}
+
+    def build_and_save_from_snapshot(  # noqa: C901
+        self,
+        media_id,
+        *,
+        snapshot,
+        graph_builder=None,
+        force_cache_rebuild=False,
+        started_at=None,
+        mark_attempt=True,
+    ) -> dict:
+        """Save UI cache payloads from an already-built franchise snapshot."""
+        media_id = str(media_id)
+        started_at = started_at if started_at is not None else time.monotonic()
+        try:
+            if mark_attempt:
+                anime_franchise_cache.mark_attempt(media_id)
+            if graph_builder is None:
+                error_message = (
+                    "graph_builder is required when saving a prebuilt snapshot"
+                )
+                raise ValueError(error_message)  # noqa: TRY301
             franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
             truncated = bool(graph_builder.truncated)
             aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED

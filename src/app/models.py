@@ -1936,9 +1936,7 @@ class Anime(Media):
         """Save anime and trigger import hot-priority when relevant."""
         was_adding = self._state.adding
         status_changed = self.tracker.has_changed("status")
-        previous_status = (
-            self.tracker.previous("status") if status_changed else None
-        )
+        previous_status = self.tracker.previous("status") if status_changed else None
 
         super().save(*args, **kwargs)
 
@@ -2084,6 +2082,8 @@ class AnimeFranchiseDiscoveryState(models.Model):
     last_error_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+        """Keep discovery states unique and optimize root lookups."""
+
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "component_root_mal_id"],
@@ -2096,6 +2096,47 @@ class AnimeFranchiseDiscoveryState(models.Model):
                 name="app_af_disc_state_idx",
             )
         ]
+
+
+class AnimeFranchiseMaintenanceScanState(models.Model):
+    """Persistent scan state for autonomous MAL anime franchise maintenance."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    seed_mal_id = models.CharField(max_length=36)
+    component_root_mal_id = models.CharField(max_length=36, blank=True, default="")
+    next_scan_at = models.DateTimeField()
+    last_scanned_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
+    last_change_at = models.DateTimeField(null=True, blank=True)
+    last_result_fingerprint = models.CharField(max_length=128, blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    consecutive_stable_scans = models.PositiveIntegerField(default=0)
+    consecutive_error_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        """Keep scan states unique and optimize due/root lookups."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "seed_mal_id"],
+                name="app_af_maint_state_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["next_scan_at"], name="app_af_maint_due_idx"),
+            models.Index(
+                fields=["user", "component_root_mal_id"],
+                name="app_af_maint_root_idx",
+            ),
+            models.Index(fields=["user", "seed_mal_id"], name="app_af_maint_seed_idx"),
+        ]
+
+    def __str__(self):
+        """Return a concise maintenance state label."""
+        return f"{self.user}: {self.seed_mal_id}"
 
 
 class AnimeFranchiseDiscoveredEntry(models.Model):

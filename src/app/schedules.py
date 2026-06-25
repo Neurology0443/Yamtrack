@@ -48,3 +48,20 @@ def build_anime_release_date_scan_schedule(
             "schedule": 60 * 60 * interval_hours,
         },
     }
+
+
+def build_anime_franchise_maintenance_schedule(
+    *,
+    enabled: bool,
+    interval_minutes: int,
+) -> dict:
+    """Return optional Celery Beat entry for MAL anime franchise maintenance."""
+    if not enabled:
+        return {}
+
+    return {
+        "scan_mal_anime_franchise_maintenance": {
+            "task": "Scan MAL anime franchise maintenance",
+            "schedule": 60 * interval_minutes,
+        },
+    }

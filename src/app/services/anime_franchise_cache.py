@@ -336,6 +336,9 @@ def default_meta(**overrides) -> dict:
         "truncated": False,
         "truncation_reason": "",
         "last_success_at": None,
+        "invalidated_at": None,
+        "invalidation_reason": "",
+        "invalidated_by_media_id": "",
     }
     meta.update(overrides)
     meta["fetched_at"] = _serialize_datetime(meta.get("fetched_at"))
@@ -343,10 +346,15 @@ def default_meta(**overrides) -> dict:
     meta["last_attempt_at"] = _serialize_datetime(meta.get("last_attempt_at"))
     meta["last_error_at"] = _serialize_datetime(meta.get("last_error_at"))
     meta["last_success_at"] = _serialize_datetime(meta.get("last_success_at"))
+    meta["invalidated_at"] = _serialize_datetime(meta.get("invalidated_at"))
     if meta["last_error_message"] is None:
         meta["last_error_message"] = ""
     if meta["truncation_reason"] is None:
         meta["truncation_reason"] = ""
+    if meta["invalidation_reason"] is None:
+        meta["invalidation_reason"] = ""
+    if meta["invalidated_by_media_id"] is None:
+        meta["invalidated_by_media_id"] = ""
     meta["truncated"] = bool(meta.get("truncated"))
     return meta
 
@@ -368,6 +376,10 @@ def normalize_meta(meta) -> dict:
         normalized["last_accessed_at"] = timezone.now().isoformat()
     normalized["last_error_message"] = normalized.get("last_error_message") or ""
     normalized["truncation_reason"] = normalized.get("truncation_reason") or ""
+    normalized["invalidation_reason"] = normalized.get("invalidation_reason") or ""
+    normalized["invalidated_by_media_id"] = (
+        normalized.get("invalidated_by_media_id") or ""
+    )
     normalized["node_count"] = _safe_int(normalized.get("node_count"), 0)
     normalized["truncated"] = bool(normalized.get("truncated"))
     return normalized
@@ -788,6 +800,9 @@ def save_payload(
         truncated=truncated,
         truncation_reason=truncation_reason,
         last_success_at=now,
+        invalidated_at=None,
+        invalidation_reason="",
+        invalidated_by_media_id="",
     )
     ttl = get_ttl_seconds()
     delete_alias_for_media(media_id)
@@ -800,9 +815,15 @@ def is_fresh(meta) -> bool:
     """Return whether the franchise payload is logically fresh."""
     if not meta or not meta.get("fetched_at"):
         return False
+
     fetched_at = parse_cached_datetime(meta["fetched_at"])
     if fetched_at is None:
         return False
+
+    invalidated_at = parse_cached_datetime(meta.get("invalidated_at"))
+    if invalidated_at is not None and invalidated_at >= fetched_at:
+        return False
+
     return fetched_at >= timezone.now() - timedelta(
         days=settings.ANIME_FRANCHISE_CACHE_FRESH_DAYS,
     )
@@ -815,17 +836,20 @@ def _is_within_cooldown(value, hours) -> bool:
     return parsed > timezone.now() - timedelta(hours=hours)
 
 
-def can_schedule_build(meta, *, has_payload=False) -> bool:
+def can_schedule_build(meta, *, has_payload=False, force=False) -> bool:
     """Return whether a background build/refresh may be queued."""
     meta = normalize_meta(meta)
-    if has_payload and is_fresh(meta):
+
+    if not force and has_payload and is_fresh(meta):
         return False
+
     if _is_within_cooldown(
         meta.get("last_error_at"),
         settings.ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS,
     ):
         return False
-    return not _is_within_cooldown(
+
+    return force or not _is_within_cooldown(
         meta.get("last_attempt_at"),
         settings.ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS,
     )
@@ -844,6 +868,18 @@ def update_meta(media_id, updates) -> dict:
     return meta
 
 
+def mark_stale(media_id, *, reason="", invalidated_by_media_id="") -> dict:
+    """Mark a franchise payload functionally stale without deleting it."""
+    return update_meta(
+        media_id,
+        {
+            "invalidated_at": timezone.now().isoformat(),
+            "invalidation_reason": str(reason or "")[:250],
+            "invalidated_by_media_id": str(invalidated_by_media_id or ""),
+        },
+    )
+
+
 def mark_attempt(media_id) -> dict:
     """Record a franchise build attempt."""
     return update_meta(media_id, {"last_attempt_at": timezone.now().isoformat()})
@@ -860,13 +896,19 @@ def mark_error(media_id, error_message) -> dict:
     )
 
 
-def maybe_schedule_build(media_id, meta=None, *, has_payload=False) -> bool:
+def maybe_schedule_build(
+    media_id,
+    meta=None,
+    *,
+    has_payload=False,
+    force=False,
+) -> bool:
     """Queue a franchise build if cooldown and queue-lock checks permit."""
     media_id = str(media_id)
     if meta is None:
         meta = cache.get(get_meta_key(media_id))
     meta = normalize_meta(meta)
-    if not can_schedule_build(meta, has_payload=has_payload):
+    if not can_schedule_build(meta, has_payload=has_payload, force=force):
         return False
 
     lock_key = get_queue_lock_key(media_id)

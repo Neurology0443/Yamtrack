@@ -18,7 +18,14 @@ from app.providers import mal, mal_cache, services
 from app.services import anime_franchise_cache
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
+from app.services.anime_franchise_continuity_invalidation import (
+    AnimeFranchiseContinuityInvalidationService,
+)
 from app.services.anime_franchise_import import AnimeFranchiseImportService
+from app.services.anime_franchise_maintenance import AnimeFranchiseMaintenanceService
+from app.services.anime_franchise_maintenance_scan import (
+    AnimeFranchiseMaintenanceScanService,
+)
 from app.services.anime_franchise_manual_add_triggers import manual_add_queue_lock_key
 from app.services.anime_franchise_task_names import (
     MAL_ANIME_FRANCHISE_BUILD_TASK_NAME,
@@ -175,10 +182,29 @@ def refresh_mal_anime_metadata(media_id):
                 "Failed to process anime release-date metadata refresh for %s",
                 media_id,
             )
+        try:
+            franchise_invalidation = (
+                AnimeFranchiseContinuityInvalidationService().process_metadata_refresh(
+                    media_id=media_id,
+                    old_metadata=old_metadata,
+                    new_metadata=new_metadata,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Failed to process MAL anime franchise invalidation for %s",
+                media_id,
+            )
+            franchise_invalidation = {
+                "changed": False,
+                "scheduled": False,
+                "error": "franchise_invalidation_failed",
+            }
         return {
             "media_type": "anime",
             "media_id": str(media_id),
             "refreshed": True,
+            "franchise_invalidation": franchise_invalidation,
         }
     except (
         requests.exceptions.Timeout,
@@ -285,6 +311,28 @@ def import_anime_franchise(
         cache.delete(lock_key)
 
 
+@shared_task(name="Scan MAL anime franchise maintenance")
+def scan_mal_anime_franchise_maintenance():
+    """Run autonomous MAL anime franchise maintenance for due tracked seeds."""
+    if not settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED:
+        return {"enabled": False, "skipped": True, "reason": "disabled"}
+
+    lock_key = "anime-franchise-maintenance-scan"
+    acquired = cache.add(
+        lock_key,
+        "1",
+        timeout=settings.ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES * 60,
+    )
+    if not acquired:
+        return {"enabled": True, "skipped": True, "reason": "already_running"}
+
+    try:
+        stats = AnimeFranchiseMaintenanceScanService().scan_due()
+        return {"enabled": True, "skipped": False, **stats.to_dict()}
+    finally:
+        cache.delete(lock_key)
+
+
 @shared_task(name=MAL_ANIME_FRANCHISE_BUILD_TASK_NAME)
 def build_mal_anime_franchise_payload(media_id):
     """Build and cache the complete MAL anime franchise payload in the background."""
@@ -334,71 +382,44 @@ def process_manual_mal_anime_franchise(user_id, media_id):
             result["reason"] = "user_not_found"
             return result
 
-        build_session = AnimeFranchiseBuildSession(refresh_cache=False)
-        cache_service = AnimeFranchiseCacheBuildService(build_session=build_session)
-        try:
-            cache_result = cache_service.build_and_save(
-                media_id,
-                refresh_cache=False,
-                force_cache_rebuild=True,
-            )
-            result["cache_ui"].update(
-                {
-                    "success": bool(cache_result.get("built")),
-                    "canonical_media_id": cache_result.get("canonical_media_id"),
-                    "result": cache_result,
-                },
-            )
-        except Exception as error:
-            logger.exception(
-                "Manual MAL anime franchise cache warm failed",
-                extra={"user_id": user_id, "media_id": media_id},
-            )
-            result["cache_ui"]["error"] = str(error)[:250]
-
-        projection_builder = AnimeSeriesViewProjectionBuilder(
-            snapshot_service=build_session.build_series_view_snapshot_service(),
+        maintenance_result = AnimeFranchiseMaintenanceService().process_seed(
+            user=user,
+            seed_mal_id=media_id,
+            refresh_cache=False,
+            update_ui_cache=True,
+            process_discovery=False,
+            refresh_series_view=True,
+            refresh_series_view_on_change=False,
         )
-        refresh_service = AnimeSeriesViewFranchiseRefreshService(
-            projection_builder=projection_builder,
+        result["cache_ui"].update(
+            {
+                "success": maintenance_result.cache_built,
+                "attempted": maintenance_result.cache_attempted,
+            }
         )
-        try:
-            stats = refresh_service.refresh_for_media_ids(
-                user=user,
-                media_ids=(media_id,),
-                refresh_cache=False,
-            )
-            result["series_view"].update(
-                {
-                    "success": stats.errors == 0,
-                    "stats": {
-                        "requested": stats.requested,
-                        "snapshots_built": stats.snapshots_built,
-                        "snapshots_skipped": stats.snapshots_skipped,
-                        "franchise_memberships_created": (
-                            stats.franchise_memberships_created
-                        ),
-                        "franchise_memberships_updated": (
-                            stats.franchise_memberships_updated
-                        ),
-                        "singleton_memberships_created": (
-                            stats.singleton_memberships_created
-                        ),
-                        "singleton_memberships_updated": (
-                            stats.singleton_memberships_updated
-                        ),
-                        "memberships_deleted": stats.memberships_deleted,
-                        "errors": stats.errors,
-                    },
-                },
-            )
-        except Exception as error:
-            logger.exception(
-                "Manual MAL anime Series View refresh failed",
-                extra={"user_id": user_id, "media_id": media_id},
-            )
-            result["series_view"]["error"] = str(error)[:250]
-
-        return result
+        result["series_view"].update(
+            {
+                "success": maintenance_result.series_view_refreshed,
+                "attempted": maintenance_result.series_view_attempted,
+            }
+        )
+        result["component_root_mal_id"] = maintenance_result.component_root_mal_id
+        result["critical_errors"] = maintenance_result.critical_errors
+        result["non_critical_errors"] = maintenance_result.non_critical_errors
+        result["success"] = maintenance_result.ok
+    except Exception as error:
+        logger.exception(
+            "Manual MAL anime franchise maintenance failed",
+            extra={"user_id": user_id, "media_id": media_id},
+        )
+        result = {
+            "user_id": user_id,
+            "media_id": media_id,
+            "cache_ui": {"attempted": True, "success": False},
+            "series_view": {"attempted": True, "success": False},
+            "success": False,
+            "critical_errors": [str(error)[:250]],
+        }
     finally:
         cache.delete(lock_key)
+    return result
