@@ -211,7 +211,7 @@ class AnimeFranchiseMaintenanceScanService:
 
     def mark_media_due_soon(self, media_id: str) -> int:
         """Nudge known states for a media ID or its resolved component root."""
-        media_id = str(media_id).strip()
+        media_id = str(media_id or "").strip()
         if not media_id:
             return 0
 
@@ -219,13 +219,13 @@ class AnimeFranchiseMaintenanceScanService:
         states = list(
             AnimeFranchiseMaintenanceScanState.objects.filter(seed_mal_id=media_id)
         )
-        component_roots = {
+        roots_to_nudge = {
             state.component_root_mal_id
             for state in states
             if state.component_root_mal_id
         }
-        for component_root_mal_id in sorted(component_roots):
-            changed += self.mark_component_root_due_soon(component_root_mal_id)
+        # Fallback: media_id may itself be a component_root_mal_id.
+        roots_to_nudge.add(media_id)
 
         seed_states_without_root = [
             state for state in states if not state.component_root_mal_id
@@ -233,7 +233,9 @@ class AnimeFranchiseMaintenanceScanService:
         if seed_states_without_root:
             changed += self._mark_states_due_soon(seed_states_without_root)
 
-        changed += self.mark_component_root_due_soon(media_id)
+        for component_root_mal_id in sorted(roots_to_nudge):
+            changed += self.mark_component_root_due_soon(component_root_mal_id)
+
         return changed
 
     def _mark_states_due_soon(self, states) -> int:

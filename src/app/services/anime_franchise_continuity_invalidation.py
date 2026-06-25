@@ -46,18 +46,16 @@ class AnimeFranchiseContinuityInvalidationService:
                 "scheduled": False,
             }
 
-        changed_relation_types = sorted(
-            {edge[2] for edge in old_edges.symmetric_difference(new_edges)}
-        )
+        changed_edges = old_edges.symmetric_difference(new_edges)
+        changed_relation_types = sorted({edge[2] for edge in changed_edges})
         invalidation_reason = self._invalidation_reason(changed_relation_types)
         touched_media_ids = self._media_ids_from_edges(
             media_id=media_id,
-            old_edges=old_edges,
-            new_edges=new_edges,
+            edges=changed_edges,
         )
 
         source_lookup = anime_franchise_cache.load_payload_for_media(media_id)
-        canonical_media_id = source_lookup.canonical_media_id or media_id
+        canonical_media_id = str(source_lookup.canonical_media_id or media_id).strip()
 
         scheduled = False
         invalidated_canonical_media_ids = set()
@@ -65,7 +63,13 @@ class AnimeFranchiseContinuityInvalidationService:
 
         for touched_media_id in sorted(touched_media_ids):
             lookup = anime_franchise_cache.load_payload_for_media(touched_media_id)
-            touched_canonical_media_id = lookup.canonical_media_id
+            touched_canonical_media_id = str(
+                lookup.canonical_media_id or touched_media_id
+            ).strip()
+
+            if not touched_canonical_media_id:
+                missing_payload_media_ids.add(touched_media_id)
+                continue
 
             if lookup.payload is None:
                 logger.info(
@@ -115,12 +119,14 @@ class AnimeFranchiseContinuityInvalidationService:
         logger.info(
             "MAL anime franchise invalidation processed for media_id=%s "
             "canonical_media_id=%s invalidation_reason=%s "
-            "changed_relation_types=%s invalidated_canonical_media_ids=%s "
-            "maintenance_states_nudged=%s scheduled=%s",
+            "changed_relation_types=%s changed_edges=%s "
+            "invalidated_canonical_media_ids=%s maintenance_states_nudged=%s "
+            "scheduled=%s",
             media_id,
             canonical_media_id,
             invalidation_reason,
             changed_relation_types,
+            sorted(changed_edges),
             sorted(invalidated_canonical_media_ids),
             maintenance_states_nudged,
             scheduled,
@@ -138,6 +144,7 @@ class AnimeFranchiseContinuityInvalidationService:
             "maintenance_states_nudged": maintenance_states_nudged,
             "old_edges": sorted(old_edges),
             "new_edges": sorted(new_edges),
+            "changed_edges": sorted(changed_edges),
         }
 
     def _extract_invalidation_edges(
@@ -183,12 +190,12 @@ class AnimeFranchiseContinuityInvalidationService:
             if edge[2] in CONTINUITY_INVALIDATION_RELATIONS
         }
 
-    def _media_ids_from_edges(self, *, media_id, old_edges, new_edges) -> set[str]:
+    def _media_ids_from_edges(self, *, media_id, edges) -> set[str]:
         """Return source and target media IDs touched by changed relation edges."""
-        media_ids = {str(media_id)}
-        for source_media_id, target_media_id, _relation_type in old_edges | new_edges:
-            media_ids.add(str(source_media_id))
-            media_ids.add(str(target_media_id))
+        media_ids = {str(media_id or "").strip()}
+        for source_media_id, target_media_id, _relation_type in edges:
+            media_ids.add(str(source_media_id or "").strip())
+            media_ids.add(str(target_media_id or "").strip())
         media_ids.discard("")
         return media_ids
 
