@@ -203,19 +203,56 @@ class AnimeFranchiseMaintenanceScanService:
         component_root_mal_id = str(component_root_mal_id).strip()
         if not component_root_mal_id:
             return 0
+        return self._mark_states_due_soon(
+            AnimeFranchiseMaintenanceScanState.objects.filter(
+                component_root_mal_id=component_root_mal_id
+            )
+        )
+
+    def mark_media_due_soon(self, media_id: str) -> int:
+        """Nudge known states for a media ID or its resolved component root."""
+        media_id = str(media_id).strip()
+        if not media_id:
+            return 0
+
+        changed = 0
+        states = list(
+            AnimeFranchiseMaintenanceScanState.objects.filter(seed_mal_id=media_id)
+        )
+        component_roots = {
+            state.component_root_mal_id
+            for state in states
+            if state.component_root_mal_id
+        }
+        for component_root_mal_id in sorted(component_roots):
+            changed += self.mark_component_root_due_soon(component_root_mal_id)
+
+        seed_states_without_root = [
+            state for state in states if not state.component_root_mal_id
+        ]
+        if seed_states_without_root:
+            changed += self._mark_states_due_soon(seed_states_without_root)
+
+        changed += self.mark_component_root_due_soon(media_id)
+        return changed
+
+    def _mark_states_due_soon(self, states) -> int:
+        """Nudge states into a near-future scan without delaying closer scans."""
         now = timezone.now()
         changed = 0
-        for state in AnimeFranchiseMaintenanceScanState.objects.filter(
-            component_root_mal_id=component_root_mal_id
-        ):
-            due_at = now + self._spread_minutes(
-                state.user_id, state.seed_mal_id, "due-soon", 5, 60
-            )
+        for state in states:
+            due_at = self._due_soon_at(state, now=now)
             if state.next_scan_at > due_at:
                 state.next_scan_at = due_at
                 state.save(update_fields=["next_scan_at", "updated_at"])
                 changed += 1
         return changed
+
+    def _due_soon_at(self, state, *, now):
+        """Return the deterministic near-future scan time for a state."""
+        return now + self._spread_minutes(
+            state.user_id, state.seed_mal_id, "due-soon", 5, 60
+        )
 
     def _eligible_anime_queryset(self):
         return Anime.objects.select_related("item").filter(
