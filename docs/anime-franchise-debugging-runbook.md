@@ -21,6 +21,9 @@
 | Page differs from service payload | Request context enrichment |
 | Badge or tooltip is wrong | Request context / `anime_franchise_footer.py` |
 | Series image looks outdated | Request context enrichment and local media image lookup |
+| MAL anime cover stays stale after metadata refresh | MAL cache payload image, `Item.image`, and `item_image_sync` rule |
+| Maintenance scan refreshed cache but cover did not change | `ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE`, snapshot node image, non-critical maintenance errors |
+| Season/episode row image did not change | Expected for provider image sync; only base no-season/no-episode `Item` rows are targeted |
 | Alias page misses the franchise cache | Alias key and canonical payload validity |
 | Cache does not refresh | Queue/task locks and error cooldown metadata |
 | Anime list Series View is empty or incomplete | `AnimeSeriesViewMembership` / rebuild command / `unprojected_count` |
@@ -59,6 +62,7 @@ python manage.py test app.tests.services.test_anime_franchise_cache
 python manage.py test app.tests.services.test_anime_franchise_import_profiles
 python manage.py test app.tests.views.test_media_details
 python manage.py test app.tests.test_tasks
+python manage.py test app.tests.test_item_image_sync
 ```
 
 Docker equivalents:
@@ -337,7 +341,7 @@ Compare:
 - image data stored in the cached franchise payload;
 - image currently available on the Yamtrack media entry.
 
-A newer local image can be preferred without rebuilding the franchise payload.
+A newer local image can be preferred without rebuilding the franchise payload. Fresh provider images may also update the global `Item.image` through `item_image_sync` before request-time enrichment displays that local image.
 
 ## Docker commands
 
@@ -349,6 +353,21 @@ docker compose exec yamtrack python manage.py import_anime_franchise --profile c
 docker compose exec yamtrack python manage.py shell -c "from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay('34161')"
 docker compose exec yamtrack celery -A config inspect active
 ```
+
+## Inspect provider image synchronization
+
+Use this when a MAL anime cover looks stale even though metadata or maintenance recently refreshed.
+
+```bash
+docker compose exec yamtrack python manage.py shell -c "from django.core.cache import cache; from app.models import Item, MediaTypes, Sources; from app.providers import mal_cache; media_id='30831'; item=Item.objects.filter(source=Sources.MAL.value, media_type=MediaTypes.ANIME.value, media_id=media_id, season_number__isnull=True, episode_number__isnull=True).first(); payload=cache.get(mal_cache.get_anime_cache_key(media_id)); print({'item_image': item.image if item else None, 'cache_image': payload.get('image') if payload else None})"
+```
+
+Interpretation:
+
+- `cache_image` changed but `item_image` did not: check whether the path used `refresh_cache=True` and whether `item_image_sync` rejected the candidate;
+- `item_image` is already equal to the provider image: no write is expected;
+- image is blank or `IMG_NONE`: it should be ignored as a provider candidate;
+- season/episode rows are intentionally not targeted.
 
 ## Inspect autonomous franchise maintenance
 

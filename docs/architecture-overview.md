@@ -97,6 +97,35 @@ The session has operation-local freshness rules:
 - stale-allowed and normal fetch levels are tracked inside the session;
 - the session ends with the task, command, or service call.
 
+## Provider cover synchronization
+
+Fresh provider metadata can also update the global `Item.image` field through `item_image_sync` (`app/services/item_image_sync.py`). The service owns the rule for when a provider image may update `Item.image`.
+
+```text
+MAL provider/cache refresh
+        │
+        ▼
+fresh image candidate
+        │
+        ▼
+item_image_sync
+        │
+        ▼
+global Item.image
+```
+
+Rules:
+
+- this is metadata hygiene, not franchise structure;
+- it targets global base `Item` rows, not per-user rows;
+- automatic MAL paths currently target MAL anime base rows with no season or episode number;
+- empty images, `IMG_NONE`, and identical images are skipped;
+- missing or placeholder `Item.image` values can be filled;
+- MAL anime refreshes may replace older MAL images;
+- non-MAL providers do not overwrite an existing different image;
+- bulk sync deduplicates candidates, and the last normalized candidate wins for the same source, media type, and media ID;
+- failures are best-effort in background refresh and maintenance paths.
+
 ## Runtime flows
 
 ### Detail page
@@ -118,6 +147,7 @@ Rules:
 - The detail page must not synchronously build large franchises on cache miss.
 - The cached payload is user-agnostic.
 - User-specific status, progress, current-entry context, local media image, and display checks are added at request time.
+- Helper enrichment uses the centralized `item_image_sync` rule when local user/media data is enriched for rendering.
 
 ### Manual add
 
@@ -235,6 +265,7 @@ Rules:
 - Maintenance is not import automation.
 - Maintenance does not directly create missing `Anime` rows.
 - Maintenance can discover newly visible franchise entries and notify through discovery.
+- Maintenance can sync fresh MAL snapshot images into `Item.image` when `refresh_cache=True`.
 - One processed seed can cover multiple tracked member states in the same franchise.
 - Batch size limits selected due seed states, not franchise size.
 
@@ -262,6 +293,7 @@ Rules:
 - Continuity relations count.
 - Franchise-structure relations such as `alternative_setting`, `alternative_version`, and `spin_off` count.
 - Missing payloads are tracked as missing but cannot be invalidated.
+- Refresh MAL anime metadata also attempts best-effort cover sync after a successful MAL refresh.
 - `mark_media_due_soon()` must not delay a scan that is already sooner.
 
 ### Anime Series View
