@@ -844,19 +844,27 @@
 <li><code>mark_media_due_soon()</code> must not delay a scan that is already sooner.</li>
 </ul>
 <h3 id="anime-series-view">Anime Series View<a class="headerlink" href="#anime-series-view" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>Anime list Series layout
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>canonical franchise snapshot
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>        │
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        ▼
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>read AnimeSeriesViewMembership rows
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>Anime Series View projection / refresh
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        │
 </span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        ▼
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>group by root_media_id
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>AnimeSeriesViewMembership rows
 </span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>        │
 </span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>        ▼
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>render franchise cards
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>Anime list Series layout reads rows
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>        │
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>        ▼
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>group by root_media_id
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>        │
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>        ▼
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>render franchise cards
 </span></code></pre></div>
 <p>Rules:</p>
 <ul>
+<li>Series View is a consumer/projection of the canonical snapshot.</li>
+<li><code>AnimeSeriesViewMembership</code> is the persisted Series View state model.</li>
 <li><code>media_list</code> must stay DB-only.</li>
 <li>No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.</li>
 <li>Refresh work belongs to triggers, tasks, rebuild commands, import, and maintenance.</li>
@@ -1006,7 +1014,7 @@
 </tr>
 <tr>
 <td>Series View</td>
-<td><code>src/app/services/anime_series_view.py</code>, <code>src/app/services/anime_series_view_projection.py</code>, <code>src/app/services/anime_series_view_franchise_refresh.py</code>, <code>src/app/services/anime_series_view_refresh_triggers.py</code>, <code>src/app/management/commands/rebuild_anime_series_view.py</code></td>
+<td><code>src/app/anime_series_view_constants.py</code>, <code>src/app/services/anime_series_view_rules.py</code>, <code>src/app/services/anime_series_view.py</code>, <code>src/app/services/anime_series_view_projection.py</code>, <code>src/app/services/anime_series_view_franchise_refresh.py</code>, <code>src/app/services/anime_series_view_refresh_triggers.py</code>, <code>src/app/services/anime_series_view_refresh_queue.py</code>, <code>src/app/management/commands/rebuild_anime_series_view.py</code></td>
 </tr>
 <tr>
 <td>Views and templates</td>

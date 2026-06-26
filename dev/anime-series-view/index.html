@@ -581,14 +581,15 @@
 
 <h1 id="anime-series-view">Anime Series View<a class="headerlink" href="#anime-series-view" title="Permanent link">&para;</a></h1>
 <h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
-<p>Anime Series View is the anime-list presentation that groups the user's tracked MAL anime into franchise cards. It is distinct from the MAL anime detail page: the detail page explains one MAL franchise, while Anime Series View reorganizes the user's Anime library.</p>
+<p>Anime Series View is the anime-list presentation that groups the user's tracked MAL anime into franchise and singleton cards. It is distinct from the MAL anime detail page: the detail page explains one MAL franchise, while Anime Series View reorganizes the user's Anime library.</p>
 <ul>
 <li>The <code>series</code> layout applies only to the Anime media list.</li>
-<li>Non-anime media types fall back to the normal grid/table layouts.</li>
-<li>A large MAL franchise is shown as one card when the projection is confident.</li>
-<li>A tracked anime remains a singleton when there is no reliable groupable evidence.</li>
-<li>Non-confident projections are not persisted.</li>
-<li>Cards do not render member titles; they summarize the group instead.</li>
+<li>Non-anime media types fall back to normal grid/table behavior; when <code>layout=series</code> is requested outside Anime, the current view path falls back to grid-style media-list behavior.</li>
+<li>One persisted franchise card represents tracked anime that confidently project to the same Series View root.</li>
+<li>Anime with no groupable evidence become explicit singleton cards.</li>
+<li>Non-confident projections are skipped and are not persisted.</li>
+<li>Cards summarize groups; they do not render member titles.</li>
+<li>Cards show the hover title and tracked-entry count.</li>
 </ul>
 <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>AnimeFranchiseSnapshotService
@@ -603,9 +604,19 @@
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    ↓
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>anime_series_groups.html / anime_series_group_card.html
 </span></code></pre></div>
-<p><code>media_list</code> must remain DB-only. Do not add a MAL provider call, snapshot build, DB write, cache build, or Celery scheduling to <code>build_anime_series_view</code> or to Series View rendering. Refresh work belongs to triggers, tasks, and rebuild commands before the reader runs.</p>
+<p><code>media_list</code> rendering must remain DB-only. No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in <code>build_anime_series_view</code> or Series View rendering. Refresh work belongs to triggers, tasks, import, maintenance, and rebuild commands before the reader runs.</p>
+<p>Series View is a projection of canonical franchise snapshots. It is not the MAL anime detail-page franchise UI, and detail-page UI sections are not Series View grouping rules.</p>
+<h2 id="projection-source">Projection source<a class="headerlink" href="#projection-source" title="Permanent link">&para;</a></h2>
+<p>The projection builder consumes canonical franchise snapshots and can use these relation collections:</p>
+<ul>
+<li><code>root_story_parent_candidates</code></li>
+<li><code>no_series_line_secondary_candidates</code></li>
+<li><code>direct_candidates</code></li>
+<li><code>all_normalized_relations</code></li>
+</ul>
+<p>Candidate relations are de-duplicated by source media ID, target media ID, and relation type before Series View rules are applied.</p>
 <h2 id="projection-rules">Projection rules<a class="headerlink" href="#projection-rules" title="Permanent link">&para;</a></h2>
-<p>The projection consumes franchise snapshots and uses the real Series View rule set, not the detail-page UI sections.</p>
+<p>The projection uses the real Series View rule set, not the detail-page UI sections.</p>
 <p>Groupable relations are:</p>
 <ul>
 <li><code>prequel</code></li>
@@ -615,6 +626,16 @@
 <li><code>side_story</code></li>
 <li><code>spin_off</code></li>
 </ul>
+<p>Continuity relations are:</p>
+<ul>
+<li><code>prequel</code></li>
+<li><code>sequel</code></li>
+</ul>
+<p>Strong reroot relations are:</p>
+<ul>
+<li><code>parent_story</code></li>
+<li><code>full_story</code></li>
+</ul>
 <p>Compatible root media types are:</p>
 <ul>
 <li><code>tv</code></li>
@@ -622,14 +643,22 @@
 <li><code>movie</code></li>
 <li><code>ova</code></li>
 </ul>
-<p>Independent continuity boundaries are intentionally narrow:</p>
+<p>These relations are not groupable and do not reroot Series View projections:</p>
 <ul>
-<li><code>alternative_version</code> is not a normal groupable relation in Series View. It is
-  treated as a narrow boundary signal when the projection builder detects
-  autonomous old/remake-style continuities.</li>
-<li><code>alternative_setting</code> is not part of the Series View groupable relation set.</li>
-<li>The independent continuity media types affected by the boundary are <code>tv</code>, <code>ona</code>, and <code>ova</code>.</li>
-<li><code>movie</code> is a compatible root media type, but it does not trigger the autonomous <code>alternative_version</code> boundary behavior.</li>
+<li><code>alternative_version</code></li>
+<li><code>alternative_setting</code></li>
+</ul>
+<p>Unsafe or non-franchise relations such as <code>character</code>, <code>adaptation</code>, <code>recommendation</code>, and <code>other</code> are ignored for Series View grouping.</p>
+<h2 id="root-selection-and-confidence">Root selection and confidence<a class="headerlink" href="#root-selection-and-confidence" title="Permanent link">&para;</a></h2>
+<p>The builder prefers conservative cards over surprising merges.</p>
+<ul>
+<li>If a snapshot has a usable <code>series_line</code>, the local root starts from the first line entry.</li>
+<li>The builder can perform at most one controlled reroot.</li>
+<li><code>parent_story</code> and <code>full_story</code> are strong reroot signals.</li>
+<li>Weaker reroots must be confirmed by canonical snapshot evidence such as a series line or clear continuity.</li>
+<li>Truncated or unconfirmed weak reroots become unresolved instead of being persisted.</li>
+<li>If no groupable evidence exists, the seed becomes a singleton projection.</li>
+<li>If groupable evidence exists but the root is not reliable, the projection is unresolved and skipped.</li>
 </ul>
 <h2 id="persisted-read-model">Persisted read model<a class="headerlink" href="#persisted-read-model" title="Permanent link">&para;</a></h2>
 <p><code>AnimeSeriesViewMembership</code> is the per-user read model consumed by the list reader. It stores:</p>
@@ -639,6 +668,7 @@
 <li><code>root_media_id</code></li>
 <li><code>display_media_id</code></li>
 <li><code>display_title</code></li>
+<li><code>display_alternative_title_en</code></li>
 <li><code>display_image</code></li>
 <li><code>display_media_type</code></li>
 <li><code>display_start_date</code></li>
@@ -651,61 +681,11 @@
 <ul>
 <li>unique constraint on <code>(user, media_id)</code>;</li>
 <li>indexes on <code>(user, media_id)</code>, <code>(user, root_media_id)</code>, and <code>(user, projection_version)</code>;</li>
-<li><code>projection_version = franchise_root_v4</code>;</li>
+<li>current canonical <code>projection_version = franchise_root_v4</code>;</li>
 <li><code>group_kind = franchise | singleton</code>.</li>
 </ul>
-<p>Memberships are not global. They are per-user rows for the user's tracked anime.</p>
-<h2 id="refresh-triggers">Refresh triggers<a class="headerlink" href="#refresh-triggers" title="Permanent link">&para;</a></h2>
-<p>Series View membership refresh is asynchronous after user-library changes:</p>
-<ul>
-<li>manual MAL anime add -&gt; <code>schedule_manual_add</code>;</li>
-<li>delete MAL anime -&gt; <code>schedule_delete</code>;</li>
-<li>import-created anime -&gt; <code>schedule_import_batch</code>.</li>
-</ul>
-<p>Operational behavior:</p>
-<ul>
-<li>refresh is scheduled after the surrounding transaction commits;</li>
-<li>Celery task <code>Refresh Anime Series View franchise projection</code> performs the refresh;</li>
-<li>queue locks prevent duplicate refresh scheduling for the same user/media/mode tuple;</li>
-<li>the queue lock is deleted in <code>finally</code> when the task exits;</li>
-<li>normal refresh is non-destructive until a projection succeeds;</li>
-<li>delete mode removes direct memberships for deleted media and then rebuilds affected groups.</li>
-</ul>
-<h2 id="reader-and-ui-rendering">Reader and UI rendering<a class="headerlink" href="#reader-and-ui-rendering" title="Permanent link">&para;</a></h2>
-<p><code>build_anime_series_view</code> reads persisted memberships and groups tracked entries by <code>root_media_id</code>. It does not build snapshots and does not call MAL.</p>
-<p>Series View pagination is 12 groups per page. Each card renders the root image, root title, root media type, and the count of tracked entries. The card link points to the root through <code>media_url</code>.</p>
-<p><code>unprojected_count</code> is the count of tracked entries without an exploitable membership. When it is non-zero, the first Series View page shows the preparation message so the user understands that grouping is still being prepared.</p>
-<h2 id="rebuild-command">Rebuild command<a class="headerlink" href="#rebuild-command" title="Permanent link">&para;</a></h2>
-<p>Use the management command to backfill or repair memberships:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users<span class="w"> </span>--dry-run
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--dry-run
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--media-id<span class="w"> </span><span class="m">11757</span><span class="w"> </span>--dry-run
-</span></code></pre></div>
-<p>Even with <code>refresh_cache=False</code>, a rebuild can contact MAL when the local provider cache does not contain the nodes required to build the snapshot.</p>
-<h2 id="debugging-checklist">Debugging checklist<a class="headerlink" href="#debugging-checklist" title="Permanent link">&para;</a></h2>
-<p>Check these symptoms from the read model back toward the projection and provider cache:</p>
-<ul>
-<li><code>unprojected_count &gt; 0</code>;</li>
-<li>stale membership;</li>
-<li>wrong root;</li>
-<li>franchise split into multiple cards;</li>
-<li>alternative continuity merged when it should remain separated;</li>
-<li>too many MAL calls during backfill;</li>
-<li>Celery refresh task failure.</li>
-</ul>
-<h2 id="boundaries-and-known-examples">Boundaries and known examples<a class="headerlink" href="#boundaries-and-known-examples" title="Permanent link">&para;</a></h2>
-<p>These examples explain the rules; do not hardcode these examples or their MAL IDs into product behavior.</p>
-<ul>
-<li>SAO + Gun Gale Online -&gt; same Sword Art Online card when the snapshot confirms the groupable relationship.</li>
-<li>Code Geass branches -&gt; same card if the snapshot confirms groupable franchise structure.</li>
-<li>Spice &amp; Wolf old/remake -&gt; separate cards through the <code>alternative_version</code> boundary.</li>
-</ul>
-<h2 id="future-direction">Future direction<a class="headerlink" href="#future-direction" title="Permanent link">&para;</a></h2>
-<p>The current model is a per-user read model. It is robust for this step. A future Spec 2 could replace or complement it with a global MAL franchise index:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>media_id -&gt; root_media_id + display metadata
-</span></code></pre></div>
-<p>The projection should remain pure and independent of the user so this evolution stays possible.</p>
+<p>Memberships are per-user rows for the user's tracked anime. They are not a global franchise index.</p>
+<p>After projection-version bumps, old rows should be rebuilt so stored memberships use current semantics and display metadata. The reader can tolerate legacy rows during migration, but rebuild is the explicit repair and backfill path.</p>
 <h2 id="refresh-sources">Refresh sources<a class="headerlink" href="#refresh-sources" title="Permanent link">&para;</a></h2>
 <p>Anime Series View rendering is DB-only. Refresh work happens before rendering through triggers, tasks, commands, import, and maintenance.</p>
 <p>Refresh sources include:</p>
@@ -715,11 +695,95 @@
 <li>import-created anime;</li>
 <li>autonomous maintenance first observation;</li>
 <li>autonomous maintenance root change;</li>
-<li>autonomous maintenance detected fingerprint change;</li>
-<li>optional refresh on every maintenance success when <code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS=True</code>.</li>
+<li>autonomous maintenance detected maintenance-fingerprint change;</li>
+<li>optional refresh on every maintenance success when <code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS=True</code>;</li>
+<li>explicit rebuild command.</li>
 </ul>
-<p>The <code>media_list</code> reader should only read <code>AnimeSeriesViewMembership</code> rows and group by <code>root_media_id</code>. No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.</p>
 <p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a> for the maintenance refresh path.</p>
+<h2 id="refresh-behavior">Refresh behavior<a class="headerlink" href="#refresh-behavior" title="Permanent link">&para;</a></h2>
+<p>Manual MAL anime add uses the coordinated franchise path:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>manual MAL anime add
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    ↓ transaction commit
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>AnimeFranchiseManualAddTriggerService
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    ↓
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>Process manual MAL anime franchise
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    ↓
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>AnimeFranchiseMaintenanceService.process_seed(... refresh_series_view=True)
+</span></code></pre></div>
+<p>Manual add refreshes the detail-page cache and Series View quickly. It does not process discovery notifications.</p>
+<p>Delete MAL anime uses the direct Series View refresh path:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>delete MAL anime
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    ↓ transaction commit
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>AnimeSeriesViewRefreshTriggerService.schedule_delete
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    ↓
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>Refresh Anime Series View franchise projection mode=delete
+</span></code></pre></div>
+<p>Delete mode removes direct memberships for deleted media, then rebuilds affected groups best-effort.</p>
+<p>Import refreshes Series View inside the import run after new <code>Anime</code> rows are created. It refreshes the imported IDs plus seed/root context, and it can reuse the shared build session.</p>
+<p>Maintenance refreshes Series View through <code>AnimeFranchiseMaintenanceService</code>. Refresh can happen on first observation, root change, maintenance fingerprint change, or every successful maintenance run depending on settings.</p>
+<p>Direct refresh operational behavior:</p>
+<ul>
+<li>web-triggered scheduling happens after transaction commit;</li>
+<li>queue locks prevent duplicate direct refresh scheduling for the same user/media/mode tuple;</li>
+<li>the direct refresh task deletes its queue lock in <code>finally</code>;</li>
+<li>normal refresh is non-destructive until a projection succeeds;</li>
+<li>unresolved projections are logged and skipped;</li>
+<li>refresh writes only tracked MAL anime rows for the target user.</li>
+</ul>
+<h2 id="reader-and-ui-rendering">Reader and UI rendering<a class="headerlink" href="#reader-and-ui-rendering" title="Permanent link">&para;</a></h2>
+<p><code>build_anime_series_view</code> reads <code>AnimeSeriesViewMembership</code> rows and groups by <code>root_media_id</code>. It does not build snapshots and does not call MAL.</p>
+<p>The reader receives the full filtered user media list before group pagination. This preserves search, status, and sort filters before card grouping. Series View pagination is 12 groups per page.</p>
+<p>HTMX Series View partial rendering uses <code>app/components/anime_series_groups.html</code>, and the HTMX target is <code>.anime-series-groups</code>.</p>
+<p><code>unprojected_count</code> counts tracked entries without usable memberships. If <code>unprojected_count</code> is non-zero, the first Series View page shows the preparation message. Empty Series View uses the standard media-list empty state and should not invent a special empty state.</p>
+<p>Card rendering:</p>
+<ul>
+<li>cover uses <code>display_image</code>;</li>
+<li>link uses <code>display_media_id</code> through <code>media_url</code>;</li>
+<li>hover overlay uses <code>display_alternative_title_en</code> if present;</li>
+<li>fallback hover title is <code>display_title</code>;</li>
+<li>count below cover is <code>group.entries|length</code>;</li>
+<li>member titles are not rendered;</li>
+<li>media type labels, ratings, progress, and track controls are intentionally not rendered on Series View cards.</li>
+</ul>
+<h2 id="rebuild-command">Rebuild command<a class="headerlink" href="#rebuild-command" title="Permanent link">&para;</a></h2>
+<p>Use the management command to backfill, repair, or update memberships after projection-version changes:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users<span class="w"> </span>--dry-run
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--dry-run
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--media-id<span class="w"> </span><span class="m">11757</span><span class="w"> </span>--dry-run
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users<span class="w"> </span>--limit<span class="w"> </span><span class="m">100</span><span class="w"> </span>--dry-run
+</span></code></pre></div>
+<p><code>--refresh-cache</code> should only be used intentionally when fresher MAL/provider data is desired. Do not use <code>--refresh-cache</code> for routine projection-version rebuilds unless extra MAL API pressure is acceptable. Even without <code>--refresh-cache</code>, a rebuild can contact MAL when the local provider cache does not contain the nodes required to build the snapshot.</p>
+<h2 id="debugging-checklist">Debugging checklist<a class="headerlink" href="#debugging-checklist" title="Permanent link">&para;</a></h2>
+<p>Check these symptoms from the read model back toward the projection and provider cache:</p>
+<ul>
+<li><code>unprojected_count &gt; 0</code>;</li>
+<li>no <code>AnimeSeriesViewMembership</code> row for a tracked MAL anime;</li>
+<li>stale membership after projection-version bump;</li>
+<li>missing <code>display_alternative_title_en</code>;</li>
+<li>wrong root or unexpected reroot;</li>
+<li>franchise split into multiple cards;</li>
+<li>alternative-only anime merged when they should stay separate;</li>
+<li>too many MAL calls during rebuild;</li>
+<li>direct refresh queue lock stuck or repeatedly skipped;</li>
+<li>Celery task <code>Refresh Anime Series View franchise projection</code> failure;</li>
+<li>coordinated task <code>Process manual MAL anime franchise</code> failure;</li>
+<li>maintenance scan not refreshing Series View when expected.</li>
+</ul>
+<h2 id="boundaries-and-known-examples">Boundaries and known examples<a class="headerlink" href="#boundaries-and-known-examples" title="Permanent link">&para;</a></h2>
+<p>These examples explain the rules; do not hardcode these examples or their MAL IDs into product behavior.</p>
+<ul>
+<li>SAO + Gun Gale Online can share a Sword Art Online card when there is confident groupable evidence.</li>
+<li>SAO Progressive entries connected only by <code>alternative_setting</code> or <code>alternative_version</code> should stay separate.</li>
+<li>Code Geass branches can share a card if the snapshot confirms groupable franchise structure.</li>
+<li>Spice &amp; Wolf old/remake continuities stay separate when their connection is only alternative-style evidence.</li>
+<li>Parent-story or full-story specials can reroot to the parent title when the canonical snapshot confirms the parent.</li>
+</ul>
+<h2 id="future-direction">Future direction<a class="headerlink" href="#future-direction" title="Permanent link">&para;</a></h2>
+<p>The current model is a per-user read model. It is robust for this step. A future Spec 2 could replace or complement it with a global MAL franchise index:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>media_id -&gt; root_media_id + display metadata
+</span></code></pre></div>
+<p>The projection should remain pure and independent of the user so this evolution stays possible.</p>
 
 
 
