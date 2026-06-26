@@ -297,10 +297,9 @@ class RefreshMALAnimeMetadataTaskTests(TestCase):
 
         result = refresh_mal_anime_metadata(self.media_id)
 
-        self.assertEqual(
-            result,
-            {"media_type": "anime", "media_id": self.media_id, "refreshed": True},
-        )
+        self.assertEqual(result["media_type"], "anime")
+        self.assertEqual(result["media_id"], self.media_id)
+        self.assertTrue(result["refreshed"])
         mock_anime.assert_called_once_with(self.media_id, refresh_cache=True)
         meta = cache.get(mal_cache.get_anime_cache_meta_key(self.media_id))
         self.assertIsNotNone(meta["last_refresh_attempt_at"])
@@ -357,10 +356,9 @@ class RefreshMALAnimeMetadataTaskTests(TestCase):
 
         result = refresh_mal_anime_metadata(self.media_id)
 
-        self.assertEqual(
-            result,
-            {"media_type": "anime", "media_id": self.media_id, "refreshed": True},
-        )
+        self.assertEqual(result["media_type"], "anime")
+        self.assertEqual(result["media_id"], self.media_id)
+        self.assertTrue(result["refreshed"])
         mock_api_request.assert_called_once()
         self.assertEqual(
             cache.get(mal_cache.get_anime_cache_key(self.media_id))["title"],

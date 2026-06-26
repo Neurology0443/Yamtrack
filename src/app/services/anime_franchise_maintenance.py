@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from django.utils import timezone
 
 from app.models import Anime, MediaTypes, Sources
+from app.services import item_image_sync
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
 from app.services.anime_franchise_discovery import AnimeFranchiseDiscoveryService
@@ -112,6 +113,13 @@ class AnimeFranchiseMaintenanceService:
         snapshot = snapshot_service.build(seed_mal_id, refresh_cache=refresh_cache)
         result.snapshot_built = True
         result.component_root_mal_id = str(snapshot.canonical_root_media_id)
+        self._sync_snapshot_images_if_fresh(
+            user=user,
+            seed_mal_id=seed_mal_id,
+            snapshot=snapshot,
+            refresh_cache=refresh_cache,
+            result=result,
+        )
         result.activity_summary = summarize_franchise_activity(
             snapshot, now=timezone.now()
         )
@@ -203,6 +211,36 @@ class AnimeFranchiseMaintenanceService:
                 result.critical_errors.append(str(error)[:250])
 
         return result
+
+    def _sync_snapshot_images_if_fresh(
+        self,
+        *,
+        user,
+        seed_mal_id: str,
+        snapshot,
+        refresh_cache: bool,
+        result: AnimeFranchiseMaintenanceResult,
+    ) -> None:
+        """Best-effort sync of fresh MAL snapshot images into global Item rows."""
+        if not refresh_cache:
+            return
+
+        try:
+            item_image_sync.sync_provider_images(
+                item_image_sync.ProviderImageEntry(
+                    source=Sources.MAL.value,
+                    media_type=MediaTypes.ANIME.value,
+                    media_id=str(node.media_id),
+                    image=getattr(node, "image", None),
+                )
+                for node in getattr(snapshot, "nodes_by_media_id", {}).values()
+            )
+        except Exception as error:
+            logger.exception(
+                "Maintenance image sync failed",
+                extra={"user_id": user.id, "seed_mal_id": seed_mal_id},
+            )
+            result.non_critical_errors.append(str(error)[:250])
 
     def _series_view_refresh_service(self, build_session):
         if self.series_view_refresh_service_factory is not None:
