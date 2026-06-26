@@ -607,7 +607,7 @@
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a> -&gt; profile selection
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a> -&gt; missing entry creation
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a> -&gt; scan-state update
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a> -&gt; notifications
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a> -&gt; entry-added notifications
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a> -&gt; optional cache warmup
 </span></code></pre></div>
 <p>Execution surfaces:</p>
@@ -776,6 +776,26 @@
 <li>A failed seed does not abort the whole import run.</li>
 <li>Cache warmup scheduling errors are counted separately from entry creation errors.</li>
 </ul>
+<h2 id="relationship-with-maintenance-and-discovery">Relationship with maintenance and discovery<a class="headerlink" href="#relationship-with-maintenance-and-discovery" title="Permanent link">&para;</a></h2>
+<p>Import, maintenance, discovery, cache warmup, and Series View refresh are separate consumers around the same canonical franchise snapshot:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Import creates missing Anime rows.
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>Maintenance keeps existing tracked franchise data fresh.
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>Discovery records visible missing entries and can notify.
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>Cache warmup prepares detail pages.
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Series View refresh keeps list grouping current.
+</span></code></pre></div>
+<p>Import uses <code>AnimeFranchiseBuildSession</code> for shared per-operation hydration. The same run can build a snapshot, select profile entries, create missing rows, warm cache payloads, process discovery, and refresh Anime Series View memberships without treating those consumers as the same system.</p>
+<p>Important boundaries:</p>
+<ul>
+<li>import creates missing user library entries;</li>
+<li>autonomous franchise maintenance does not directly create missing <code>Anime</code> rows;</li>
+<li>discovery records visible missing entries and can notify users;</li>
+<li>cache warmup prepares detail-page payloads but does not decide import eligibility;</li>
+<li>Series View refresh keeps the DB read model current before rendering;</li>
+<li>import profile selection is not UI placement.</li>
+</ul>
+<p>When import creates a row, the entry defaults to <code>Planning</code>, queues an entry-added notification, initializes MAL release-date state when metadata is available, and sets <code>_skip_hot_priority</code> to avoid recursive hot-priority behavior.</p>
+<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>, <a href="../anime-franchise-cache/">franchise cache</a>, and <a href="../anime-series-view/">Anime Series View</a>.</p>
 
 
 

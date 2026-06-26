@@ -503,10 +503,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#import-notifications" class="md-nav__link">
+  <a href="#notifications" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        🔔 Import notifications
+        🔔 Notifications
       </span>
     </span>
   </a>
@@ -514,10 +514,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#mal-anime-release-date-notifications" class="md-nav__link">
+  <a href="#autonomous-franchise-maintenance" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        📅 MAL anime release-date notifications
+        🛠 Autonomous franchise maintenance
       </span>
     </span>
   </a>
@@ -894,7 +894,7 @@
 <li>Groups tracked MAL anime into franchise cards backed by persisted <code>AnimeSeriesViewMembership</code> rows.</li>
 <li>Keeps the list page DB-only: no MAL call, no snapshot build, and no write during <code>media_list</code> rendering.</li>
 <li>Uses one card per franchise when the projection is confident.</li>
-<li>Keeps autonomous <code>alternative_version</code> continuities separated when detected, such as old/remake continuities.</li>
+<li>Keeps autonomous <code>alternative_version</code>/<code>alternative_settings</code> continuities separated when detected.</li>
 </ul>
 <h3 id="faster-franchise-pages">⚡ Faster franchise pages<a class="headerlink" href="#faster-franchise-pages" title="Permanent link">&para;</a></h3>
 <ul>
@@ -918,19 +918,26 @@
 <li>Complete</li>
 <li>Configure how often franchise imports should run.</li>
 </ul>
-<h3 id="import-notifications">🔔 Import notifications<a class="headerlink" href="#import-notifications" title="Permanent link">&para;</a></h3>
+<h3 id="notifications">🔔 Notifications<a class="headerlink" href="#notifications" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Receive notifications when franchise imports add new entries.</li>
-<li>Makes automatic additions easy to spot and review.</li>
-<li>Helps you keep track of changes made to your library.</li>
+<li>Receive notifications for MAL anime franchise activity:</li>
+<li>franchise imports adding new <code>Planning</code> entries;</li>
+<li>newly visible franchise entries discovered after the user's discovery baseline;</li>
+<li>tracked MAL anime start dates being announced, becoming more precise, or changing.</li>
+<li>Discovery notifications can surface new sequels, specials, movies, alternatives,
+  or spin-offs without automatically importing them.</li>
+<li>MAL anime start-date notifications support MAL dates expressed as a year, a year
+  and month, or a complete date.</li>
+<li>These MAL-focused notifications remain separate from AniList episode-calendar and
+  event release notifications.</li>
 </ul>
-<h3 id="mal-anime-release-date-notifications">📅 MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h3>
+<h3 id="autonomous-franchise-maintenance">🛠 Autonomous franchise maintenance<a class="headerlink" href="#autonomous-franchise-maintenance" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Optionally receive a notification when a tracked MAL anime start date is
-  announced, becomes more precise, or changes.</li>
-<li>Supports MAL dates expressed as a year, a year and month, or a complete date.</li>
-<li>Uses MAL metadata directly and remains separate from AniList episode-calendar
-  and release notifications.</li>
+<li>Keeps tracked MAL anime franchises fresh in the background.</li>
+<li>Rebuilds franchise cache payloads.</li>
+<li>Updates discovery state for newly visible entries.</li>
+<li>Refreshes Anime Series View memberships when franchise structure changes.</li>
+<li>Uses persistent scan state, batch limits, adaptive cadence, and jitter.</li>
 </ul>
 <p>Detailed fork docs are available in <code>docs/</code>:</p>
 <ul>
@@ -940,6 +947,7 @@
 <li><a href="docs/anime-series-view/">Anime Series View</a></li>
 <li><a href="docs/anime-franchise-import/">Anime franchise import</a></li>
 <li><a href="docs/anime-franchise-cache/">Anime franchise cache</a></li>
+<li><a href="docs/anime-franchise-maintenance/">Anime franchise maintenance</a></li>
 <li><a href="docs/anime-franchise-customization/">Anime franchise customization</a></li>
 <li><a href="docs/anime-franchise-debugging-runbook/">Anime franchise debugging runbook</a></li>
 <li><a href="docs/anime-release-date-notifications/">Anime release-date notifications</a></li>
@@ -1138,8 +1146,10 @@
 <li><a href="anime-franchise-snapshot/">Anime franchise snapshot</a></li>
 <li><a href="anime-franchise-import/">Anime franchise import</a></li>
 <li><a href="anime-franchise-cache/">Anime franchise cache</a></li>
+<li><a href="anime-franchise-maintenance/">Anime franchise maintenance</a></li>
 <li><a href="anime-franchise-customization/">Anime franchise customization</a></li>
 <li><a href="anime-franchise-debugging-runbook/">Anime franchise debugging runbook</a></li>
+<li><a href="anime-release-date-notifications/">Anime release-date notifications</a></li>
 <li><a href="docker-testing-runbook/">Docker testing runbook</a></li>
 <li><a href="operational-commands/">Operational commands</a></li>
 </ul>

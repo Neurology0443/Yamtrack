@@ -1,0 +1,1138 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Yamtrack is a self hosted media tracker for movies, tv shows, anime, manga, video games, books, comics, and board games.">
+      
+      
+        <meta name="author" content="FuzzyGrim">
+      
+      
+        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-franchise-maintenance/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/logo.png">
+      <meta name="generator" content="zensical-0.0.42">
+    
+    
+      
+        <title>Anime franchise maintenance - Yamtrack Documentation</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.fba56155.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#anime-franchise-maintenance" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Yamtrack Documentation" class="md-header__button md-logo" aria-label="Yamtrack Documentation" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="Yamtrack Documentation">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Yamtrack Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Anime franchise maintenance
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun-moon" viewBox="0 0 24 24"><path d="M12 2v2M14.837 16.385a6 6 0 1 1-7.223-7.222c.624-.147.97.66.715 1.248a4 4 0 0 0 5.26 5.259c.589-.255 1.396.09 1.248.715M16 12a4 4 0 0 0-4-4M19 5l-1.256 1.256M20 12h2"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/FuzzyGrim/Yamtrack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FuzzyGrim/Yamtrack
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../development/" class="md-tabs__link">
+        
+  
+  Development
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../env-variables/" class="md-tabs__link">
+        
+  
+  Environment Variables
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../media-imports/" class="md-tabs__link">
+        
+  
+  Media Imports
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../social-auth/" class="md-tabs__link">
+        
+  
+  Social Auth
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Yamtrack Documentation" class="md-nav__button md-logo" aria-label="Yamtrack Documentation" data-md-component="logo">
+      
+  <img src="../assets/logo.png" alt="Yamtrack Documentation">
+
+    </a>
+    Yamtrack Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/FuzzyGrim/Yamtrack" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FuzzyGrim/Yamtrack
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Development
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../env-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Environment Variables
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../media-imports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Media Imports
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../social-auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Social Auth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Administration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-franchise-maintenance.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-franchise-maintenance.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
+    </a>
+  
+
+
+<h1 id="anime-franchise-maintenance">Anime franchise maintenance<a class="headerlink" href="#anime-franchise-maintenance" title="Permanent link">&para;</a></h1>
+<p>Autonomous franchise maintenance keeps tracked MAL anime franchise data fresh without relying on page visits or import runs.</p>
+<p>Related docs: <a href="../architecture-overview/">architecture overview</a>, <a href="../anime-franchise-cache/">franchise cache</a>, <a href="../anime-franchise-import/">franchise import</a>, <a href="../anime-series-view/">Anime Series View</a>, <a href="../anime-franchise-debugging-runbook/">debugging runbook</a>, and <a href="../operational-commands/">operational commands</a>.</p>
+<h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
+<p>The autonomous maintenance scanner:</p>
+<ul>
+<li>runs in the background through Celery Beat as <code>Scan MAL anime franchise maintenance</code>;</li>
+<li>ensures persistent maintenance scan state exists for eligible tracked MAL anime;</li>
+<li>selects a bounded batch of due state rows;</li>
+<li>builds one canonical franchise snapshot per processed seed with a shared build session;</li>
+<li>rebuilds the user-agnostic detail-page franchise cache payload;</li>
+<li>can synchronize fresh MAL cover images from refreshed snapshot nodes into the global <code>Item.image</code> row when <code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE=True</code>;</li>
+<li>processes discovery state for newly visible missing franchise entries;</li>
+<li>can queue franchise discovery notifications for eligible new entries after the
+  user's discovery baseline;</li>
+<li>refreshes Anime Series View memberships when configured or when structure changes;</li>
+<li>records success, errors, component root, fingerprint, and the next scan time.</li>
+</ul>
+<p>It is operational maintenance for existing tracked MAL anime. It is not import automation and it does not directly create missing <code>Anime</code> rows.</p>
+<h2 id="why-this-maintenance-exists">Why this maintenance exists<a class="headerlink" href="#why-this-maintenance-exists" title="Permanent link">&para;</a></h2>
+<p>Page visits and imports are not enough:</p>
+<ul>
+<li>users may not open old detail pages;</li>
+<li>MAL can change related-anime relations after an item was cached;</li>
+<li>new sequels, specials, movies, alternatives, or spin-offs can appear;</li>
+<li>Anime Series View memberships can become stale;</li>
+<li>discovery notifications need a reliable background observation path;</li>
+<li>large franchise rebuilds must stay out of the request path.</li>
+</ul>
+<p>Maintenance provides that background observation path while keeping detail-page requests fast.</p>
+<h2 id="execution-surfaces">Execution surfaces<a class="headerlink" href="#execution-surfaces" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Celery task:
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Scan MAL anime franchise maintenance
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Management command:
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python manage.py scan_mal_anime_franchise_maintenance --limit 10 --force
+</span></code></pre></div>
+<p>The Celery task respects <code>ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED</code>. When disabled, it returns a skipped result.</p>
+<p>The management command runs the same <code>AnimeFranchiseMaintenanceScanService</code>. <code>--force</code> only hides the disabled-setting warning for manual runs. It does not mean “scan every state immediately”. <code>--limit</code> controls the due-state batch size for that run.</p>
+<h2 id="scan-state-lifecycle">Scan state lifecycle<a class="headerlink" href="#scan-state-lifecycle" title="Permanent link">&para;</a></h2>
+<p><code>AnimeFranchiseMaintenanceScanState</code> stores one row per user and seed MAL anime ID.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>user</code></td>
+<td>User whose library contains the tracked MAL anime.</td>
+</tr>
+<tr>
+<td><code>seed_mal_id</code></td>
+<td>Tracked MAL anime ID used as the maintenance seed.</td>
+</tr>
+<tr>
+<td><code>component_root_mal_id</code></td>
+<td>Last resolved canonical component root for the seed. Blank until a successful scan resolves it.</td>
+</tr>
+<tr>
+<td><code>next_scan_at</code></td>
+<td>Due time used by the scanner.</td>
+</tr>
+<tr>
+<td><code>last_scanned_at</code></td>
+<td>Last time the state was attempted or covered.</td>
+</tr>
+<tr>
+<td><code>last_success_at</code></td>
+<td>Last successful maintenance observation.</td>
+</tr>
+<tr>
+<td><code>last_error_at</code></td>
+<td>Last critical or partial failure time.</td>
+</tr>
+<tr>
+<td><code>last_change_at</code></td>
+<td>Last time the maintenance fingerprint or root changed.</td>
+</tr>
+<tr>
+<td><code>last_result_fingerprint</code></td>
+<td>Last maintenance fingerprint for root, discovery-visible data, and tracked member coverage.</td>
+</tr>
+<tr>
+<td><code>last_error</code></td>
+<td>Short error text for the last failure.</td>
+</tr>
+<tr>
+<td><code>consecutive_stable_scans</code></td>
+<td>Successful scans since the last detected change.</td>
+</tr>
+<tr>
+<td><code>consecutive_error_count</code></td>
+<td>Consecutive failures used for retry backoff.</td>
+</tr>
+</tbody>
+</table>
+<p>Uniqueness:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>one state per user + seed_mal_id
+</span></code></pre></div>
+<p>Indexes support:</p>
+<ul>
+<li>due lookup by <code>next_scan_at</code>;</li>
+<li>root lookup by <code>(user, component_root_mal_id)</code>;</li>
+<li>seed lookup by <code>(user, seed_mal_id)</code>.</li>
+</ul>
+<h2 id="first-run-initial-spread">First-run initial spread<a class="headerlink" href="#first-run-initial-spread" title="Permanent link">&para;</a></h2>
+<p>The first maintenance run creates missing states for eligible tracked MAL anime. Initial <code>next_scan_at</code> values are spread across <code>ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS</code>, which defaults to <code>24</code> hours.</p>
+<p>This avoids scanning every tracked seed immediately after deployment.</p>
+<p>Example:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>tracked_seeds_seen: 94
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>states_created: 94
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>due_selected: 2
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>processed: 2
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>succeeded: 2
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>errors: 0
+</span></code></pre></div>
+<p>Many states can be created while only a few are due immediately. That is expected and healthy.</p>
+<h2 id="due-selection-and-batch-size">Due selection and batch size<a class="headerlink" href="#due-selection-and-batch-size" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>BATCH_SIZE limits selected due seed states.
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>It does not limit the number of franchise members that can be covered by one processed seed.
+</span></code></pre></div>
+<p>Example:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>due_selected: 2
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>processed: 2
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>with_success: 12
+</span></code></pre></div>
+<p>Meaning:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Two seeds were processed.
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Those two seeds covered twelve tracked member states.
+</span></code></pre></div>
+<p>Do not document batch size as “maximum members per franchise”.</p>
+<h2 id="per-seed-processing">Per-seed processing<a class="headerlink" href="#per-seed-processing" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>process seed
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    ├─ build snapshot
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    ├─ compute component root
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    ├─ sync fresh provider images into Item.image when refresh_cache=True
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    ├─ compute discovery fingerprint
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    ├─ collect tracked member media IDs
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    ├─ build maintenance fingerprint
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    ├─ rebuild UI cache
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    ├─ process discovery
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    ├─ refresh Series View when needed
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    └─ update state
+</span></code></pre></div>
+<p><code>AnimeFranchiseMaintenanceService</code> uses one shared <code>AnimeFranchiseBuildSession</code>. Cache rebuild, discovery, and Series View refresh can therefore reuse MAL metadata hydrated inside the same operation.</p>
+<h2 id="provider-image-synchronization">Provider image synchronization<a class="headerlink" href="#provider-image-synchronization" title="Permanent link">&para;</a></h2>
+<p>When maintenance builds a snapshot with <code>refresh_cache=True</code>, snapshot node images are treated as fresh MAL provider image candidates.</p>
+<p>The sync is best-effort:</p>
+<ul>
+<li>it updates only existing global MAL anime <code>Item</code> rows;</li>
+<li>it targets base rows where <code>season_number</code> and <code>episode_number</code> are blank;</li>
+<li>it does not create <code>Item</code> or <code>Anime</code> rows;</li>
+<li>it does not run when <code>refresh_cache=False</code>;</li>
+<li>failures are logged and recorded as non-critical errors, so cache rebuild, discovery, and Series View work can still continue.</li>
+</ul>
+<h2 id="franchise-member-coverage">Franchise member coverage<a class="headerlink" href="#franchise-member-coverage" title="Permanent link">&para;</a></h2>
+<p>After a seed succeeds, tracked members from the same canonical franchise snapshot are covered:</p>
+<ul>
+<li>member states get the component root, fingerprint, success timestamps, and next scan time;</li>
+<li>duplicate root work is avoided during the same scan;</li>
+<li>repeated scans of every season in a franchise are avoided;</li>
+<li>a single processed seed can move many tracked member states forward.</li>
+</ul>
+<h2 id="success-cadence">Success cadence<a class="headerlink" href="#success-cadence" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Trigger</th>
+<th>Next scan window</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HOT</code></td>
+<td>changed, root changed, currently airing, upcoming, future start</td>
+<td>6h to 36h</td>
+</tr>
+<tr>
+<td><code>WARM</code></td>
+<td>unknown end date or recent franchise</td>
+<td>24h to 3d</td>
+</tr>
+<tr>
+<td><code>COOL</code></td>
+<td>mature franchise</td>
+<td>3d to 10d</td>
+</tr>
+<tr>
+<td><code>COLD</code></td>
+<td>old franchise</td>
+<td>10d to 21d</td>
+</tr>
+<tr>
+<td><code>DEEP_COLD</code></td>
+<td>old, stable, complete, no unknown dates, not truncated</td>
+<td>21d to 30d</td>
+</tr>
+</tbody>
+</table>
+<p><code>HOT</code> is intentionally fast for active or future franchises. <code>WARM</code> covers recent or incomplete information. <code>COOL</code> and <code>COLD</code> reduce work for older franchises. <code>DEEP_COLD</code> requires enough stable scans and old data.</p>
+<p>Deterministic jitter avoids synchronized scans. Root-based schedule keys keep a franchise together while seed micro-jitter avoids exact same-minute spikes.</p>
+<h2 id="error-behavior">Error behavior<a class="headerlink" href="#error-behavior" title="Permanent link">&para;</a></h2>
+<p>Critical errors mark the state as failed or partially failed:</p>
+<ul>
+<li><code>last_error</code> and <code>last_error_at</code> are recorded;</li>
+<li><code>consecutive_error_count</code> increases;</li>
+<li>the next retry uses exponential backoff based on <code>ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS</code>;</li>
+<li>retry delay is capped at seven days;</li>
+<li>locks prevent concurrent maintenance runs.</li>
+</ul>
+<p>Provider image sync errors are non-critical maintenance errors. They are recorded for visibility but do not stop cache rebuild, discovery, or Series View work the way critical failures do.</p>
+<h2 id="metadata-refresh-invalidation">Metadata refresh invalidation<a class="headerlink" href="#metadata-refresh-invalidation" title="Permanent link">&para;</a></h2>
+<p>MAL metadata refresh can detect strong relation changes and complement scheduled maintenance.</p>
+<p>When old and new related-anime edges differ for strong relations:</p>
+<ul>
+<li>known canonical franchise payloads are marked stale;</li>
+<li>forced cache rebuilds can be scheduled;</li>
+<li>relevant maintenance scan states can be nudged due soon;</li>
+<li>missing payloads are reported as missing, but cannot be invalidated.</li>
+</ul>
+<p>Strong relations include continuity relations and franchise-structure relations such as <code>alternative_setting</code>, <code>alternative_version</code>, and <code>spin_off</code>.</p>
+<p>See <a href="../anime-franchise-cache/">franchise cache</a> and <a href="../architecture-overview/">architecture overview</a> for the cache invalidation flow.</p>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED</code></td>
+<td><code>False</code></td>
+<td>Enables the Celery Beat maintenance scan entry.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES</code></td>
+<td><code>60</code></td>
+<td>Beat interval for the maintenance task.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE</code></td>
+<td><code>10</code></td>
+<td>Number of due seed states selected per scan.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS</code></td>
+<td><code>24</code></td>
+<td>Spread window for first-run state creation.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code></td>
+<td><code>True</code></td>
+<td>Whether maintenance refreshes MAL provider cache while building snapshots; also gates maintenance-driven cover synchronization into <code>Item.image</code>.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES</code></td>
+<td><code>360</code></td>
+<td>Lock lifetime for one maintenance task run.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS</code></td>
+<td><code>12</code></td>
+<td>Base retry interval for failed states before exponential backoff.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_CHANGE</code></td>
+<td><code>True</code></td>
+<td>Refresh Series View when the maintenance fingerprint changes.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS</code></td>
+<td><code>False</code></td>
+<td>Optionally refresh Series View after every successful maintenance scan.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_AGE_YEARS</code></td>
+<td><code>15</code></td>
+<td>Minimum age before deep-cold cadence can apply.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_STABLE_SCANS</code></td>
+<td><code>8</code></td>
+<td>Stable success count needed for deep-cold cadence.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_CHANGE_AGE_DAYS</code></td>
+<td><code>180</code></td>
+<td>Minimum time since last change before deep-cold cadence can apply.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS</code></td>
+<td><code>21</code></td>
+<td>Minimum deep-cold scan window.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS</code></td>
+<td><code>30</code></td>
+<td>Maximum deep-cold scan window.</td>
+</tr>
+</tbody>
+</table>
+<p><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code> also gates maintenance-driven cover synchronization into <code>Item.image</code>; with <code>False</code>, maintenance may rebuild from existing cache but will not sync snapshot images into <code>Item.image</code>.</p>
+<p>Compatibility settings that still exist in settings:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS</code></td>
+<td><code>24</code></td>
+<td>Legacy compatibility setting. The current adaptive cadence path uses profile windows instead.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF</code></td>
+<td><code>False</code></td>
+<td>Legacy compatibility setting. Do not enable unless the code path is intentionally reintroduced.</td>
+</tr>
+<tr>
+<td><code>ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS</code></td>
+<td><code>30</code></td>
+<td>Legacy compatibility setting for the old stable-backoff path.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<p>The checked-in Compose service is <code>yamtrack</code>. Some deployments may split web, worker, and beat into separate services.</p>
+<p>Inspect settings:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="s">from django.conf import settings</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s">entry = settings.CELERY_BEAT_SCHEDULE.get(&quot;scan_mal_anime_franchise_maintenance&quot;)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s">for name in [</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED&quot;,</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES&quot;,</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE&quot;,</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS&quot;,</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE&quot;,</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="s">    &quot;ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES&quot;,</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="s">]:</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="s">    print(f&quot;{name}:&quot;, getattr(settings, name))</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="s">print(&quot;beat_entry_exists:&quot;, bool(entry))</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="s">print(&quot;beat_entry:&quot;, entry)</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Inspect logs:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>--since<span class="o">=</span>90m<span class="w"> </span>yamtrack<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-Ei<span class="w"> </span><span class="s2">&quot;Scan MAL anime franchise maintenance|anime franchise maintenance|Scheduler: Sending due task|succeeded|failed|error&quot;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">true</span>
+</span></code></pre></div>
+<p>DB summary:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="s">from django.utils import timezone</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="s">now = timezone.now()</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="s">qs = AnimeFranchiseMaintenanceScanState.objects.all()</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="s">print({</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="s">    &quot;total_states&quot;: qs.count(),</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="s">    &quot;due_now&quot;: qs.filter(next_scan_at__lte=now).count(),</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="s">    &quot;with_success&quot;: qs.filter(last_success_at__isnull=False).count(),</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="s">    &quot;pending_first_success&quot;: qs.filter(last_success_at__isnull=True).count(),</span>
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="s">    &quot;with_error&quot;: qs.exclude(last_error=&quot;&quot;).count(),</span>
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="s">})</span>
+</span><span id="__span-9-14"><a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Due states:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="s">from django.utils import timezone</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="s">for state in AnimeFranchiseMaintenanceScanState.objects.filter(next_scan_at__lte=timezone.now()).order_by(&quot;next_scan_at&quot;)[:20]:</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or &quot;-&quot;, state.next_scan_at, state.last_success_at)</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Error states:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="s">for state in AnimeFranchiseMaintenanceScanState.objects.exclude(last_error=&quot;&quot;).order_by(&quot;-last_error_at&quot;)[:20]:</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.last_error_at, state.consecutive_error_count, state.last_error[:200])</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Next state:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="s">state = AnimeFranchiseMaintenanceScanState.objects.order_by(&quot;next_scan_at&quot;).first()</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="s">if state:</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or &quot;-&quot;, state.next_scan_at)</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="s">else:</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="s">    print(&quot;no maintenance states&quot;)</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Manual scan:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>scan_mal_anime_franchise_maintenance<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span><span class="w"> </span>--force
+</span></code></pre></div>
+<h2 id="healthy-output-examples">Healthy output examples<a class="headerlink" href="#healthy-output-examples" title="Permanent link">&para;</a></h2>
+<p>Healthy first scan:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>states_created: 94
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>due_selected: 2
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>processed: 2
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>succeeded: 2
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>errors: 0
+</span></code></pre></div>
+<p>Healthy DB summary after a scan:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>total_states: 94
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>due_now: 0
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>with_success: 12
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>pending_first_success: 82
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>with_error: 0
+</span></code></pre></div>
+<p><code>pending_first_success</code> is normal after the first state-creation pass because initial spread intentionally defers most seeds.</p>
+<p><code>due_now</code> can remain greater than zero when backlog exceeds the batch size or when another state becomes due immediately after the scan.</p>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Meaning</th>
+<th>First check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>total_states=0</code></td>
+<td>first scan not run, disabled setting, no eligible anime, or Beat not running</td>
+<td>settings and logs</td>
+</tr>
+<tr>
+<td><code>due_now&gt;0</code> after scan</td>
+<td>state became due after the scan or backlog exceeded batch</td>
+<td><code>next_scan_at</code> and Beat time</td>
+</tr>
+<tr>
+<td><code>with_error&gt;0</code></td>
+<td>one or more states failed</td>
+<td>error state list</td>
+</tr>
+<tr>
+<td>many <code>root=-</code></td>
+<td>states not processed yet or unresolved root</td>
+<td><code>last_success_at</code></td>
+</tr>
+<tr>
+<td><code>with_success</code> jumps faster than <code>processed</code></td>
+<td>one seed covered multiple tracked members</td>
+<td>root grouping</td>
+</tr>
+<tr>
+<td>Beat entry missing</td>
+<td>scan disabled or settings not visible in Beat process</td>
+<td>Django settings in runtime container</td>
+</tr>
+<tr>
+<td>task skipped <code>already_running</code></td>
+<td>lock is active</td>
+<td>logs and lock timeout</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2022 - 2026 FuzzyGrim
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/FuzzyGrim/Yamtrack" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["content.action.edit","content.action.view","content.code.annotate","content.code.copy","header.autohide","navigation.footer","navigation.indexes","navigation.sections","navigation.tabs","navigation.top","navigation.tracking","search.highlight","search.share","search.suggest","toc.follow","toc.integrate"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"default":"release","provider":"mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.6e5f0216.min.js"></script>
+      
+    
+  </body>
+</html>

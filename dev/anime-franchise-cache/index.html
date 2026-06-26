@@ -657,12 +657,26 @@
 <li>user-specific item data;</li>
 <li>current-entry markers;</li>
 <li>footer display helpers that depend on the current page/user context;</li>
-<li>opportunistic image updates when Yamtrack has a more recent or more complete local image than the cached franchise payload.</li>
+<li>request-time display images from current local <code>Item.image</code>, including covers refreshed from provider metadata through the centralized sync rule.</li>
 </ul>
 <p>The franchise cache stores a user-agnostic payload. Some display data can still be improved at request time.</p>
-<p>For example, Series entries may reuse a more recent image already known by Yamtrack instead of continuing to display an older image embedded in the cached franchise payload.</p>
+<p>For example, fresh provider images may flow into <code>Item.image</code>, and request-time enrichment may then prefer that current local image over an older image embedded in the cached franchise payload.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>fresh provider image -&gt; Item.image
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>Item.image -&gt; request-time display enrichment
+</span></code></pre></div>
 <p>This enrichment improves visual consistency without requiring a full franchise rebuild.</p>
 <p>This separation allows the same cached franchise payload to be reused safely for different users.</p>
+<h2 id="image-freshness-and-itemimage">Image freshness and <code>Item.image</code><a class="headerlink" href="#image-freshness-and-itemimage" title="Permanent link">&para;</a></h2>
+<p>The franchise cache payload stays user-agnostic and can contain image URLs from the time the payload was built.</p>
+<p><code>Item.image</code> is the global local cover used by normal Yamtrack item rendering. Fresh provider images can be synchronized into <code>Item.image</code> through <code>item_image_sync</code> from metadata refresh, maintenance, or request-time enrichment paths.</p>
+<p>This keeps local item covers fresh without making the franchise cache payload the canonical image store.</p>
+<p>Rules:</p>
+<ul>
+<li>cache payload freshness and <code>Item.image</code> freshness are related but separate;</li>
+<li>request rendering may enrich cached entries with the current local <code>Item.image</code>;</li>
+<li>background refresh and maintenance may update <code>Item.image</code> from fresh MAL provider data;</li>
+<li>updating <code>Item.image</code> does not change franchise grouping, cache aliases, import selection, or Series View membership.</li>
+</ul>
 <h2 id="canonical-payload">Canonical payload<a class="headerlink" href="#canonical-payload" title="Permanent link">&para;</a></h2>
 <p>A franchise can be stored under one canonical root. The canonical media ID is usually the first entry in the fixed <code>Series</code> line, falling back to <code>canonical_root_media_id</code> or the seed when needed.</p>
 <p>Canonical storage avoids duplicating the same complete franchise payload under every related media ID.</p>
@@ -680,15 +694,15 @@
 <p>If the canonical franchise payload is stored under the first TV entry, opening a main-story OVA can still resolve to that canonical payload through <code>mal_anime_franchise_alias_&lt;ova_id&gt;</code>.</p>
 <p>The alias only changes cache lookup. It does not move the OVA into a different UI section.</p>
 <p>Example flow:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Canonical TV entry
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    ↓
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>stores canonical franchise payload
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>Main-story movie / OVA
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    ↓
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>alias key
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    ↓
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>resolves to the same canonical franchise payload
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Canonical TV entry
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    ↓
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>stores canonical franchise payload
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Main-story movie / OVA
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    ↓
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>alias key
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    ↓
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>resolves to the same canonical franchise payload
 </span></code></pre></div>
 <p>This lets related main-story pages reuse the complete franchise view without duplicating the payload. The alias still does not change UI placement.</p>
 <p>Alias resolution only decides which cached franchise view is loaded. The loaded view still uses the section placement produced by the UI grouping pipeline.</p>
@@ -702,45 +716,45 @@
 </ul>
 <p>This allows Yamtrack to keep rendering a known-good franchise while refreshing it in the background.</p>
 <p>Current behavior:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>fresh hit
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a> -&gt; render cached payload
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>stale hit
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a> -&gt; render cached payload
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a> -&gt; schedule background refresh when cooldown/locks allow
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>miss
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a> -&gt; keep normal related-anime fallback for this request
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a> -&gt; schedule background build
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>invalid payload
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a> -&gt; ignore cached payload
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a> -&gt; keep fallback visible
-</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a> -&gt; record metadata/error when applicable
-</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a> -&gt; schedule rebuild when cooldown/locks allow
-</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
-</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>build error
-</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a> -&gt; record error metadata
-</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a> -&gt; preserve previous valid payload when available
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>fresh hit
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a> -&gt; render cached payload
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>stale hit
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a> -&gt; render cached payload
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a> -&gt; schedule background refresh when cooldown/locks allow
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>miss
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a> -&gt; keep normal related-anime fallback for this request
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a> -&gt; schedule background build
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>invalid payload
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a> -&gt; ignore cached payload
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a> -&gt; keep fallback visible
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a> -&gt; record metadata/error when applicable
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a> -&gt; schedule rebuild when cooldown/locks allow
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>build error
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a> -&gt; record error metadata
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a> -&gt; preserve previous valid payload when available
 </span></code></pre></div>
 <p>In practice, stale-while-refresh means users should not lose a working franchise page just because the cache needs to be updated.</p>
 <p>Example timeline:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Day 0
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>  payload is built and cached
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>Day 45
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>  page opens
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  payload is still fresh
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>  page renders immediately
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>Day 120
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>  page opens
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>  payload is valid but stale
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>  page still renders immediately
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>  background refresh is queued
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>User result
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>  the page stays usable while Yamtrack refreshes the franchise
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Day 0
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>  payload is built and cached
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Day 45
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>  page opens
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>  payload is still fresh
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>  page renders immediately
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>Day 120
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>  page opens
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>  payload is valid but stale
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>  page still renders immediately
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>  background refresh is queued
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>User result
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>  the page stays usable while Yamtrack refreshes the franchise
 </span></code></pre></div>
 <p>The exact timing depends on <code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code> and <code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code>.</p>
 <h2 id="warmup">Warmup<a class="headerlink" href="#warmup" title="Permanent link">&para;</a></h2>
@@ -780,14 +794,14 @@
 <li>Import task lock: <code>anime-franchise-import:&lt;profile&gt;</code></li>
 </ul>
 <h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>keys<span class="w"> </span><span class="s1">&#39;*anime*franchise*&#39;</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161:meta
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_alias_34428
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161:aliases
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>del<span class="w"> </span>mal_anime_franchise_34161<span class="w"> </span>mal_anime_franchise_34161:meta<span class="w"> </span>mal_anime_franchise_34161:aliases
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>del<span class="w"> </span>mal_anime_franchise_alias_34428
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay(&#39;34161&#39;)&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>keys<span class="w"> </span><span class="s1">&#39;*anime*franchise*&#39;</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161:meta
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_alias_34428
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>get<span class="w"> </span>mal_anime_franchise_34161:aliases
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>del<span class="w"> </span>mal_anime_franchise_34161<span class="w"> </span>mal_anime_franchise_34161:meta<span class="w"> </span>mal_anime_franchise_34161:aliases
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>redis<span class="w"> </span>redis-cli<span class="w"> </span>del<span class="w"> </span>mal_anime_franchise_alias_34428
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay(&#39;34161&#39;)&quot;</span>
 </span></code></pre></div>
 <h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
 <table>
@@ -836,6 +850,58 @@
 </tr>
 </tbody>
 </table>
+<h2 id="cache-rebuild-sources">Cache rebuild sources<a class="headerlink" href="#cache-rebuild-sources" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Trigger</th>
+<th>Refresh behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Detail page</td>
+<td>miss, stale, invalid payload</td>
+<td>background build</td>
+</tr>
+<tr>
+<td>Manual add</td>
+<td>post-commit task</td>
+<td>coordinated cache + Series View</td>
+</tr>
+<tr>
+<td>Import</td>
+<td>created entries</td>
+<td>cache warmup</td>
+</tr>
+<tr>
+<td>Maintenance</td>
+<td>due scan state</td>
+<td>forced UI cache rebuild</td>
+</tr>
+<tr>
+<td>Metadata refresh invalidation</td>
+<td>strong relation change</td>
+<td>mark stale + forced rebuild</td>
+</tr>
+</tbody>
+</table>
+<p>These sources all write the same kind of user-agnostic franchise payload. Request-time context still adds the current user's status, progress, and current-entry information after loading the payload.</p>
+<h2 id="shared-build-session">Shared build session<a class="headerlink" href="#shared-build-session" title="Permanent link">&para;</a></h2>
+<p>The cache builder may use a provided <code>AnimeFranchiseBuildSession</code>. When no session is provided, normal cache builds create their own per-operation session.</p>
+<p>Maintenance and import pass a shared build session so cache rebuild, discovery, and Anime Series View refresh can reuse hydrated MAL metadata inside one operation. This keeps the cache projection aligned with the canonical franchise snapshot without introducing process-wide shared hydration.</p>
+<p>See <a href="../architecture-overview/">architecture overview</a> and <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>.</p>
+<h2 id="invalidation-from-mal-metadata-refresh">Invalidation from MAL metadata refresh<a class="headerlink" href="#invalidation-from-mal-metadata-refresh" title="Permanent link">&para;</a></h2>
+<p><code>Refresh MAL anime metadata</code> compares old and new <code>related_anime</code> edges after MAL metadata refresh. Only strong relation changes trigger franchise invalidation:</p>
+<ul>
+<li>continuity relations;</li>
+<li><code>alternative_setting</code>;</li>
+<li><code>alternative_version</code>;</li>
+<li><code>spin_off</code>.</li>
+</ul>
+<p>When a strong edge changes, known canonical payloads for touched media are marked stale and a forced rebuild can be scheduled. Known maintenance scan states for the touched media or component root are nudged due soon. Missing payloads are tracked as missing in the result, but there is no payload to invalidate.</p>
+<p><code>mark_media_due_soon()</code> only moves a maintenance state earlier. It does not delay a scan that is already sooner.</p>
 
 
 

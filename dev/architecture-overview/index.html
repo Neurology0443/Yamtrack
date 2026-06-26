@@ -585,284 +585,484 @@
 <ul>
 <li>MAL anime only.</li>
 <li>Anime detail pages for grouping and display.</li>
-<li>Import automation only for existing user library entries whose source is MAL anime.</li>
-<li>Non-MAL anime providers and other media types keep upstream Yamtrack behavior.</li>
+<li>Anime-only Series View layout.</li>
+<li>Import automation and autonomous maintenance for tracked MAL anime.</li>
+<li>MAL anime start-date notifications.</li>
 </ul>
-<p>The goal is to keep the user-facing page stable while letting provider fetching, graph normalization, UI placement, import selection, and cache delivery evolve independently.</p>
-<h2 id="high-level-model">High-level model<a class="headerlink" href="#high-level-model" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>MAL Provider
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ↓
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Franchise Graph
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ↓
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Franchise Snapshot
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── Detail-page UI Projection
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── Anime Series View Projection
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>├── Import Projection
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>├── Cache Projection
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>└── Discovery / notification monitoring
+<p>Non-MAL anime providers and other media types keep upstream Yamtrack behavior.</p>
+<p>The goal is to keep request rendering stable while provider fetching, graph normalization, UI placement, import selection, cache delivery, discovery, maintenance, and notification state evolve independently.</p>
+<h2 id="current-architecture">Current architecture<a class="headerlink" href="#current-architecture" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>                         MyAnimeList
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                             │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                             ▼
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                 ┌──────────────────────┐
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                 │ MAL provider          │
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                 │ src/app/providers/mal │
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                 └──────────┬───────────┘
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>                            │
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                            ▼
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>                 ┌──────────────────────┐
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                 │ MAL metadata cache    │
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>                 │ providers/mal_cache   │
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>                 └──────────┬───────────┘
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                            │
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                            ▼
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>┌──────────────────────────────────────────────────────────────┐
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│ AnimeFranchiseBuildSession                                   │
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│ short-lived operation scope                                  │
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│ shared MAL hydration + refresh_cache policy                  │
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│ anime_franchise_build_session.py                             │
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│                                                              │
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│        ┌────────────────────────────────────┐                │
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>│        │ AnimeFranchiseGraphBuilder          │                │
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>│        │ relation graph + normalized edges   │                │
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│        │ anime_franchise_graph.py            │                │
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│        └─────────────────┬──────────────────┘                │
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│                          │                                   │
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>│                          ▼                                   │
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>│        ┌────────────────────────────────────┐                │
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>│        │ AnimeFranchiseSnapshotService       │                │
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>│        │ builds canonical franchise snapshot │                │
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>│        │ anime_franchise_snapshot.py         │                │
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>│        └─────────────────┬──────────────────┘                │
+</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>│                          │                                   │
+</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>│                          ▼                                   │
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>│        ┌────────────────────────────────────┐                │
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>│        │ AnimeFranchiseSnapshot              │                │
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>│        │ canonical franchise truth           │                │
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>│        └────────────────────────────────────┘                │
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>└──────────────────────────┬───────────────────────────────────┘
+</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>                           │
+</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>                           ▼
+</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>          ┌────────────────────────────────────┐
+</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>          │ Consumers / projections             │
+</span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>          │ use the snapshot, and coordinated   │
+</span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>          │ operations may reuse session        │
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>          │ hydration context                   │
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>          └────────────────┬───────────────────┘
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>                           │
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>          ┌────────────────┼────────────────┬────────────────┬────────────────┐
+</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>          ▼                ▼                ▼                ▼                ▼
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>   │ UI cache      │ │ Discovery    │ │ Import       │ │ Series View  │ │ Maintenance  │
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>   │ detail page   │ │ notifications│ │ Planning     │ │ memberships  │ │ scan state   │
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>   └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 </span></code></pre></div>
-<p>The snapshot is the shared canonical state. UI, import, and cache code are separate projections of that state; none of those layers should copy another layer's policy blindly.</p>
-<h2 id="mental-model">Mental model<a class="headerlink" href="#mental-model" title="Permanent link">&para;</a></h2>
-<p>Think of the franchise snapshot as the single source of franchise truth.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Snapshot
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    ↓
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>├── UI grouping
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── Import selection
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>└── Cache payload
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    ↓
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Rendering
-</span></code></pre></div>
-<p>The snapshot describes what a franchise is. UI grouping, import selection, and cache delivery are independent consumers of that same snapshot.</p>
-<p>This separation allows page layout, import automation, and cache delivery to evolve without changing franchise semantics.</p>
-<h2 id="what-this-fork-changes-compared-to-upstream">What this fork changes compared to upstream<a class="headerlink" href="#what-this-fork-changes-compared-to-upstream" title="Permanent link">&para;</a></h2>
-<p>Compared to upstream Yamtrack, this fork adds MAL anime franchise behavior on top of the existing tracker:</p>
+<h3 id="how-to-read-this-diagram">How to read this diagram<a class="headerlink" href="#how-to-read-this-diagram" title="Permanent link">&para;</a></h3>
 <ul>
-<li>clearer MAL anime franchise pages;</li>
-<li>automatic grouping of related MAL anime entries;</li>
-<li>anime-only Series View layout for grouping tracked MAL anime into franchise cards;</li>
-<li>persisted per-user AnimeSeriesViewMembership read model;</li>
-<li>asynchronous refresh of Series View memberships after add/import/delete;</li>
-<li>optional automatic import of useful missing franchise entries;</li>
-<li>persistent scan scheduling for franchise imports;</li>
-<li>complete franchise cache payloads for responsive detail pages;</li>
-<li>cache warmup after import-created entries;</li>
-<li>entry-added notifications for automatically imported anime;</li>
-<li>opt-in MAL anime start-date notifications;</li>
-<li>configurable MAL provider rate limiting.</li>
+<li>The MAL provider and MAL metadata cache are the metadata source layer.</li>
+<li><code>AnimeFranchiseBuildSession</code> is the short-lived operation scope, not the canonical franchise state.</li>
+<li><code>AnimeFranchiseGraphBuilder</code> builds normalized relation graph data from hydrated MAL metadata inside that scope.</li>
+<li><code>AnimeFranchiseSnapshotService</code> creates the canonical franchise snapshot.</li>
+<li><code>AnimeFranchiseSnapshot</code> is the canonical franchise truth produced inside that operation scope.</li>
+<li>The arrow exits the session envelope because coordinated consumers may reuse the session hydration context, but their franchise truth remains the snapshot.</li>
+<li>UI cache, discovery, import, Series View, and maintenance are projections or consumers of the same snapshot.</li>
+<li>These consumers should not blindly copy each other's policies. UI placement is not import selection, and Series View grouping is not detail-page layout.</li>
 </ul>
-<p>These additions are scoped to MAL anime franchise behavior. Existing Yamtrack features for other media types and providers remain upstream-compatible.</p>
+<h2 id="shared-build-session">Shared build session<a class="headerlink" href="#shared-build-session" title="Permanent link">&para;</a></h2>
+<p><code>AnimeFranchiseBuildSession</code> owns per-operation hydration. It memoizes MAL anime payloads for one operation and creates graph builders and snapshot services that share that hydration context.</p>
+<p>This matters when one operation has several consumers. Import and maintenance can reuse the same build session for snapshot, cache, discovery, and Anime Series View work. Import-created entries can additionally initialize MAL release-date state when metadata is available.</p>
+<p>The session has operation-local freshness rules:</p>
+<ul>
+<li><code>refresh_cache=True</code> asks the MAL provider path to refresh provider cache data;</li>
+<li>stale-allowed and normal fetch levels are tracked inside the session;</li>
+<li>the session ends with the task, command, or service call.</li>
+</ul>
+<h2 id="provider-cover-synchronization">Provider cover synchronization<a class="headerlink" href="#provider-cover-synchronization" title="Permanent link">&para;</a></h2>
+<p>Fresh provider metadata can also update the global <code>Item.image</code> field through <code>item_image_sync</code> (<code>app/services/item_image_sync.py</code>). The service owns the rule for when a provider image may update <code>Item.image</code>.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>MAL provider/cache refresh
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>        │
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        ▼
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>fresh image candidate
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        │
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        ▼
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>item_image_sync
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        │
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        ▼
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>global Item.image
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>this is metadata hygiene, not franchise structure;</li>
+<li>it targets global base <code>Item</code> rows, not per-user rows;</li>
+<li>automatic MAL paths currently target MAL anime base rows with no season or episode number;</li>
+<li>empty images, <code>IMG_NONE</code>, and identical images are skipped;</li>
+<li>missing or placeholder <code>Item.image</code> values can be filled;</li>
+<li>MAL anime refreshes may replace older MAL images;</li>
+<li>non-MAL providers do not overwrite an existing different image;</li>
+<li>bulk sync deduplicates candidates, and the last normalized candidate wins for the same source, media type, and media ID;</li>
+<li>failures are best-effort in background refresh and maintenance paths.</li>
+</ul>
+<h2 id="runtime-flows">Runtime flows<a class="headerlink" href="#runtime-flows" title="Permanent link">&para;</a></h2>
+<h3 id="detail-page">Detail page<a class="headerlink" href="#detail-page" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>User opens MAL anime detail page
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>        │
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        ▼
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>load complete franchise cache / alias
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        │
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        ├─ fresh payload  → enrich for current user → render
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        ├─ stale payload  → render stale payload → queue refresh
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        ├─ missing payload → fallback related anime → queue build
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        └─ invalid payload → fallback related anime → queue rebuild
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>The detail page must not synchronously build large franchises on cache miss.</li>
+<li>The cached payload is user-agnostic.</li>
+<li>User-specific status, progress, current-entry context, local media image, and display checks are added at request time.</li>
+<li>Helper enrichment uses the centralized <code>item_image_sync</code> rule when local user/media data is enriched for rendering.</li>
+</ul>
+<h3 id="manual-add">Manual add<a class="headerlink" href="#manual-add" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>User manually adds MAL anime
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>        │
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        ▼
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>transaction commit
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        │
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        ▼
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>Process manual MAL anime franchise
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        │
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        ├─ shared build session
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        ├─ snapshot
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        ├─ force/update UI cache
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        └─ refresh Anime Series View
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Manual add should make the detail page and Series View coherent quickly.</li>
+<li>Manual add does not process discovery notifications.</li>
+<li>Queue locks avoid duplicate work for the same user/media operation.</li>
+</ul>
+<h3 id="background-cache-build">Background cache build<a class="headerlink" href="#background-cache-build" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Build MAL anime franchise payload
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>        │
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>        ▼
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>shared build session
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        │
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        ▼
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>snapshot
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>        │
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        ▼
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>UI projection
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>        │
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>        ▼
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>serialize user-agnostic payload
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>        │
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>        ▼
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>save canonical payload + aliases + metadata
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li><code>force_cache_rebuild</code> bypasses the alias shortcut for cache writing.</li>
+<li><code>refresh_cache</code> controls MAL provider freshness.</li>
+<li>Truncated builds avoid unsafe alias replacement.</li>
+</ul>
+<h3 id="import-automation">Import automation<a class="headerlink" href="#import-automation" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Import anime franchise
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>        │
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>        ▼
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>select due seeds
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>        │
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>        ▼
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>shared build session + snapshot
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        │
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        ▼
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>profile selection
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        │
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>        ├─ continuity
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        ├─ satellites
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>        └─ complete
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        │
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>        ▼
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>create missing Anime rows as Planning
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>        │
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>        ├─ entry-added notification
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>        ├─ cache warmup
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>        ├─ discovery processing
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>        └─ Series View refresh
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Import creates missing user library entries.</li>
+<li>Import profile selection is not UI placement.</li>
+<li>Imported entries default to <code>Planning</code>.</li>
+<li>Import-created rows set <code>_skip_hot_priority</code> to avoid recursive hot-priority behavior.</li>
+<li>Import-created rows initialize release-date state when metadata is available.</li>
+</ul>
+<h3 id="autonomous-maintenance">Autonomous maintenance<a class="headerlink" href="#autonomous-maintenance" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Celery Beat every N minutes
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>        │
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>        ▼
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Scan MAL anime franchise maintenance
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        │
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        ▼
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>ensure missing maintenance states
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        │
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        ▼
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>select due states up to batch size
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>        │
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>        ▼
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>process each seed
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>        │
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>        ├─ shared build session
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>        ├─ canonical snapshot
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>        ├─ forced UI cache rebuild
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>        ├─ discovery processing
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>        ├─ Series View refresh when needed
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>        └─ scan-state update + next_scan_at
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Maintenance keeps existing tracked MAL anime franchise data fresh.</li>
+<li>Maintenance is not import automation.</li>
+<li>Maintenance does not directly create missing <code>Anime</code> rows.</li>
+<li>Maintenance can discover newly visible franchise entries and notify through discovery.</li>
+<li>Maintenance can sync fresh MAL snapshot images into <code>Item.image</code> when <code>refresh_cache=True</code>.</li>
+<li>One processed seed can cover multiple tracked member states in the same franchise.</li>
+<li>Batch size limits selected due seed states, not franchise size.</li>
+</ul>
+<p>See <a href="../anime-franchise-maintenance/">anime-franchise-maintenance.md</a>.</p>
+<h3 id="metadata-refresh-invalidation">Metadata refresh invalidation<a class="headerlink" href="#metadata-refresh-invalidation" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>Refresh MAL anime metadata
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>        │
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>        ▼
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>compare old/new related_anime edges
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        │
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>        ▼
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>strong relation changed?
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        │
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>        ├─ mark canonical franchise payload stale
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>        ├─ schedule forced cache rebuild
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>        └─ nudge known maintenance states due soon
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Only strong relation changes trigger franchise invalidation.</li>
+<li>Continuity relations count.</li>
+<li>Franchise-structure relations such as <code>alternative_setting</code>, <code>alternative_version</code>, and <code>spin_off</code> count.</li>
+<li>Missing payloads are tracked as missing but cannot be invalidated.</li>
+<li>Refresh MAL anime metadata also attempts best-effort cover sync after a successful MAL refresh.</li>
+<li><code>mark_media_due_soon()</code> must not delay a scan that is already sooner.</li>
+</ul>
+<h3 id="anime-series-view">Anime Series View<a class="headerlink" href="#anime-series-view" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>canonical franchise snapshot
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>        │
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>        ▼
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>Anime Series View projection / refresh
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        │
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        ▼
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>AnimeSeriesViewMembership rows
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>        │
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>        ▼
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>Anime list Series layout reads rows
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>        │
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>        ▼
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>group by root_media_id
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>        │
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>        ▼
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a>render franchise cards
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>Series View is a consumer/projection of the canonical snapshot.</li>
+<li><code>AnimeSeriesViewMembership</code> is the persisted Series View state model.</li>
+<li><code>media_list</code> must stay DB-only.</li>
+<li>No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.</li>
+<li>Refresh work belongs to triggers, tasks, rebuild commands, import, and maintenance.</li>
+</ul>
+<p>See <a href="../anime-series-view/">anime-series-view.md</a>.</p>
+<h3 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>MAL metadata[&quot;details&quot;][&quot;start_date&quot;]
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>        │
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        ▼
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>AnimeReleaseDateScanState
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        │
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>        ▼
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>detect first date / precision increase / date change
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>        │
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>        ▼
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>AnimeReleaseDateNotificationDelivery
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>        │
+</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>        ▼
+</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a>Apprise notification
+</span></code></pre></div>
+<p>Rules:</p>
+<ul>
+<li>The release-date notification scanner watches MAL start-date values.</li>
+<li>It is separate from franchise maintenance.</li>
+<li>It is separate from <code>send_release_notifications</code>.</li>
+<li>It is separate from AniList calendar/event notifications.</li>
+</ul>
+<p>See <a href="../anime-release-date-notifications/">anime-release-date-notifications.md</a>.</p>
 <h2 id="core-concepts">Core concepts<a class="headerlink" href="#core-concepts" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Franchise graph</strong>: hydrated MAL anime nodes plus normalized relation edges. Built by <code>AnimeFranchiseGraphBuilder</code> from MAL metadata and direct neighbors.</li>
-<li><strong>Franchise snapshot</strong>: normalized, deterministic representation around one seed. Built by <code>AnimeFranchiseSnapshotService</code>.</li>
+<li><strong>Canonical franchise snapshot</strong>: normalized deterministic representation around one seed. Built by <code>AnimeFranchiseSnapshotService</code>.</li>
 <li><code>continuity_component</code>: nodes reached by the graph builder for the franchise continuity component.</li>
 <li><code>series_line</code>: ordered TV-only continuity line derived from prequel/sequel direction and dates. This feeds the fixed UI <code>Series</code> block.</li>
-<li><code>direct_anchors</code>: nodes used for direct secondary candidate discovery. Usually the full TV series line; for a non-TV root it can include the root too.</li>
+<li><code>direct_anchors</code>: nodes used for direct secondary candidate discovery.</li>
 <li><code>direct_candidates</code>: direct relations from anchors after excluding entries already in the TV series line.</li>
-<li><code>promoted_continuity_candidates</code>: non-TV prequel/sequel chains promoted from the series line so transitive OVAs/movies can still be considered as main-story extras.</li>
-<li><code>no_series_line_secondary_candidates</code>: secondary candidates used when the snapshot has no TV series line.</li>
-<li><code>root_story_parent_candidates</code>: direct <code>full_story</code> links from a non-TV root to a TV parent.</li>
-<li><code>canonical_root_media_id</code>: stable root used for scan state and canonical cache payloads. It is the first series-line item when available, otherwise the earliest continuity node.</li>
+<li><code>promoted_continuity_candidates</code>: non-TV prequel/sequel chains promoted from the series line.</li>
+<li><code>canonical_root_media_id</code>: stable root used for scan state and canonical cache payloads.</li>
 <li><code>fallback_anchor_media_id</code>: root media ID used for anchoring no-series-line layouts.</li>
-<li><code>has_series_line</code>: boolean guard for UI and candidate assembly when no TV line exists.</li>
 </ul>
-<h2 id="main-runtime-flows">Main runtime flows<a class="headerlink" href="#main-runtime-flows" title="Permanent link">&para;</a></h2>
-<h3 id="detail-page">Detail page<a class="headerlink" href="#detail-page" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>media_details view
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> -&gt; load complete franchise cache / alias
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> -&gt; prepare request-specific context if payload is valid
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a> -&gt; render media_details.html
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a> -&gt; schedule background build on miss/stale/invalid when allowed
-</span></code></pre></div>
-<p>The view does not synchronously build a large franchise on a cache miss. It keeps the standard related-anime fallback for that request and asks Celery to build the full payload.</p>
-<h3 id="background-cache-build">Background cache build<a class="headerlink" href="#background-cache-build" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Build MAL anime franchise payload task
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a> -&gt; graph build
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a> -&gt; snapshot build
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a> -&gt; detail-page UI projection
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a> -&gt; serialize user-agnostic payload
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a> -&gt; save canonical payload, metadata, and safe aliases
-</span></code></pre></div>
-<h3 id="import-automation">Import automation<a class="headerlink" href="#import-automation" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Existing user MAL anime
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a> -&gt; due seed selection
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a> -&gt; snapshot build
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a> -&gt; profile selection
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a> -&gt; missing Item/Anime creation
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a> -&gt; scan-state update
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a> -&gt; entry-added notification
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a> -&gt; cache warmup scheduling
-</span></code></pre></div>
-<h3 id="anime-list-series-view">Anime list Series View<a class="headerlink" href="#anime-list-series-view" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Anime list Series View
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a> -&gt; DB-filtered user anime queryset
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a> -&gt; persisted AnimeSeriesViewMembership lookup
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a> -&gt; group by root_media_id
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a> -&gt; render anime_series_group_card.html
-</span></code></pre></div>
-<h3 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>MAL metadata[&quot;details&quot;][&quot;start_date&quot;]
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a> -&gt; opportunistic metadata refresh / franchise import / bounded scan
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a> -&gt; global AnimeReleaseDateScanState per MAL anime Item
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a> -&gt; per-user transition delivery
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a> -&gt; Apprise notification
-</span></code></pre></div>
-<p>This flow is deliberately independent from AniList <code>airingSchedule</code>, calendar
-events, and episode release notifications. The dedicated scan considers only
-actively tracked MAL anime with an eligible user, uses a recent MAL cache entry
-before making a provider request, and applies cooldown, deterministic batching,
-backoff, and jitter.</p>
-<h2 id="ui-projection">UI projection<a class="headerlink" href="#ui-projection" title="Permanent link">&para;</a></h2>
-<p>The UI projection builds the anime detail-page franchise layout:</p>
-<ul>
-<li><code>Series</code> is fixed and comes only from <code>snapshot.series_line</code>.</li>
-<li>Secondary sections are rule-driven.</li>
-<li>Classification belongs in rule packs, not in templates.</li>
-<li>The adapter is a compatibility layer; it should not decide placement.</li>
-</ul>
-<p>Current UI pipeline:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>AnimeFranchiseSnapshot
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a> -&gt; SeriesBuilder
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a> -&gt; UiCandidateAssembler
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a> -&gt; RulePipeline
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a> -&gt; LayoutCompiler
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a> -&gt; ViewModelAdapter
-</span></code></pre></div>
-<h2 id="anime-series-view-projection">Anime Series View projection<a class="headerlink" href="#anime-series-view-projection" title="Permanent link">&para;</a></h2>
-<p>Anime Series View is a separate list/read-model projection from the franchise snapshot. It is not the same as the anime detail-page UI projection.</p>
-<p>The projection is built by <code>AnimeSeriesViewProjectionBuilder</code> and persists a stable grouping root plus member IDs for the user's tracked MAL anime. Its grouping policy is intentionally narrower than the detail-page franchise layout.</p>
-<p>Current Series View groupable relations are:</p>
-<ul>
-<li><code>prequel</code></li>
-<li><code>sequel</code></li>
-<li><code>parent_story</code></li>
-<li><code>full_story</code></li>
-<li><code>side_story</code></li>
-<li><code>spin_off</code></li>
-</ul>
-<p><code>alternative_version</code> and <code>alternative_setting</code> are intentionally not groupable for Anime Series View. They must not merge alternative continuities into the same card and must not trigger reroots.</p>
-<p>Strong reroot relations (<code>parent_story</code>, <code>full_story</code>) are trusted as canonical parent-story signals for Anime Series View. When a non-root-compatible seed such as a special, recap, or other secondary entry points directly to a root-compatible parent through one of those relations, the projection reroots to that parent and keeps the original seed as a member.</p>
-<p>Weak secondary relations (<code>side_story</code>, <code>spin_off</code>) remain conservative and require confirmation before they can become a confident reroot.</p>
-<p>This does not remove alternatives from MAL data, detail-page sections, import-profile decisions, or cache payloads. It only defines the Series View card grouping policy.</p>
-<h2 id="import-projection">Import projection<a class="headerlink" href="#import-projection" title="Permanent link">&para;</a></h2>
-<p>The import projection also uses the snapshot, but it has its own policy:</p>
-<ul>
-<li><code>continuity</code> imports continuity-component entries that pass format/runtime/summary filters.</li>
-<li><code>satellites</code> imports selected direct spin-off, alternative-version, and side-story entries from canonical seeds.</li>
-<li><code>complete</code> is the union of continuity and satellites.</li>
-</ul>
-<p>Import profiles must not follow UI sections blindly. UI placement is about detail-page readability; import selection is about creating useful library entries without over-importing noise.</p>
-<h2 id="cache-projection">Cache projection<a class="headerlink" href="#cache-projection" title="Permanent link">&para;</a></h2>
-<p>The cache projection stores a complete, user-agnostic payload for detail pages:</p>
-<ul>
-<li>payload is JSON-safe and schema-versioned;</li>
-<li>no user status/progress, <code>Item</code>, <code>BasicMedia</code>, user IDs, or rendered HTML;</li>
-<li>stale payloads can still render while a refresh is queued;</li>
-<li>canonical aliases let aliasable media IDs resolve to one canonical payload;</li>
-<li>import-created entries schedule cache warmup after transaction commit.</li>
-</ul>
+<h2 id="persistent-state-models">Persistent state models<a class="headerlink" href="#persistent-state-models" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Scope</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AnimeSeriesViewMembership</code></td>
+<td>per user + media</td>
+<td>DB read model for Anime Series View</td>
+</tr>
+<tr>
+<td><code>AnimeImportScanState</code></td>
+<td>per user + seed + profile</td>
+<td>import automation due state</td>
+</tr>
+<tr>
+<td><code>AnimeFranchiseMaintenanceScanState</code></td>
+<td>per user + seed</td>
+<td>autonomous maintenance due state</td>
+</tr>
+<tr>
+<td><code>AnimeFranchiseDiscoveryState</code></td>
+<td>per user + root</td>
+<td>discovery baseline and fingerprint</td>
+</tr>
+<tr>
+<td><code>AnimeFranchiseDiscoveredEntry</code></td>
+<td>per user + root + discovered media</td>
+<td>visible discovered entries and notification state</td>
+</tr>
+<tr>
+<td><code>AnimeReleaseDateScanState</code></td>
+<td>global per MAL anime item</td>
+<td>start-date scan state</td>
+</tr>
+<tr>
+<td><code>AnimeReleaseDateNotificationDelivery</code></td>
+<td>per user + transition</td>
+<td>release-date notification dedupe</td>
+</tr>
+</tbody>
+</table>
+<p>Dedicated docs explain the operational fields for <a href="../anime-franchise-maintenance/">maintenance</a>, <a href="../anime-franchise-import/">import</a>, <a href="../anime-series-view/">Series View</a>, and <a href="../anime-release-date-notifications/">release-date notifications</a>.</p>
 <h2 id="delivery-layer">Delivery layer<a class="headerlink" href="#delivery-layer" title="Permanent link">&para;</a></h2>
+<p>Celery tasks:</p>
 <ul>
-<li>Celery task <code>Build MAL anime franchise payload</code> builds cache payloads.</li>
-<li>Celery task <code>Import anime franchise</code> runs import automation.</li>
-<li>Celery task <code>Refresh Anime Series View franchise projection</code> updates persisted Series View memberships after add/delete/import triggers.</li>
-<li>Celery task <code>Scan MAL anime release dates</code> checks a bounded batch of due
-  start-date states.</li>
-<li>Beat schedule entry <code>auto_import_anime_franchise</code> exists only when import automation is enabled.</li>
-<li><code>views.py</code> enriches cached payloads with current-user data at render time.</li>
-<li><code>media_details.html</code> renders prepared context and should not classify entries.</li>
-<li><code>media_list</code> renders Anime Series View from DB-only memberships and does not build snapshots.</li>
+<li><code>Build MAL anime franchise payload</code>;</li>
+<li><code>Process manual MAL anime franchise</code>;</li>
+<li><code>Import anime franchise</code>;</li>
+<li><code>Refresh MAL anime metadata</code>;</li>
+<li><code>Refresh Anime Series View franchise projection</code>;</li>
+<li><code>Scan MAL anime release dates</code>;</li>
+<li><code>Scan MAL anime franchise maintenance</code>.</li>
 </ul>
+<p>Beat schedule helpers:</p>
+<ul>
+<li><code>auto_import_anime_franchise</code> from <code>build_anime_franchise_import_schedule()</code>;</li>
+<li><code>scan_mal_anime_release_dates</code> from <code>build_anime_release_date_scan_schedule()</code>;</li>
+<li><code>scan_mal_anime_franchise_maintenance</code> from <code>build_anime_franchise_maintenance_schedule()</code>.</li>
+</ul>
+<p>Event/release notifications use the existing <code>Send release notifications</code> task for calendar <code>Event</code> rows. That task is not the MAL start-date scanner.</p>
 <h2 id="where-to-find-the-main-files">Where to find the main files<a class="headerlink" href="#where-to-find-the-main-files" title="Permanent link">&para;</a></h2>
-<p>This section is a quick map for navigating the MAL anime franchise code. It does not list every file. It points to the files that are usually the best starting point when debugging, reviewing, or extending this feature.</p>
-<h3 id="page-entry-points-and-templates">Page entry points and templates<a class="headerlink" href="#page-entry-points-and-templates" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/views.py</code>: start here for list pages, detail pages, manual add, and delete behavior.</li>
-<li><code>src/templates/app/media_details.html</code>: detail-page template for the prepared anime franchise block.</li>
-<li><code>src/templates/app/media_list.html</code>: parent template for media lists. It contains the shared list UI and switches between grid, table, and anime Series View partials.</li>
-<li><code>src/templates/app/components/anime_series_groups.html</code>: Series View list partial. It loops through the prepared groups and shows the preparation message when some anime are not projected yet.</li>
-<li><code>src/templates/app/components/anime_series_group_card.html</code>: one Series View card.</li>
-<li><code>src/users/models.py</code>: user preferences, including the anime-only <code>series</code> layout option.</li>
-</ul>
-<h3 id="mal-metadata-and-cache-files">MAL metadata and cache files<a class="headerlink" href="#mal-metadata-and-cache-files" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/providers/mal.py</code>: MAL anime fetcher and metadata normalizer.</li>
-<li><code>src/app/providers/mal_cache.py</code>: cache for individual MAL anime metadata.</li>
-<li><code>src/app/services/anime_franchise_cache.py</code>: cache for complete franchise payloads used by detail pages.</li>
-<li><code>src/app/services/anime_franchise_context.py</code>: prepares cached franchise payloads for the current request before rendering.</li>
-<li><code>src/app/services/anime_franchise_cache_warmer.py</code>: queues franchise cache rebuilds after import-created entries.</li>
-</ul>
-<h3 id="franchise-building-files">Franchise building files<a class="headerlink" href="#franchise-building-files" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/services/anime_franchise_graph.py</code>: builds the MAL relation graph around an anime.</li>
-<li><code>src/app/services/anime_franchise_snapshot.py</code>: builds the canonical franchise snapshot used by the rest of the feature.</li>
-<li><code>src/app/services/anime_franchise.py</code>: small facade for building the detail-page franchise payload.</li>
-<li><code>src/app/services/anime_franchise_types.py</code>: shared dataclasses for nodes and relations.</li>
-<li><code>src/app/services/anime_franchise_ui/</code>: detail-page UI pipeline for the franchise sections.</li>
-<li><code>src/app/services/anime_franchise_rules.py</code>: shared franchise relation and format rules.</li>
-<li><code>src/app/services/anime_franchise_ui_profile.py</code>: section/profile configuration for the detail-page UI.</li>
-<li><code>src/app/services/anime_franchise_scoped_payload.py</code>: scoped detail payloads for non-canonical anime seeds.</li>
-</ul>
-<h3 id="import-and-discovery-files">Import and discovery files<a class="headerlink" href="#import-and-discovery-files" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/services/anime_franchise_import.py</code>: main orchestration for automatic franchise imports.</li>
-<li><code>src/app/services/anime_franchise_import_profiles.py</code>: import profiles such as <code>continuity</code>, <code>satellites</code>, and <code>complete</code>.</li>
-<li><code>src/app/services/anime_import_state.py</code>: scan-state selection and due-seed tracking for imports.</li>
-<li><code>src/app/services/anime_franchise_discovery.py</code>: discovery records and discovery notifications for franchise entries.</li>
-<li><code>src/app/services/anime_tracking.py</code>: helper checks for tracked MAL anime entries.</li>
-<li><code>src/app/management/commands/import_anime_franchise.py</code>: manual command for testing or running franchise imports.</li>
-</ul>
-<h3 id="series-view-database-files">Series View database files<a class="headerlink" href="#series-view-database-files" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/anime_series_view_constants.py</code>: Series View version, group kinds, and refresh modes.</li>
-<li><code>src/app/services/anime_series_view_rules.py</code>: Series View grouping and rerooting rules.</li>
-<li><code>src/app/services/anime_series_view_projection.py</code>: builds a franchise or singleton projection from a snapshot.</li>
-<li><code>src/app/services/anime_series_view_franchise_refresh.py</code>: writes the projected groups into <code>AnimeSeriesViewMembership</code> rows.</li>
-<li><code>src/app/services/anime_series_view_refresh_queue.py</code>: de-duplicates queued refresh jobs.</li>
-<li><code>src/app/services/anime_series_view_refresh_triggers.py</code>: schedules refreshes after add, import, or delete.</li>
-<li><code>src/app/services/anime_series_view.py</code>: reads existing <code>AnimeSeriesViewMembership</code> rows to build the list page. It must stay DB-only.</li>
-<li><code>src/app/management/commands/rebuild_anime_series_view.py</code>: rebuilds Series View memberships for existing users after projection changes.</li>
-<li><code>src/app/models.py</code>: contains <code>AnimeSeriesViewMembership</code> and the related indexes/constraints.</li>
-</ul>
-<h3 id="background-jobs-and-settings">Background jobs and settings<a class="headerlink" href="#background-jobs-and-settings" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>src/app/tasks.py</code>: Celery tasks for franchise cache builds, franchise imports, MAL metadata refresh, and Series View refreshes.</li>
-<li><code>src/app/schedules.py</code>: Celery Beat schedule helpers for automatic franchise imports and MAL release-date scans.</li>
-<li><code>src/events/tasks.py</code>: notification and calendar-related Celery tasks.</li>
-<li><code>src/events/services/anime_release_date_notifications.py</code>: MAL anime start-date scan and notification logic.</li>
-<li><code>src/events/models.py</code>: event models and MAL release-date scan/delivery state.</li>
-<li><code>src/config/settings.py</code>: settings for MAL, cache behavior, franchise imports, release-date scans, and limits.</li>
-</ul>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Files</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Provider metadata</td>
+<td><code>src/app/providers/mal.py</code>, <code>src/app/providers/mal_cache.py</code></td>
+</tr>
+<tr>
+<td>Shared build session</td>
+<td><code>src/app/services/anime_franchise_build_session.py</code></td>
+</tr>
+<tr>
+<td>Graph and snapshot</td>
+<td><code>src/app/services/anime_franchise_graph.py</code>, <code>src/app/services/anime_franchise_snapshot.py</code></td>
+</tr>
+<tr>
+<td>Detail-page cache</td>
+<td><code>src/app/services/anime_franchise_cache.py</code>, <code>src/app/services/anime_franchise_cache_builder.py</code>, <code>src/app/services/anime_franchise_context.py</code>, <code>src/app/services/anime_franchise_scoped_payload.py</code></td>
+</tr>
+<tr>
+<td>Import</td>
+<td><code>src/app/services/anime_franchise_import.py</code>, <code>src/app/services/anime_import_state.py</code>, <code>src/app/management/commands/import_anime_franchise.py</code></td>
+</tr>
+<tr>
+<td>Maintenance</td>
+<td><code>src/app/services/anime_franchise_maintenance.py</code>, <code>src/app/services/anime_franchise_maintenance_scan.py</code>, <code>src/app/services/anime_franchise_maintenance_cadence.py</code>, <code>src/app/management/commands/scan_mal_anime_franchise_maintenance.py</code></td>
+</tr>
+<tr>
+<td>Metadata invalidation</td>
+<td><code>src/app/services/anime_franchise_continuity_invalidation.py</code></td>
+</tr>
+<tr>
+<td>Discovery</td>
+<td><code>src/app/services/anime_franchise_discovery.py</code>, <code>src/events/notifications.py</code></td>
+</tr>
+<tr>
+<td>Series View</td>
+<td><code>src/app/anime_series_view_constants.py</code>, <code>src/app/services/anime_series_view_rules.py</code>, <code>src/app/services/anime_series_view.py</code>, <code>src/app/services/anime_series_view_projection.py</code>, <code>src/app/services/anime_series_view_franchise_refresh.py</code>, <code>src/app/services/anime_series_view_refresh_triggers.py</code>, <code>src/app/services/anime_series_view_refresh_queue.py</code>, <code>src/app/management/commands/rebuild_anime_series_view.py</code></td>
+</tr>
+<tr>
+<td>Views and templates</td>
+<td><code>src/app/views.py</code>, <code>src/templates/app/media_details.html</code>, <code>src/templates/app/media_list.html</code>, <code>src/templates/app/components/anime_series_groups.html</code>, <code>src/templates/app/components/anime_series_group_card.html</code></td>
+</tr>
+<tr>
+<td>Release dates</td>
+<td><code>src/events/services/anime_release_date_notifications.py</code>, <code>src/events/tasks.py</code></td>
+</tr>
+<tr>
+<td>Tasks and schedules</td>
+<td><code>src/app/tasks.py</code>, <code>src/app/schedules.py</code>, <code>src/config/settings.py</code></td>
+</tr>
+</tbody>
+</table>
 <h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
-<p>Documented settings currently present in <code>src/config/settings.py</code>. For setting behavior details, see the dedicated grouping/import/cache docs.</p>
+<p>Important settings groups:</p>
 <ul>
-<li><code>ANIME_FRANCHISE_GROUPING_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_ALIASES_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_CACHE_FRESH_DAYS</code></li>
-<li><code>ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS</code></li>
-<li><code>ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS</code></li>
-<li><code>ANIME_FRANCHISE_QUEUE_LOCK_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_TASK_LOCK_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_MAX_NODES</code></li>
-<li><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></li>
-<li><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></li>
-<li><code>MAL_RATE_LIMIT_PER_MINUTE</code></li>
-<li><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_BATCH_SIZE</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS</code></li>
-<li><code>ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES</code></li>
+<li>franchise cache: cache TTL, freshness window, aliases, queue locks, task locks, max nodes, schema version;</li>
+<li>import automation: enabled flag, interval, profile, refresh-cache flag, full-rescan flag, limit;</li>
+<li>autonomous maintenance: scan enabled flag, interval, batch size, initial spread, refresh-cache flag, lock timeout, error retry, Series View refresh flags, deep-cold thresholds;</li>
+<li>release-date notifications: enabled flag, scan interval, batch size, minimum refresh interval, error retry, max backoff, lock timeout;</li>
+<li>MAL provider rate limiting.</li>
 </ul>
-<h2 id="related-docs">Related docs<a class="headerlink" href="#related-docs" title="Permanent link">&para;</a></h2>
-<ul>
-<li><a href="../anime-franchise-snapshot/">Anime franchise snapshot</a></li>
-<li><a href="../anime-franchise-grouping/">Anime franchise grouping</a></li>
-<li><a href="../anime-series-view/">Anime Series View</a></li>
-<li><a href="../anime-franchise-import/">Anime franchise import</a></li>
-<li><a href="../anime-franchise-cache/">Anime franchise cache</a></li>
-<li><a href="../anime-release-date-notifications/">Anime release-date notifications</a></li>
-</ul>
+<p>Use <a href="../operational-commands/">operational commands</a> to inspect the runtime values in a container.</p>
 <h2 id="design-rules">Design rules<a class="headerlink" href="#design-rules" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Snapshot is the canonical franchise source.</li>
-<li>UI, import, and cache are separate projections.</li>
-<li>Rule packs own placement policy.</li>
-<li>Layout code owns structure and ordering.</li>
-<li>Adapter/context code owns compatibility and request enrichment.</li>
-<li>Views should orchestrate cache/context only, not patch placement.</li>
-<li>Templates render only.</li>
-<li>Complete franchise cache never stores user-specific data.</li>
-<li>Anime Series View reader must stay DB-only.</li>
-<li>No MAL provider call, snapshot build, cache build, or DB write belongs in <code>media_list</code> rendering.</li>
+<li>UI, import, cache, discovery, Series View, and maintenance are separate consumers.</li>
+<li>Build sessions are per-operation and are not a global cache.</li>
+<li>UI placement is not import selection.</li>
+<li>Complete franchise cache stores no user-specific data.</li>
+<li>Detail page may render stale payload while refreshing.</li>
+<li>Series View reader must stay DB-only.</li>
+<li>No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in <code>media_list</code> rendering.</li>
+<li>Maintenance batch size limits seed states, not franchise member coverage.</li>
+<li>Release-date scanner is not franchise maintenance.</li>
+<li><code>send_release_notifications</code> is not the MAL release-date scanner.</li>
+</ul>
+<h2 id="related-docs">Related docs<a class="headerlink" href="#related-docs" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../anime-franchise-cache/">Anime franchise cache</a></li>
+<li><a href="../anime-franchise-import/">Anime franchise import</a></li>
+<li><a href="../anime-franchise-maintenance/">Anime franchise maintenance</a></li>
+<li><a href="../anime-series-view/">Anime Series View</a></li>
+<li><a href="../anime-release-date-notifications/">MAL anime release-date notifications</a></li>
+<li><a href="../anime-franchise-debugging-runbook/">Anime franchise debugging runbook</a></li>
+<li><a href="../operational-commands/">Operational commands</a></li>
 </ul>
 
 
