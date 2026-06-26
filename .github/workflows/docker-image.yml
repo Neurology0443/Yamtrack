@@ -1,19 +1,31 @@
 name: Docker Image
+run-name: Docker image - ${{ inputs.platforms }}
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
+    inputs:
+      platforms:
+        description: "Plateformes Docker à construire"
+        required: true
+        default: "linux/amd64,linux/arm64"
+        type: choice
+        options:
+          - "linux/amd64"
+          - "linux/amd64,linux/arm64"
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
+
     permissions:
       contents: read
       packages: write
@@ -44,7 +56,6 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=dev
             type=raw,value=latest
 
       - name: Log in to registry ${{ env.REGISTRY }}
@@ -65,6 +76,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ inputs.platforms }}
           build-args: |
             VERSION=${{ steps.get-version.outputs.VERSION }}
