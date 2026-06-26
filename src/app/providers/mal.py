@@ -135,6 +135,7 @@ def _fetch_anime_from_api(media_id):
             "raw_media_type": response.get("media_type"),
             "start_date": response.get("start_date"),
             "end_date": response.get("end_date"),
+            "raw_status": response.get("status"),
             "status": get_readable_status(response),
             "episodes": num_episodes,
             "runtime": get_runtime(response),
