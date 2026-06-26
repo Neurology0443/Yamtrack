@@ -41,8 +41,6 @@ Groupable relations are:
 - `full_story`
 - `side_story`
 - `spin_off`
-- `alternative_setting`
-- `alternative_version`
 
 Compatible root media types are:
 
@@ -53,8 +51,10 @@ Compatible root media types are:
 
 Independent continuity boundaries are intentionally narrow:
 
-- `alternative_version` is the only alternative relation used as a boundary.
-- `alternative_setting` remains groupable and is not a boundary.
+- `alternative_version` is not a normal groupable relation in Series View. It is
+  treated as a narrow boundary signal when the projection builder detects
+  autonomous old/remake-style continuities.
+- `alternative_setting` is not part of the Series View groupable relation set.
 - The independent continuity media types affected by the boundary are `tv`, `ona`, and `ova`.
 - `movie` is a compatible root media type, but it does not trigger the autonomous `alternative_version` boundary behavior.
 
@@ -79,7 +79,7 @@ Persistence constraints and read-path indexes:
 
 - unique constraint on `(user, media_id)`;
 - indexes on `(user, media_id)`, `(user, root_media_id)`, and `(user, projection_version)`;
-- `projection_version = franchise_root_v2`;
+- `projection_version = franchise_root_v4`;
 - `group_kind = franchise | singleton`.
 
 Memberships are not global. They are per-user rows for the user's tracked anime.
@@ -151,3 +151,21 @@ media_id -> root_media_id + display metadata
 ```
 
 The projection should remain pure and independent of the user so this evolution stays possible.
+
+## Refresh sources
+
+Anime Series View rendering is DB-only. Refresh work happens before rendering through triggers, tasks, commands, import, and maintenance.
+
+Refresh sources include:
+
+- manual MAL anime add;
+- delete MAL anime;
+- import-created anime;
+- autonomous maintenance first observation;
+- autonomous maintenance root change;
+- autonomous maintenance detected fingerprint change;
+- optional refresh on every maintenance success when `ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS=True`.
+
+The `media_list` reader should only read `AnimeSeriesViewMembership` rows and group by `root_media_id`. No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.
+
+See [anime franchise maintenance](anime-franchise-maintenance.md) for the maintenance refresh path.
