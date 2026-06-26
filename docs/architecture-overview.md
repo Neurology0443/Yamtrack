@@ -299,10 +299,16 @@ Rules:
 ### Anime Series View
 
 ```text
-Anime list Series layout
+canonical franchise snapshot
         │
         ▼
-read AnimeSeriesViewMembership rows
+Anime Series View projection / refresh
+        │
+        ▼
+AnimeSeriesViewMembership rows
+        │
+        ▼
+Anime list Series layout reads rows
         │
         ▼
 group by root_media_id
@@ -313,6 +319,8 @@ render franchise cards
 
 Rules:
 
+- Series View is a consumer/projection of the canonical snapshot.
+- `AnimeSeriesViewMembership` is the persisted Series View state model.
 - `media_list` must stay DB-only.
 - No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.
 - Refresh work belongs to triggers, tasks, rebuild commands, import, and maintenance.
@@ -404,7 +412,7 @@ Event/release notifications use the existing `Send release notifications` task f
 | Maintenance | `src/app/services/anime_franchise_maintenance.py`, `src/app/services/anime_franchise_maintenance_scan.py`, `src/app/services/anime_franchise_maintenance_cadence.py`, `src/app/management/commands/scan_mal_anime_franchise_maintenance.py` |
 | Metadata invalidation | `src/app/services/anime_franchise_continuity_invalidation.py` |
 | Discovery | `src/app/services/anime_franchise_discovery.py`, `src/events/notifications.py` |
-| Series View | `src/app/services/anime_series_view.py`, `src/app/services/anime_series_view_projection.py`, `src/app/services/anime_series_view_franchise_refresh.py`, `src/app/services/anime_series_view_refresh_triggers.py`, `src/app/management/commands/rebuild_anime_series_view.py` |
+| Series View | `src/app/anime_series_view_constants.py`, `src/app/services/anime_series_view_rules.py`, `src/app/services/anime_series_view.py`, `src/app/services/anime_series_view_projection.py`, `src/app/services/anime_series_view_franchise_refresh.py`, `src/app/services/anime_series_view_refresh_triggers.py`, `src/app/services/anime_series_view_refresh_queue.py`, `src/app/management/commands/rebuild_anime_series_view.py` |
 | Views and templates | `src/app/views.py`, `src/templates/app/media_details.html`, `src/templates/app/media_list.html`, `src/templates/app/components/anime_series_groups.html`, `src/templates/app/components/anime_series_group_card.html` |
 | Release dates | `src/events/services/anime_release_date_notifications.py`, `src/events/tasks.py` |
 | Tasks and schedules | `src/app/tasks.py`, `src/app/schedules.py`, `src/config/settings.py` |
