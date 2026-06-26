@@ -96,15 +96,35 @@ Added only during request rendering:
 - user-specific item data;
 - current-entry markers;
 - footer display helpers that depend on the current page/user context;
-- opportunistic image updates when Yamtrack has a more recent or more complete local image than the cached franchise payload.
+- request-time display images from current local `Item.image`, including covers refreshed from provider metadata through the centralized sync rule.
 
 The franchise cache stores a user-agnostic payload. Some display data can still be improved at request time.
 
-For example, Series entries may reuse a more recent image already known by Yamtrack instead of continuing to display an older image embedded in the cached franchise payload.
+For example, fresh provider images may flow into `Item.image`, and request-time enrichment may then prefer that current local image over an older image embedded in the cached franchise payload.
+
+```text
+fresh provider image -> Item.image
+Item.image -> request-time display enrichment
+```
 
 This enrichment improves visual consistency without requiring a full franchise rebuild.
 
 This separation allows the same cached franchise payload to be reused safely for different users.
+
+## Image freshness and `Item.image`
+
+The franchise cache payload stays user-agnostic and can contain image URLs from the time the payload was built.
+
+`Item.image` is the global local cover used by normal Yamtrack item rendering. Fresh provider images can be synchronized into `Item.image` through `item_image_sync` from metadata refresh, maintenance, or request-time enrichment paths.
+
+This keeps local item covers fresh without making the franchise cache payload the canonical image store.
+
+Rules:
+
+- cache payload freshness and `Item.image` freshness are related but separate;
+- request rendering may enrich cached entries with the current local `Item.image`;
+- background refresh and maintenance may update `Item.image` from fresh MAL provider data;
+- updating `Item.image` does not change franchise grouping, cache aliases, import selection, or Series View membership.
 
 ## Canonical payload
 

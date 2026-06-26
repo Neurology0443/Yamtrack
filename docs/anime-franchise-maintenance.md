@@ -13,6 +13,7 @@ The autonomous maintenance scanner:
 - selects a bounded batch of due state rows;
 - builds one canonical franchise snapshot per processed seed with a shared build session;
 - rebuilds the user-agnostic detail-page franchise cache payload;
+- can synchronize fresh MAL cover images from refreshed snapshot nodes into the global `Item.image` row when `ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE=True`;
 - processes discovery state for newly visible missing franchise entries;
 - can queue franchise discovery notifications for eligible new entries after the
   user's discovery baseline;
@@ -128,6 +129,7 @@ Do not document batch size as “maximum members per franchise”.
 process seed
     ├─ build snapshot
     ├─ compute component root
+    ├─ sync fresh provider images into Item.image when refresh_cache=True
     ├─ compute discovery fingerprint
     ├─ collect tracked member media IDs
     ├─ build maintenance fingerprint
@@ -138,6 +140,18 @@ process seed
 ```
 
 `AnimeFranchiseMaintenanceService` uses one shared `AnimeFranchiseBuildSession`. Cache rebuild, discovery, and Series View refresh can therefore reuse MAL metadata hydrated inside the same operation.
+
+## Provider image synchronization
+
+When maintenance builds a snapshot with `refresh_cache=True`, snapshot node images are treated as fresh MAL provider image candidates.
+
+The sync is best-effort:
+
+- it updates only existing global MAL anime `Item` rows;
+- it targets base rows where `season_number` and `episode_number` are blank;
+- it does not create `Item` or `Anime` rows;
+- it does not run when `refresh_cache=False`;
+- failures are logged and recorded as non-critical errors, so cache rebuild, discovery, and Series View work can still continue.
 
 ## Franchise member coverage
 
@@ -172,6 +186,8 @@ Critical errors mark the state as failed or partially failed:
 - retry delay is capped at seven days;
 - locks prevent concurrent maintenance runs.
 
+Provider image sync errors are non-critical maintenance errors. They are recorded for visibility but do not stop cache rebuild, discovery, or Series View work the way critical failures do.
+
 ## Metadata refresh invalidation
 
 MAL metadata refresh can detect strong relation changes and complement scheduled maintenance.
@@ -195,7 +211,7 @@ See [franchise cache](anime-franchise-cache.md) and [architecture overview](arch
 | `ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES` | `60` | Beat interval for the maintenance task. |
 | `ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE` | `10` | Number of due seed states selected per scan. |
 | `ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS` | `24` | Spread window for first-run state creation. |
-| `ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE` | `True` | Whether maintenance refreshes MAL provider cache while building snapshots. |
+| `ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE` | `True` | Whether maintenance refreshes MAL provider cache while building snapshots; also gates maintenance-driven cover synchronization into `Item.image`. |
 | `ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES` | `360` | Lock lifetime for one maintenance task run. |
 | `ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS` | `12` | Base retry interval for failed states before exponential backoff. |
 | `ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_CHANGE` | `True` | Refresh Series View when the maintenance fingerprint changes. |
@@ -205,6 +221,8 @@ See [franchise cache](anime-franchise-cache.md) and [architecture overview](arch
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_CHANGE_AGE_DAYS` | `180` | Minimum time since last change before deep-cold cadence can apply. |
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS` | `21` | Minimum deep-cold scan window. |
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS` | `30` | Maximum deep-cold scan window. |
+
+`ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE` also gates maintenance-driven cover synchronization into `Item.image`; with `False`, maintenance may rebuild from existing cache but will not sync snapshot images into `Item.image`.
 
 Compatibility settings that still exist in settings:
 
