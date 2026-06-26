@@ -323,6 +323,13 @@ class AnimeFranchiseDiscoveryService:
             visible.append(visible_candidate)
         return visible
 
+    def build_snapshot_fingerprint(self, snapshot) -> str:
+        """Build the stable discovery-visible fingerprint for a snapshot."""
+        stats = AnimeFranchiseDiscoveryStats()
+        candidates = self.projection.project(snapshot)
+        visible = self._filter_visible(candidates, stats)
+        return self.build_fingerprint(visible)
+
     @staticmethod
     def build_fingerprint(candidates):
         """Build a stable hash from visible normalized candidates."""
@@ -510,8 +517,7 @@ class AnimeFranchiseDiscoveryService:
     def _reactivation_window_expired(self, *, discovery, now) -> bool:
         """Return whether an unnotified discovery is too old to reactivate."""
         return (
-            discovery.first_seen_at
-            < now - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
+            discovery.first_seen_at < now - DISCOVERY_NOTIFICATION_REACTIVATION_WINDOW
         )
 
     def _queue_block_reason(self, *, discovery, reason: str, now) -> str:

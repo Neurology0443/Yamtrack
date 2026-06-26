@@ -1,0 +1,134 @@
+name: yamtrack-dev
+
+services:
+  yamtrack-dev:
+    container_name: yamtrack-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: yamtrack-dev
+    image: yamtrack-dev:local
+    restart: unless-stopped
+    depends_on:
+      yamtrack-dev-postgres:
+        condition: service_healthy
+      yamtrack-dev-redis:
+        condition: service_healthy
+    networks:
+      - proxy
+      - backend
+
+    environment:
+      - TZ=Europe/Berlin
+      - SECRET=${YAMTRACK_SECRET}
+
+      # Redis test isolé
+      - REDIS_URL=redis://yamtrack-dev-redis:6379
+
+      # PostgreSQL test isolé
+      - DB_HOST=yamtrack-dev-postgres
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_PORT=5432
+
+      # Anime franchise import automation
+      - ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED=true
+      # Pour test rapide uniquement, on pourra décommenter plus tard si besoin :
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES=1
+
+      # MyAnimeList API
+      - MAL_API=${MAL_API}
+      - MAL_RATE_LIMIT_PER_MINUTE=100
+
+      # Option utile pendant les tests si on veut plus de logs Celery
+      # - ENV_DEBUG=True
+
+      # Optional admin
+      # - ADMIN_ENABLED=True
+
+      - ANIME_FRANCHISE_GROUPING_ENABLED=True
+      - ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True
+      - ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=True
+
+
+      - ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES=60
+      - ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE=10
+      - ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS=24
+
+
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+
+      # Router test isolé
+      - "traefik.http.routers.yamtrack-dev.entrypoints=websecure"
+      - "traefik.http.routers.yamtrack-dev.rule=Host(`yamtrack-dev.home.lab`)"
+      - "traefik.http.routers.yamtrack-dev.tls=true"
+      - "traefik.http.routers.yamtrack-dev.middlewares=default-headers@file"
+
+      # Service test isolé
+      - "traefik.http.services.yamtrack-dev.loadbalancer.server.port=8000"
+
+  yamtrack-dev-postgres:
+    image: postgres:16-alpine
+    container_name: yamtrack-dev-postgres
+    restart: unless-stopped
+    networks:
+      - backend
+    volumes:
+      - yamtrack_dev_database:/var/lib/postgresql/data
+
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  yamtrack-dev-redis:
+    container_name: yamtrack-dev-redis
+    image: redis:8-alpine
+    restart: unless-stopped
+    networks:
+      - backend
+    volumes:
+      - yamtrack_dev_redis:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  proxy:
+    external: true
+    name: traefik-net
+
+  backend:
+    internal: true
+    name: yamtrack-dev-backend
+
+volumes:
+  #yamtrack_dev_redis:
+    #name: yamtrack_dev_redis
+    #driver: local
+  #yamtrack_dev_database:
+    #name: yamtrack_dev_database
+    #driver: local
+
+
+  yamtrack_dev_redis:
+    external: true
+    name: yamtrack_dev_redis
+
+  yamtrack_dev_database:
+    external: true
+    name: yamtrack_dev_database

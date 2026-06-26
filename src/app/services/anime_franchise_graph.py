@@ -110,24 +110,28 @@ class AnimeFranchiseGraphBuilder:
             )
         except TypeError:
             metadata = self.metadata_fetcher(media_id)
+        details = metadata["details"]
         node = AnimeNode(
             media_id=str(metadata["media_id"]),
             title=metadata["title"],
             source=metadata["source"],
-            media_type=metadata["details"].get("raw_media_type", ""),
+            media_type=details.get("raw_media_type", ""),
             image=metadata["image"],
-            start_date=self._parse_start_date(metadata["details"].get("start_date")),
+            start_date=self._parse_mal_date(details.get("start_date")),
             relations=self._normalize_relations(
                 str(metadata["media_id"]),
                 metadata,
             ),
             runtime_minutes=self._parse_runtime_minutes(
-                metadata["details"].get("runtime"),
+                details.get("runtime"),
             ),
             episode_count=self._parse_episode_count(
-                metadata["details"].get("episodes"),
+                details.get("episodes"),
             ),
             alternative_title_en=metadata.get("alternative_title_en") or "",
+            mal_raw_status=str(details.get("raw_status") or ""),
+            mal_status=str(details.get("status") or ""),
+            end_date=self._parse_mal_date(details.get("end_date")),
         )
         self._node_cache[node.media_id] = node
         return node
@@ -155,7 +159,7 @@ class AnimeFranchiseGraphBuilder:
         return normalized_relations
 
     @staticmethod
-    def _parse_start_date(raw_start_date: str | None) -> date | None:
+    def _parse_mal_date(raw_start_date: str | None) -> date | None:
         if not raw_start_date:
             return None
 
