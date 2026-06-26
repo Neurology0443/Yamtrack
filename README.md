@@ -37,7 +37,7 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
 - Groups tracked MAL anime into franchise cards backed by persisted `AnimeSeriesViewMembership` rows.
 - Keeps the list page DB-only: no MAL call, no snapshot build, and no write during `media_list` rendering.
 - Uses one card per franchise when the projection is confident.
-- Keeps autonomous `alternative_version` continuities separated when detected, such as old/remake continuities.
+- Keeps autonomous `alternative_version`/`alternative_settings` continuities separated when detected.
 
 ### ⚡ Faster franchise pages
 
@@ -74,6 +74,14 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   and month, or a complete date.
 - These MAL-focused notifications remain separate from AniList episode-calendar and
   event release notifications.
+
+### 🛠 Autonomous franchise maintenance
+
+- Keeps tracked MAL anime franchises fresh in the background.
+- Rebuilds franchise cache payloads.
+- Updates discovery state for newly visible entries.
+- Refreshes Anime Series View memberships when franchise structure changes.
+- Uses persistent scan state, batch limits, adaptive cadence, and jitter.
 
 ### 🛠 Autonomous franchise maintenance
 
