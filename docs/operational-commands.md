@@ -208,3 +208,47 @@ PY
 ```bash
 docker compose exec -T yamtrack python manage.py scan_mal_anime_franchise_maintenance --limit 10 --force
 ```
+
+## Inspect MAL cover synchronization
+
+Compare the local `Item.image` with the MAL metadata cache image. Local dev may use `docker-compose.dev.yml` and `yamtrack-dev`, but these commands use the checked-in `yamtrack` service name.
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.core.cache import cache
+from app.models import Item, MediaTypes, Sources
+from app.providers import mal_cache
+
+media_id = "30831"
+item = Item.objects.filter(
+    source=Sources.MAL.value,
+    media_type=MediaTypes.ANIME.value,
+    media_id=media_id,
+    season_number__isnull=True,
+    episode_number__isnull=True,
+).first()
+payload = cache.get(mal_cache.get_anime_cache_key(media_id))
+
+print({
+    "media_id": media_id,
+    "item_image": item.image if item else None,
+    "cache_image": payload.get("image") if payload else None,
+})
+PY
+```
+
+Trigger a metadata refresh for one MAL anime:
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from app.tasks import refresh_mal_anime_metadata
+
+print(refresh_mal_anime_metadata("30831"))
+PY
+```
+
+Run one due maintenance scan manually:
+
+```bash
+docker compose exec -T yamtrack python manage.py scan_mal_anime_franchise_maintenance --limit 1 --force
+```
