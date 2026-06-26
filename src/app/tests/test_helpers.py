@@ -15,6 +15,7 @@ from app.helpers import (
     redirect_back,
 )
 from app.models import Anime, Item, MediaTypes, Movie, Sources, Status
+from app.services import item_image_sync
 
 
 class HelpersTest(TestCase):
@@ -359,9 +360,9 @@ class EnrichItemsWithUserDataTest(TestCase):
 
 
 class ImageRefreshTest(TestCase):
-    """Test helper logic for refreshing stored item images."""
+    """Test compatibility helper logic for refreshing stored item images."""
 
-    def test_needs_image_refresh_for_missing_image(self):
+    def test_should_sync_provider_image_for_missing_image(self):
         """Test a missing image is refreshed."""
         item = Item(
             source=Sources.MAL.value,
@@ -370,13 +371,13 @@ class ImageRefreshTest(TestCase):
         )
 
         self.assertTrue(
-            helpers._needs_image_refresh(
+            item_image_sync.should_sync_provider_image(
                 item,
                 "https://cdn.myanimelist.net/images/anime/new.jpg",
             )
         )
 
-    def test_needs_image_refresh_for_placeholder_image(self):
+    def test_should_sync_provider_image_for_placeholder_image(self):
         """Test the placeholder image is refreshed."""
         item = Item(
             source=Sources.MAL.value,
@@ -385,13 +386,13 @@ class ImageRefreshTest(TestCase):
         )
 
         self.assertTrue(
-            helpers._needs_image_refresh(
+            item_image_sync.should_sync_provider_image(
                 item,
                 "https://cdn.myanimelist.net/images/anime/new.jpg",
             )
         )
 
-    def test_needs_image_refresh_for_stale_mal_image(self):
+    def test_should_sync_provider_image_for_stale_mal_image(self):
         """Test a stale MAL image is refreshed."""
         item = Item(
             source=Sources.MAL.value,
@@ -400,13 +401,13 @@ class ImageRefreshTest(TestCase):
         )
 
         self.assertTrue(
-            helpers._needs_image_refresh(
+            item_image_sync.should_sync_provider_image(
                 item,
                 "https://cdn.myanimelist.net/images/anime/new.jpg",
             )
         )
 
-    def test_needs_image_refresh_skips_identical_image(self):
+    def test_should_sync_provider_image_skips_identical_image(self):
         """Test an identical provider image is not refreshed."""
         image = "https://cdn.myanimelist.net/images/anime/new.jpg"
         item = Item(
@@ -415,9 +416,9 @@ class ImageRefreshTest(TestCase):
             image=image,
         )
 
-        self.assertFalse(helpers._needs_image_refresh(item, image))
+        self.assertFalse(item_image_sync.should_sync_provider_image(item, image))
 
-    def test_needs_image_refresh_skips_absent_provider_images(self):
+    def test_should_sync_provider_image_skips_absent_provider_images(self):
         """Test absent provider images do not replace stored images."""
         for new_image in (None, "", settings.IMG_NONE):
             item = Item(
@@ -426,9 +427,11 @@ class ImageRefreshTest(TestCase):
                 image="https://cdn.myanimelist.net/images/anime/current.jpg",
             )
 
-            self.assertFalse(helpers._needs_image_refresh(item, new_image))
+            self.assertFalse(
+                item_image_sync.should_sync_provider_image(item, new_image)
+            )
 
-    def test_needs_image_refresh_protects_manual_source(self):
+    def test_should_sync_provider_image_protects_manual_source(self):
         """Test manual images are not replaced by provider images."""
         item = Item(
             source=Sources.MANUAL.value,
@@ -437,13 +440,13 @@ class ImageRefreshTest(TestCase):
         )
 
         self.assertFalse(
-            helpers._needs_image_refresh(
+            item_image_sync.should_sync_provider_image(
                 item,
                 "https://cdn.myanimelist.net/images/anime/provider.jpg",
             )
         )
 
-    def test_needs_image_refresh_protects_filled_non_mal_source(self):
+    def test_should_sync_provider_image_protects_filled_non_mal_source(self):
         """Test filled non-MAL source images are not refreshed."""
         item = Item(
             source=Sources.TMDB.value,
@@ -452,7 +455,7 @@ class ImageRefreshTest(TestCase):
         )
 
         self.assertFalse(
-            helpers._needs_image_refresh(
+            item_image_sync.should_sync_provider_image(
                 item,
                 "https://image.tmdb.org/new.jpg",
             )

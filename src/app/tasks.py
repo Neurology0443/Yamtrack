@@ -13,9 +13,9 @@ from app.anime_series_view_constants import (
     REFRESH_MODE,
     REFRESH_MODES,
 )
-from app.models import UserMessage
+from app.models import MediaTypes, Sources, UserMessage
 from app.providers import mal, mal_cache, services
-from app.services import anime_franchise_cache
+from app.services import anime_franchise_cache, item_image_sync
 from app.services.anime_franchise_build_session import AnimeFranchiseBuildSession
 from app.services.anime_franchise_cache_builder import AnimeFranchiseCacheBuildService
 from app.services.anime_franchise_continuity_invalidation import (
@@ -166,6 +166,18 @@ def refresh_mal_anime_metadata(media_id):
         old_metadata, _ = mal_cache.load_anime_cache(media_id)
         mal_cache.mark_refresh_attempt(media_id)
         new_metadata = mal.anime(media_id, refresh_cache=True)
+        try:
+            item_image_sync.sync_provider_image(
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                media_id=str(media_id),
+                image=new_metadata.get("image"),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to sync refreshed MAL anime image to Item.image",
+                extra={"media_id": str(media_id)},
+            )
         from events.services.anime_release_date_notifications import (  # noqa: PLC0415
             AnimeReleaseDateNotificationService,
         )
