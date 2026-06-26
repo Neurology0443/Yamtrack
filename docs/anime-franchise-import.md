@@ -39,7 +39,7 @@ Existing user MAL anime
  -> profile selection
  -> missing entry creation
  -> scan-state update
- -> notifications
+ -> entry-added notifications
  -> optional cache warmup
 ```
 

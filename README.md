@@ -62,19 +62,26 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
   - Complete
 - Configure how often franchise imports should run.
 
-### 🔔 Import notifications
+### 🔔 Notifications
 
-- Receive notifications when franchise imports add new entries.
-  - Makes automatic additions easy to spot and review.
-  - Helps you keep track of changes made to your library.
+- Receive notifications for MAL anime franchise activity:
+  - franchise imports adding new `Planning` entries;
+  - newly visible franchise entries discovered after the user's discovery baseline;
+  - tracked MAL anime start dates being announced, becoming more precise, or changing.
+- Discovery notifications can surface new sequels, specials, movies, alternatives,
+  or spin-offs without automatically importing them.
+- MAL anime start-date notifications support MAL dates expressed as a year, a year
+  and month, or a complete date.
+- These MAL-focused notifications remain separate from AniList episode-calendar and
+  event release notifications.
 
-### 📅 MAL anime release-date notifications
+### 🛠 Autonomous franchise maintenance
 
-- Optionally receive a notification when a tracked MAL anime start date is
-  announced, becomes more precise, or changes.
-- Supports MAL dates expressed as a year, a year and month, or a complete date.
-- Uses MAL metadata directly and remains separate from AniList episode-calendar
-  and release notifications.
+- Keeps tracked MAL anime franchises fresh in the background.
+- Rebuilds franchise cache payloads.
+- Updates discovery state for newly visible entries.
+- Refreshes Anime Series View memberships when franchise structure changes.
+- Uses persistent scan state, batch limits, adaptive cadence, and jitter.
 
 ### 🛠 Autonomous franchise maintenance
 

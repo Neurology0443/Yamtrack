@@ -14,6 +14,8 @@ The autonomous maintenance scanner:
 - builds one canonical franchise snapshot per processed seed with a shared build session;
 - rebuilds the user-agnostic detail-page franchise cache payload;
 - processes discovery state for newly visible missing franchise entries;
+- can queue franchise discovery notifications for eligible new entries after the
+  user's discovery baseline;
 - refreshes Anime Series View memberships when configured or when structure changes;
 - records success, errors, component root, fingerprint, and the next scan time.
 

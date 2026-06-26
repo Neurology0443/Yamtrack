@@ -139,6 +139,10 @@ They can observe the same MAL item, but they update different state models and a
 - release-date notification state asks whether a start date was first announced, became more precise, or changed;
 - autonomous franchise maintenance asks whether the franchise snapshot, visible missing entries, cache payload, or Series View projection should be refreshed.
 
+Franchise discovery notifications are a separate franchise feature: they notify
+about newly visible franchise entries, while release-date notifications watch MAL
+start-date value transitions.
+
 See [anime franchise maintenance](anime-franchise-maintenance.md).
 
 ## Difference from event release notifications

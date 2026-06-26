@@ -32,48 +32,56 @@ The goal is to keep request rendering stable while provider fetching, graph norm
                  └──────────┬───────────┘
                             │
                             ▼
-        ┌────────────────────────────────────┐
-        │ AnimeFranchiseBuildSession          │
-        │ shared per-operation MAL hydration  │
-        │ anime_franchise_build_session.py    │
-        └─────────────────┬──────────────────┘
-                          │
-                          ▼
-        ┌────────────────────────────────────┐
-        │ AnimeFranchiseGraphBuilder          │
-        │ relation graph + normalized edges   │
-        │ anime_franchise_graph.py            │
-        └─────────────────┬──────────────────┘
-                          │
-                          ▼
-        ┌────────────────────────────────────┐
-        │ AnimeFranchiseSnapshotService       │
-        │ canonical franchise snapshot        │
-        │ anime_franchise_snapshot.py         │
-        └─────────────────┬──────────────────┘
-                          │
-                          ▼
-        ┌────────────────────────────────────┐
-        │ AnimeFranchiseSnapshot              │
-        │ canonical franchise state           │
-        └─────────────────┬──────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┬──────────────────┬──────────────────┐
-        ▼                 ▼                 ▼                  ▼                  ▼
-┌──────────────┐  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
-│ UI cache      │  │ Discovery       │ │ Import          │ │ Series View    │ │ Maintenance    │
-│ detail page   │  │ visible entries │ │ missing entries │ │ DB read model  │ │ due scan state │
-└──────┬───────┘  └───────┬────────┘ └───────┬────────┘ └───────┬────────┘ └───────┬────────┘
-       ▼                  ▼                  ▼                  ▼                  ▼
-Detail page        Notifications       Planning entries    Anime list cards   Future scans
+┌──────────────────────────────────────────────────────────────┐
+│ AnimeFranchiseBuildSession                                   │
+│ short-lived operation scope                                  │
+│ shared MAL hydration + refresh_cache policy                  │
+│ anime_franchise_build_session.py                             │
+│                                                              │
+│        ┌────────────────────────────────────┐                │
+│        │ AnimeFranchiseGraphBuilder          │                │
+│        │ relation graph + normalized edges   │                │
+│        │ anime_franchise_graph.py            │                │
+│        └─────────────────┬──────────────────┘                │
+│                          │                                   │
+│                          ▼                                   │
+│        ┌────────────────────────────────────┐                │
+│        │ AnimeFranchiseSnapshotService       │                │
+│        │ builds canonical franchise snapshot │                │
+│        │ anime_franchise_snapshot.py         │                │
+│        └─────────────────┬──────────────────┘                │
+│                          │                                   │
+│                          ▼                                   │
+│        ┌────────────────────────────────────┐                │
+│        │ AnimeFranchiseSnapshot              │                │
+│        │ canonical franchise truth           │                │
+│        └────────────────────────────────────┘                │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+                           ▼
+          ┌────────────────────────────────────┐
+          │ Consumers / projections             │
+          │ use the snapshot, and coordinated   │
+          │ operations may reuse session        │
+          │ hydration context                   │
+          └────────────────┬───────────────────┘
+                           │
+          ┌────────────────┼────────────────┬────────────────┬────────────────┐
+          ▼                ▼                ▼                ▼                ▼
+   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+   │ UI cache      │ │ Discovery    │ │ Import       │ │ Series View  │ │ Maintenance  │
+   │ detail page   │ │ notifications│ │ Planning     │ │ memberships  │ │ scan state   │
+   └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
 ### How to read this diagram
 
 - The MAL provider and MAL metadata cache are the metadata source layer.
-- `AnimeFranchiseBuildSession` is a short-lived per-operation hydration session. It is not a global cache.
-- `AnimeFranchiseGraphBuilder` builds normalized relation graph data from hydrated MAL metadata.
+- `AnimeFranchiseBuildSession` is the short-lived operation scope, not the canonical franchise state.
+- `AnimeFranchiseGraphBuilder` builds normalized relation graph data from hydrated MAL metadata inside that scope.
 - `AnimeFranchiseSnapshotService` creates the canonical franchise snapshot.
+- `AnimeFranchiseSnapshot` is the canonical franchise truth produced inside that operation scope.
+- The arrow exits the session envelope because coordinated consumers may reuse the session hydration context, but their franchise truth remains the snapshot.
 - UI cache, discovery, import, Series View, and maintenance are projections or consumers of the same snapshot.
 - These consumers should not blindly copy each other's policies. UI placement is not import selection, and Series View grouping is not detail-page layout.
 
