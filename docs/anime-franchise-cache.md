@@ -275,3 +275,36 @@ docker compose exec yamtrack python manage.py shell -c "from app.tasks import bu
 | `ANIME_FRANCHISE_TASK_LOCK_MINUTES` | Worker-side lock that prevents concurrent builds for the same media ID. |
 | `ANIME_FRANCHISE_MAX_NODES` | Maximum franchise graph size to hydrate before treating the build as truncated/scoped. Values `<= 0` are treated as unlimited by the graph builder. |
 | `ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION` | Payload schema version. Changing it invalidates incompatible cached payload shapes. |
+
+## Cache rebuild sources
+
+| Source | Trigger | Refresh behavior |
+| --- | --- | --- |
+| Detail page | miss, stale, invalid payload | background build |
+| Manual add | post-commit task | coordinated cache + Series View |
+| Import | created entries | cache warmup |
+| Maintenance | due scan state | forced UI cache rebuild |
+| Metadata refresh invalidation | strong relation change | mark stale + forced rebuild |
+
+These sources all write the same kind of user-agnostic franchise payload. Request-time context still adds the current user's status, progress, and current-entry information after loading the payload.
+
+## Shared build session
+
+The cache builder may use a provided `AnimeFranchiseBuildSession`. When no session is provided, normal cache builds create their own per-operation session.
+
+Maintenance and import pass a shared build session so cache rebuild, discovery, and Anime Series View refresh can reuse hydrated MAL metadata inside one operation. This keeps the cache projection aligned with the canonical franchise snapshot without introducing process-wide shared hydration.
+
+See [architecture overview](architecture-overview.md) and [anime franchise maintenance](anime-franchise-maintenance.md).
+
+## Invalidation from MAL metadata refresh
+
+`Refresh MAL anime metadata` compares old and new `related_anime` edges after MAL metadata refresh. Only strong relation changes trigger franchise invalidation:
+
+- continuity relations;
+- `alternative_setting`;
+- `alternative_version`;
+- `spin_off`.
+
+When a strong edge changes, known canonical payloads for touched media are marked stale and a forced rebuild can be scheduled. Known maintenance scan states for the touched media or component root are nudged due soon. Missing payloads are tracked as missing in the result, but there is no payload to invalidate.
+
+`mark_media_due_soon()` only moves a maintenance state earlier. It does not delay a scan that is already sooner.

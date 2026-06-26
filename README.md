@@ -76,6 +76,14 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
 - Uses MAL metadata directly and remains separate from AniList episode-calendar
   and release notifications.
 
+### 🛠 Autonomous franchise maintenance
+
+- Keeps tracked MAL anime franchises fresh in the background.
+- Rebuilds franchise cache payloads.
+- Updates discovery state for newly visible entries.
+- Refreshes Anime Series View memberships when franchise structure changes.
+- Uses persistent scan state, batch limits, adaptive cadence, and jitter.
+
 Detailed fork docs are available in `docs/`:
 
 - [Architecture overview](docs/architecture-overview.md)
@@ -84,6 +92,7 @@ Detailed fork docs are available in `docs/`:
 - [Anime Series View](docs/anime-series-view.md)
 - [Anime franchise import](docs/anime-franchise-import.md)
 - [Anime franchise cache](docs/anime-franchise-cache.md)
+- [Anime franchise maintenance](docs/anime-franchise-maintenance.md)
 - [Anime franchise customization](docs/anime-franchise-customization.md)
 - [Anime franchise debugging runbook](docs/anime-franchise-debugging-runbook.md)
 - [Anime release-date notifications](docs/anime-release-date-notifications.md)

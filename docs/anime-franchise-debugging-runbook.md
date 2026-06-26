@@ -349,3 +349,111 @@ docker compose exec yamtrack python manage.py import_anime_franchise --profile c
 docker compose exec yamtrack python manage.py shell -c "from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay('34161')"
 docker compose exec yamtrack celery -A config inspect active
 ```
+
+## Inspect autonomous franchise maintenance
+
+Use these commands when franchise pages, discovery notifications, cache payloads, or Anime Series View memberships appear stale even when users are not visiting detail pages.
+
+### Inspect settings
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.conf import settings
+
+entry = settings.CELERY_BEAT_SCHEDULE.get("scan_mal_anime_franchise_maintenance")
+
+print("SCAN_ENABLED:", settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED)
+print("SCAN_INTERVAL_MINUTES:", settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES)
+print("SCAN_BATCH_SIZE:", settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE)
+print("INITIAL_SPREAD_HOURS:", settings.ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS)
+print("beat_entry_exists:", bool(entry))
+print("beat_entry:", entry)
+PY
+```
+
+### Inspect all-in-one container processes
+
+```bash
+docker compose exec -T yamtrack ps aux
+```
+
+Some deployments run `nginx`, `gunicorn`, `celery worker`, and `celery beat` inside one container under `supervisord`. Other deployments may split web, worker, and beat into separate services.
+
+### Logs
+
+```bash
+docker compose logs --since=90m yamtrack | grep -Ei "Scan MAL anime franchise maintenance|anime franchise maintenance|Scheduler: Sending due task|succeeded|failed|error" || true
+```
+
+### DB summary
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.utils import timezone
+from app.models import AnimeFranchiseMaintenanceScanState
+
+now = timezone.now()
+qs = AnimeFranchiseMaintenanceScanState.objects.all()
+print({
+    "total_states": qs.count(),
+    "due_now": qs.filter(next_scan_at__lte=now).count(),
+    "with_success": qs.filter(last_success_at__isnull=False).count(),
+    "pending_first_success": qs.filter(last_success_at__isnull=True).count(),
+    "with_error": qs.exclude(last_error="").count(),
+})
+PY
+```
+
+### Due states
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.utils import timezone
+from app.models import AnimeFranchiseMaintenanceScanState
+
+for state in AnimeFranchiseMaintenanceScanState.objects.filter(next_scan_at__lte=timezone.now()).order_by("next_scan_at")[:20]:
+    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or "-", state.next_scan_at, state.last_success_at)
+PY
+```
+
+### Error states
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from app.models import AnimeFranchiseMaintenanceScanState
+
+for state in AnimeFranchiseMaintenanceScanState.objects.exclude(last_error="").order_by("-last_error_at")[:20]:
+    print(state.id, state.user_id, state.seed_mal_id, state.last_error_at, state.consecutive_error_count, state.last_error[:200])
+PY
+```
+
+### Next state
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from app.models import AnimeFranchiseMaintenanceScanState
+
+state = AnimeFranchiseMaintenanceScanState.objects.order_by("next_scan_at").first()
+if state:
+    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or "-", state.next_scan_at)
+else:
+    print("no maintenance states")
+PY
+```
+
+### Manual scan
+
+```bash
+docker compose exec -T yamtrack python manage.py scan_mal_anime_franchise_maintenance --limit 10 --force
+```
+
+### Troubleshooting
+
+| Symptom | Meaning | First check |
+| --- | --- | --- |
+| `total_states=0` | first scan not run, disabled setting, Beat missing, or no eligible anime | settings and logs |
+| `due_now>0` after scan | state became due after Beat or backlog exceeded batch | `next_scan_at` and logs |
+| `with_error>0` | state failure | error state section |
+| many `root=-` | not processed yet or unresolved root | `last_success_at` |
+| `with_success` jumps faster than `processed` | one seed covered multiple tracked members | root grouping |
+| task skipped `already_running` | maintenance lock active | task logs and lock timeout |

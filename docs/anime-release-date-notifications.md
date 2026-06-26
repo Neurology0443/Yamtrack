@@ -129,3 +129,22 @@ The default schedule runs every 12 hours with a batch of 25 and a minimum
 - `ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS`
 - `ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS`
 - `ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES`
+
+## Difference from franchise maintenance
+
+Release-date notifications watch `metadata["details"]["start_date"]` for tracked MAL anime. Franchise maintenance watches franchise structure, discovery candidates, cache payloads, and Anime Series View memberships.
+
+They can observe the same MAL item, but they update different state models and answer different questions:
+
+- release-date notification state asks whether a start date was first announced, became more precise, or changed;
+- autonomous franchise maintenance asks whether the franchise snapshot, visible missing entries, cache payload, or Series View projection should be refreshed.
+
+See [anime franchise maintenance](anime-franchise-maintenance.md).
+
+## Difference from event release notifications
+
+`send_release_notifications` sends notifications for existing `Event` rows from the normal release/calendar system. It is not the MAL release-date scanner.
+
+The dedicated MAL start-date scan is `scan_mal_anime_release_dates`, exposed as the Celery task `Scan MAL anime release dates`.
+
+`Scan MAL anime franchise maintenance` is a separate franchise-structure maintenance task. It is not a release-date notification scanner and it does not replace event release notification delivery.
