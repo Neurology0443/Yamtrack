@@ -836,6 +836,58 @@
 </tr>
 </tbody>
 </table>
+<h2 id="cache-rebuild-sources">Cache rebuild sources<a class="headerlink" href="#cache-rebuild-sources" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Trigger</th>
+<th>Refresh behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Detail page</td>
+<td>miss, stale, invalid payload</td>
+<td>background build</td>
+</tr>
+<tr>
+<td>Manual add</td>
+<td>post-commit task</td>
+<td>coordinated cache + Series View</td>
+</tr>
+<tr>
+<td>Import</td>
+<td>created entries</td>
+<td>cache warmup</td>
+</tr>
+<tr>
+<td>Maintenance</td>
+<td>due scan state</td>
+<td>forced UI cache rebuild</td>
+</tr>
+<tr>
+<td>Metadata refresh invalidation</td>
+<td>strong relation change</td>
+<td>mark stale + forced rebuild</td>
+</tr>
+</tbody>
+</table>
+<p>These sources all write the same kind of user-agnostic franchise payload. Request-time context still adds the current user's status, progress, and current-entry information after loading the payload.</p>
+<h2 id="shared-build-session">Shared build session<a class="headerlink" href="#shared-build-session" title="Permanent link">&para;</a></h2>
+<p>The cache builder may use a provided <code>AnimeFranchiseBuildSession</code>. When no session is provided, normal cache builds create their own per-operation session.</p>
+<p>Maintenance and import pass a shared build session so cache rebuild, discovery, and Anime Series View refresh can reuse hydrated MAL metadata inside one operation. This keeps the cache projection aligned with the canonical franchise snapshot without introducing process-wide shared hydration.</p>
+<p>See <a href="../architecture-overview/">architecture overview</a> and <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>.</p>
+<h2 id="invalidation-from-mal-metadata-refresh">Invalidation from MAL metadata refresh<a class="headerlink" href="#invalidation-from-mal-metadata-refresh" title="Permanent link">&para;</a></h2>
+<p><code>Refresh MAL anime metadata</code> compares old and new <code>related_anime</code> edges after MAL metadata refresh. Only strong relation changes trigger franchise invalidation:</p>
+<ul>
+<li>continuity relations;</li>
+<li><code>alternative_setting</code>;</li>
+<li><code>alternative_version</code>;</li>
+<li><code>spin_off</code>.</li>
+</ul>
+<p>When a strong edge changes, known canonical payloads for touched media are marked stale and a forced rebuild can be scheduled. Known maintenance scan states for the touched media or component root are nudged due soon. Missing payloads are tracked as missing in the result, but there is no payload to invalidate.</p>
+<p><code>mark_media_due_soon()</code> only moves a maintenance state earlier. It does not delay a scan that is already sooner.</p>
 
 
 

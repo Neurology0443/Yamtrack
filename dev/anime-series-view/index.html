@@ -12,7 +12,7 @@
         <meta name="author" content="FuzzyGrim">
       
       
-        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-franchise-import/">
+        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-series-view/">
       
       
       
@@ -25,7 +25,7 @@
     
     
       
-        <title>Anime franchise import - Yamtrack Documentation</title>
+        <title>Anime Series View - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#anime-franchise-import" class="md-skip">
+        <a href="#anime-series-view" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Anime franchise import
+              Anime Series View
             
           </span>
         </div>
@@ -563,7 +563,7 @@
                 
                   
   
-    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-franchise-import.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-series-view.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -572,230 +572,154 @@
     
       
     
-    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-franchise-import.md" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-series-view.md" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
     </a>
   
 
 
-<h1 id="anime-franchise-import">Anime franchise import<a class="headerlink" href="#anime-franchise-import" title="Permanent link">&para;</a></h1>
+<h1 id="anime-series-view">Anime Series View<a class="headerlink" href="#anime-series-view" title="Permanent link">&para;</a></h1>
 <h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
-<p>When a user tracks a MAL anime, this fork can discover missing MAL anime entries from the same franchise and create library entries for them. Imports are profile-based so Yamtrack can expand useful continuity without blindly importing every related MAL entry. Profile decisions are built from the normalized snapshot; see <code>docs/anime-franchise-snapshot.md</code> for the shared snapshot model.</p>
-<h2 id="simple-user-flow">Simple user flow<a class="headerlink" href="#simple-user-flow" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>User tracks a MAL anime
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>      ↓
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Import scan runs
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>      ↓
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Missing franchise entries are discovered
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>      ↓
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Entries are created as Planning
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>      ↓
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>Notification is sent when enabled
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      ↓
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>Future scans keep monitoring the franchise
+<p>Anime Series View is the anime-list presentation that groups the user's tracked MAL anime into franchise cards. It is distinct from the MAL anime detail page: the detail page explains one MAL franchise, while Anime Series View reorganizes the user's Anime library.</p>
+<ul>
+<li>The <code>series</code> layout applies only to the Anime media list.</li>
+<li>Non-anime media types fall back to the normal grid/table layouts.</li>
+<li>A large MAL franchise is shown as one card when the projection is confident.</li>
+<li>A tracked anime remains a singleton when there is no reliable groupable evidence.</li>
+<li>Non-confident projections are not persisted.</li>
+<li>Cards do not render member titles; they summarize the group instead.</li>
+</ul>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>AnimeFranchiseSnapshotService
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    ↓
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>AnimeSeriesViewProjectionBuilder
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ↓
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>AnimeSeriesViewFranchiseRefreshService
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    ↓
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>AnimeSeriesViewMembership
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    ↓
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>build_anime_series_view
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    ↓
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>anime_series_groups.html / anime_series_group_card.html
 </span></code></pre></div>
-<p>The import system is designed to reduce manual searching while keeping automatically added entries easy to review.</p>
-<h2 id="important-ui-grouping-is-not-import-selection">Important: UI grouping is not import selection<a class="headerlink" href="#important-ui-grouping-is-not-import-selection" title="Permanent link">&para;</a></h2>
-<p>UI grouping and import selection are intentionally independent.</p>
-<p>An entry can appear in a visible franchise section without being imported automatically. Likewise, import profiles are not required to mirror UI sections.</p>
-<p>UI grouping optimizes detail-page readability. Import profiles optimize which missing entries are useful enough to create in a user's library.</p>
-<h2 id="import-flow">Import flow<a class="headerlink" href="#import-flow" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Existing user MAL anime
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a> -&gt; due seed selection
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a> -&gt; snapshot build (see `docs/anime-franchise-snapshot.md`)
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a> -&gt; profile selection
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a> -&gt; missing entry creation
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a> -&gt; scan-state update
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a> -&gt; entry-added notifications
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a> -&gt; optional cache warmup
+<p><code>media_list</code> must remain DB-only. Do not add a MAL provider call, snapshot build, DB write, cache build, or Celery scheduling to <code>build_anime_series_view</code> or to Series View rendering. Refresh work belongs to triggers, tasks, and rebuild commands before the reader runs.</p>
+<h2 id="projection-rules">Projection rules<a class="headerlink" href="#projection-rules" title="Permanent link">&para;</a></h2>
+<p>The projection consumes franchise snapshots and uses the real Series View rule set, not the detail-page UI sections.</p>
+<p>Groupable relations are:</p>
+<ul>
+<li><code>prequel</code></li>
+<li><code>sequel</code></li>
+<li><code>parent_story</code></li>
+<li><code>full_story</code></li>
+<li><code>side_story</code></li>
+<li><code>spin_off</code></li>
+</ul>
+<p>Compatible root media types are:</p>
+<ul>
+<li><code>tv</code></li>
+<li><code>ona</code></li>
+<li><code>movie</code></li>
+<li><code>ova</code></li>
+</ul>
+<p>Independent continuity boundaries are intentionally narrow:</p>
+<ul>
+<li><code>alternative_version</code> is not a normal groupable relation in Series View. It is
+  treated as a narrow boundary signal when the projection builder detects
+  autonomous old/remake-style continuities.</li>
+<li><code>alternative_setting</code> is not part of the Series View groupable relation set.</li>
+<li>The independent continuity media types affected by the boundary are <code>tv</code>, <code>ona</code>, and <code>ova</code>.</li>
+<li><code>movie</code> is a compatible root media type, but it does not trigger the autonomous <code>alternative_version</code> boundary behavior.</li>
+</ul>
+<h2 id="persisted-read-model">Persisted read model<a class="headerlink" href="#persisted-read-model" title="Permanent link">&para;</a></h2>
+<p><code>AnimeSeriesViewMembership</code> is the per-user read model consumed by the list reader. It stores:</p>
+<ul>
+<li><code>user</code></li>
+<li><code>media_id</code></li>
+<li><code>root_media_id</code></li>
+<li><code>display_media_id</code></li>
+<li><code>display_title</code></li>
+<li><code>display_image</code></li>
+<li><code>display_media_type</code></li>
+<li><code>display_start_date</code></li>
+<li><code>group_kind</code></li>
+<li><code>projection_version</code></li>
+<li><code>created_at</code></li>
+<li><code>updated_at</code></li>
+</ul>
+<p>Persistence constraints and read-path indexes:</p>
+<ul>
+<li>unique constraint on <code>(user, media_id)</code>;</li>
+<li>indexes on <code>(user, media_id)</code>, <code>(user, root_media_id)</code>, and <code>(user, projection_version)</code>;</li>
+<li><code>projection_version = franchise_root_v4</code>;</li>
+<li><code>group_kind = franchise | singleton</code>.</li>
+</ul>
+<p>Memberships are not global. They are per-user rows for the user's tracked anime.</p>
+<h2 id="refresh-triggers">Refresh triggers<a class="headerlink" href="#refresh-triggers" title="Permanent link">&para;</a></h2>
+<p>Series View membership refresh is asynchronous after user-library changes:</p>
+<ul>
+<li>manual MAL anime add -&gt; <code>schedule_manual_add</code>;</li>
+<li>delete MAL anime -&gt; <code>schedule_delete</code>;</li>
+<li>import-created anime -&gt; <code>schedule_import_batch</code>.</li>
+</ul>
+<p>Operational behavior:</p>
+<ul>
+<li>refresh is scheduled after the surrounding transaction commits;</li>
+<li>Celery task <code>Refresh Anime Series View franchise projection</code> performs the refresh;</li>
+<li>queue locks prevent duplicate refresh scheduling for the same user/media/mode tuple;</li>
+<li>the queue lock is deleted in <code>finally</code> when the task exits;</li>
+<li>normal refresh is non-destructive until a projection succeeds;</li>
+<li>delete mode removes direct memberships for deleted media and then rebuilds affected groups.</li>
+</ul>
+<h2 id="reader-and-ui-rendering">Reader and UI rendering<a class="headerlink" href="#reader-and-ui-rendering" title="Permanent link">&para;</a></h2>
+<p><code>build_anime_series_view</code> reads persisted memberships and groups tracked entries by <code>root_media_id</code>. It does not build snapshots and does not call MAL.</p>
+<p>Series View pagination is 12 groups per page. Each card renders the root image, root title, root media type, and the count of tracked entries. The card link points to the root through <code>media_url</code>.</p>
+<p><code>unprojected_count</code> is the count of tracked entries without an exploitable membership. When it is non-zero, the first Series View page shows the preparation message so the user understands that grouping is still being prepared.</p>
+<h2 id="rebuild-command">Rebuild command<a class="headerlink" href="#rebuild-command" title="Permanent link">&para;</a></h2>
+<p>Use the management command to backfill or repair memberships:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users<span class="w"> </span>--dry-run
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--all-users
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--dry-run
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>rebuild_anime_series_view<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span><span class="w"> </span>--media-id<span class="w"> </span><span class="m">11757</span><span class="w"> </span>--dry-run
 </span></code></pre></div>
-<p>Execution surfaces:</p>
+<p>Even with <code>refresh_cache=False</code>, a rebuild can contact MAL when the local provider cache does not contain the nodes required to build the snapshot.</p>
+<h2 id="debugging-checklist">Debugging checklist<a class="headerlink" href="#debugging-checklist" title="Permanent link">&para;</a></h2>
+<p>Check these symptoms from the read model back toward the projection and provider cache:</p>
 <ul>
-<li>management command <code>python manage.py import_anime_franchise</code>;</li>
-<li>Celery task <code>Import anime franchise</code>;</li>
-<li>optional Beat schedule entry <code>auto_import_anime_franchise</code>.</li>
+<li><code>unprojected_count &gt; 0</code>;</li>
+<li>stale membership;</li>
+<li>wrong root;</li>
+<li>franchise split into multiple cards;</li>
+<li>alternative continuity merged when it should remain separated;</li>
+<li>too many MAL calls during backfill;</li>
+<li>Celery refresh task failure.</li>
 </ul>
-<h2 id="when-to-use-each-profile">When to use each profile<a class="headerlink" href="#when-to-use-each-profile" title="Permanent link">&para;</a></h2>
-<h3 id="continuity"><code>continuity</code><a class="headerlink" href="#continuity" title="Permanent link">&para;</a></h3>
+<h2 id="boundaries-and-known-examples">Boundaries and known examples<a class="headerlink" href="#boundaries-and-known-examples" title="Permanent link">&para;</a></h2>
+<p>These examples explain the rules; do not hardcode these examples or their MAL IDs into product behavior.</p>
 <ul>
-<li>Recommended default profile.</li>
-<li>Imports main continuity entries.</li>
-<li>Best balance between usefulness and avoiding noise.</li>
+<li>SAO + Gun Gale Online -&gt; same Sword Art Online card when the snapshot confirms the groupable relationship.</li>
+<li>Code Geass branches -&gt; same card if the snapshot confirms groupable franchise structure.</li>
+<li>Spice &amp; Wolf old/remake -&gt; separate cards through the <code>alternative_version</code> boundary.</li>
 </ul>
-<h3 id="satellites"><code>satellites</code><a class="headerlink" href="#satellites" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Adds selected side content around the main continuity.</li>
-<li>More aggressive than <code>continuity</code>.</li>
-<li>Useful when users want side stories, alternatives, or selected spin-offs.</li>
-<li>Short non-<code>tv_special</code> single-episode satellites are allowed only when their local <code>prequel</code>/<code>sequel</code> branch is fully known and has runtimes of at least 15 minutes.</li>
-</ul>
-<h3 id="complete"><code>complete</code><a class="headerlink" href="#complete" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Maximum franchise coverage.</li>
-<li>Combines <code>continuity</code> and <code>satellites</code>.</li>
-<li>Useful for users who want the broadest automatic coverage.</li>
-</ul>
-<p>All automatically imported entries are created with the <code>Planning</code> status.</p>
-<p>Users remain responsible for moving imported entries to another status when they decide to start watching them.</p>
-<h2 id="profiles">Profiles<a class="headerlink" href="#profiles" title="Permanent link">&para;</a></h2>
-<h3 id="continuity_1"><code>continuity</code><a class="headerlink" href="#continuity_1" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Seed mode: all eligible library MAL anime entries.</li>
-<li>Continuity mode: transitive continuity component.</li>
-<li>Selects IDs from <code>snapshot.continuity_component</code>.</li>
-<li>Excludes MAL media types <code>cm</code> and <code>pv</code>.</li>
-<li>Excludes entries with runtime <code>&lt;= 15</code> minutes when runtime is known.</li>
-<li>Excludes targets of normalized <code>summary</code> relations.</li>
-</ul>
-<h3 id="satellites_1"><code>satellites</code><a class="headerlink" href="#satellites_1" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Seed mode: canonical roots only, based on known scan-state component root.</li>
-<li>Satellites mode: direct-only.</li>
-<li>Included relation types: <code>spin_off</code>, <code>alternative_version</code>, <code>side_story</code>.</li>
-<li>Excludes MAL media types <code>cm</code> and <code>pv</code>.</li>
-<li><code>tv_special</code> requires known runtime greater than 15 minutes.</li>
-<li>Other targets require known runtime at least 15 minutes.</li>
-<li>For non-<code>tv_special</code> targets, single-episode entries with runtime <code>&lt;= 30</code> minutes are treated as short satellite candidates.</li>
-<li>Short satellite candidates are accepted only when their local <code>prequel</code>/<code>sequel</code> branch is fully available in the snapshot.</li>
-<li>Every entry in that local branch must have a known runtime of at least 15 minutes.</li>
-<li>If the local branch contains a missing node, unknown runtime, or runtime below 15 minutes, the candidate is excluded.</li>
-</ul>
-<h3 id="complete_1"><code>complete</code><a class="headerlink" href="#complete_1" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Union of <code>continuity</code> and <code>satellites</code>.</li>
-<li>Fingerprint payload includes both profile selections and the union IDs.</li>
-</ul>
-<h2 id="seed-selection">Seed selection<a class="headerlink" href="#seed-selection" title="Permanent link">&para;</a></h2>
-<p><code>AnimeImportStateService.select_due_seeds()</code> considers existing <code>Anime</code> rows where:</p>
-<ul>
-<li>source is MAL;</li>
-<li>media type is anime;</li>
-<li>status is <code>Planning</code>, <code>In progress</code>, or <code>Completed</code>.</li>
-</ul>
-<p>Optional filters:</p>
-<ul>
-<li><code>--user-id</code> limits users;</li>
-<li><code>--limit</code> caps selected due seeds;</li>
-<li><code>--full-rescan</code> bypasses next-scan due checks.</li>
-</ul>
-<p>Canonical-only profiles use known <code>component_root_mal_id</code> from previous scan state to avoid scanning satellite profiles from every library entry.</p>
-<h2 id="scan-state">Scan state<a class="headerlink" href="#scan-state" title="Permanent link">&para;</a></h2>
-<p><code>AnimeImportScanState</code> is keyed logically by user, seed MAL ID, and profile. It stores:</p>
-<ul>
-<li>last result fingerprint;</li>
-<li>last scanned/success/error timestamps;</li>
-<li>consecutive stable scan count;</li>
-<li>consecutive error count;</li>
-<li>next scan timestamp;</li>
-<li>canonical component root;</li>
-<li>last component size.</li>
-</ul>
-<p>Success behavior:</p>
-<ul>
-<li>changed fingerprint: reset stable scans and scan again sooner;</li>
-<li>unchanged fingerprint: increment stable scans and increase delay;</li>
-<li>stable delays include deterministic jitter and cap at a long interval.</li>
-</ul>
-<p>Error behavior:</p>
-<ul>
-<li>increment error count;</li>
-<li>exponential backoff up to 24 hours;</li>
-<li>deterministic jitter to avoid synchronized retries.</li>
-</ul>
-<h2 id="entry-creation">Entry creation<a class="headerlink" href="#entry-creation" title="Permanent link">&para;</a></h2>
-<p>For each selected missing MAL ID:</p>
-<ul>
-<li>fetch minimal MAL anime metadata;</li>
-<li>create or reuse the shared <code>Item</code> row;</li>
-<li>create an <code>Anime</code> row for the user;</li>
-<li>default status is <code>Planning</code>;</li>
-<li><code>_skip_hot_priority</code> is set to avoid recursive hot-priority import triggers from the importer-created row.</li>
-</ul>
-<p>Creation happens in a transaction. A dry run counts planned creations without writing entries or scan-state successes.</p>
-<h2 id="notifications">Notifications<a class="headerlink" href="#notifications" title="Permanent link">&para;</a></h2>
-<p>Created entries call the existing entry-added notification hook after transaction commit. Notification delivery still follows the existing events/notification subsystem behavior and user configuration.</p>
-<h2 id="cache-warmup-after-import">Cache warmup after import<a class="headerlink" href="#cache-warmup-after-import" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Import creates entries
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> -&gt; transaction commit
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> -&gt; cache warm task scheduled
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a> -&gt; detail page can later use prebuilt franchise payload
+<h2 id="future-direction">Future direction<a class="headerlink" href="#future-direction" title="Permanent link">&para;</a></h2>
+<p>The current model is a per-user read model. It is robust for this step. A future Spec 2 could replace or complement it with a global MAL franchise index:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>media_id -&gt; root_media_id + display metadata
 </span></code></pre></div>
-<p>The importer schedules one forced cache warm build per component root per run. Warmup bypasses freshness checks because the user's library changed, but still uses queue locks to avoid duplicate enqueues.</p>
-<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
-<p>The checked-in Compose services are <code>yamtrack</code> and <code>redis</code>.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--dry-run
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>satellites<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span><span class="nb">complete</span><span class="w"> </span>--full-rescan<span class="w"> </span>--refresh-cache
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>import_anime_franchise<span class="w"> </span>--profile<span class="w"> </span>continuity<span class="w"> </span>--user-id<span class="w"> </span><span class="m">1</span>
-</span></code></pre></div>
-<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></td>
-<td>Enables or disables scheduled franchise import automation.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></td>
-<td>Beat interval between automatic import runs.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></td>
-<td>Profile used by the scheduled import task, such as <code>continuity</code>, <code>satellites</code>, or <code>complete</code>.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></td>
-<td>Tells scheduled imports whether MAL/provider cache should be refreshed during import.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></td>
-<td>Forces scheduled imports to ignore due times and rescan eligible seeds.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></td>
-<td>Maximum number of due seeds processed per scheduled run when configured.</td>
-</tr>
-<tr>
-<td><code>MAL_RATE_LIMIT_PER_MINUTE</code></td>
-<td>Controls MAL provider request rate to avoid hitting API limits.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="failure-behavior">Failure behavior<a class="headerlink" href="#failure-behavior" title="Permanent link">&para;</a></h2>
+<p>The projection should remain pure and independent of the user so this evolution stays possible.</p>
+<h2 id="refresh-sources">Refresh sources<a class="headerlink" href="#refresh-sources" title="Permanent link">&para;</a></h2>
+<p>Anime Series View rendering is DB-only. Refresh work happens before rendering through triggers, tasks, commands, import, and maintenance.</p>
+<p>Refresh sources include:</p>
 <ul>
-<li>The Celery import task uses lock key <code>anime-franchise-import:&lt;profile&gt;</code> and skips if the same profile is already running.</li>
-<li>Per-seed errors are counted and recorded in scan state when not dry-running.</li>
-<li>A failed seed does not abort the whole import run.</li>
-<li>Cache warmup scheduling errors are counted separately from entry creation errors.</li>
+<li>manual MAL anime add;</li>
+<li>delete MAL anime;</li>
+<li>import-created anime;</li>
+<li>autonomous maintenance first observation;</li>
+<li>autonomous maintenance root change;</li>
+<li>autonomous maintenance detected fingerprint change;</li>
+<li>optional refresh on every maintenance success when <code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS=True</code>.</li>
 </ul>
-<h2 id="relationship-with-maintenance-and-discovery">Relationship with maintenance and discovery<a class="headerlink" href="#relationship-with-maintenance-and-discovery" title="Permanent link">&para;</a></h2>
-<p>Import, maintenance, discovery, cache warmup, and Series View refresh are separate consumers around the same canonical franchise snapshot:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Import creates missing Anime rows.
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>Maintenance keeps existing tracked franchise data fresh.
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>Discovery records visible missing entries and can notify.
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>Cache warmup prepares detail pages.
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Series View refresh keeps list grouping current.
-</span></code></pre></div>
-<p>Import uses <code>AnimeFranchiseBuildSession</code> for shared per-operation hydration. The same run can build a snapshot, select profile entries, create missing rows, warm cache payloads, process discovery, and refresh Anime Series View memberships without treating those consumers as the same system.</p>
-<p>Important boundaries:</p>
-<ul>
-<li>import creates missing user library entries;</li>
-<li>autonomous franchise maintenance does not directly create missing <code>Anime</code> rows;</li>
-<li>discovery records visible missing entries and can notify users;</li>
-<li>cache warmup prepares detail-page payloads but does not decide import eligibility;</li>
-<li>Series View refresh keeps the DB read model current before rendering;</li>
-<li>import profile selection is not UI placement.</li>
-</ul>
-<p>When import creates a row, the entry defaults to <code>Planning</code>, queues an entry-added notification, initializes MAL release-date state when metadata is available, and sets <code>_skip_hot_priority</code> to avoid recursive hot-priority behavior.</p>
-<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>, <a href="../anime-franchise-cache/">franchise cache</a>, and <a href="../anime-series-view/">Anime Series View</a>.</p>
+<p>The <code>media_list</code> reader should only read <code>AnimeSeriesViewMembership</code> rows and group by <code>root_media_id</code>. No MAL provider call, snapshot build, cache build, DB write, or Celery scheduling belongs in Series View rendering.</p>
+<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a> for the maintenance refresh path.</p>
 
 
 
