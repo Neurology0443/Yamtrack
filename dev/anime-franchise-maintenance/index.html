@@ -590,6 +590,7 @@
 <li>selects a bounded batch of due state rows;</li>
 <li>builds one canonical franchise snapshot per processed seed with a shared build session;</li>
 <li>rebuilds the user-agnostic detail-page franchise cache payload;</li>
+<li>can synchronize fresh MAL cover images from refreshed snapshot nodes into the global <code>Item.image</code> row when <code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE=True</code>;</li>
 <li>processes discovery state for newly visible missing franchise entries;</li>
 <li>can queue franchise discovery notifications for eligible new entries after the
   user's discovery baseline;</li>
@@ -716,15 +717,26 @@
 <div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>process seed
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    ├─ build snapshot
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    ├─ compute component root
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    ├─ compute discovery fingerprint
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    ├─ collect tracked member media IDs
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    ├─ build maintenance fingerprint
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    ├─ rebuild UI cache
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    ├─ process discovery
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    ├─ refresh Series View when needed
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    └─ update state
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    ├─ sync fresh provider images into Item.image when refresh_cache=True
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    ├─ compute discovery fingerprint
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    ├─ collect tracked member media IDs
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    ├─ build maintenance fingerprint
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    ├─ rebuild UI cache
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    ├─ process discovery
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    ├─ refresh Series View when needed
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    └─ update state
 </span></code></pre></div>
 <p><code>AnimeFranchiseMaintenanceService</code> uses one shared <code>AnimeFranchiseBuildSession</code>. Cache rebuild, discovery, and Series View refresh can therefore reuse MAL metadata hydrated inside the same operation.</p>
+<h2 id="provider-image-synchronization">Provider image synchronization<a class="headerlink" href="#provider-image-synchronization" title="Permanent link">&para;</a></h2>
+<p>When maintenance builds a snapshot with <code>refresh_cache=True</code>, snapshot node images are treated as fresh MAL provider image candidates.</p>
+<p>The sync is best-effort:</p>
+<ul>
+<li>it updates only existing global MAL anime <code>Item</code> rows;</li>
+<li>it targets base rows where <code>season_number</code> and <code>episode_number</code> are blank;</li>
+<li>it does not create <code>Item</code> or <code>Anime</code> rows;</li>
+<li>it does not run when <code>refresh_cache=False</code>;</li>
+<li>failures are logged and recorded as non-critical errors, so cache rebuild, discovery, and Series View work can still continue.</li>
+</ul>
 <h2 id="franchise-member-coverage">Franchise member coverage<a class="headerlink" href="#franchise-member-coverage" title="Permanent link">&para;</a></h2>
 <p>After a seed succeeds, tracked members from the same canonical franchise snapshot are covered:</p>
 <ul>
@@ -781,6 +793,7 @@
 <li>retry delay is capped at seven days;</li>
 <li>locks prevent concurrent maintenance runs.</li>
 </ul>
+<p>Provider image sync errors are non-critical maintenance errors. They are recorded for visibility but do not stop cache rebuild, discovery, or Series View work the way critical failures do.</p>
 <h2 id="metadata-refresh-invalidation">Metadata refresh invalidation<a class="headerlink" href="#metadata-refresh-invalidation" title="Permanent link">&para;</a></h2>
 <p>MAL metadata refresh can detect strong relation changes and complement scheduled maintenance.</p>
 <p>When old and new related-anime edges differ for strong relations:</p>
@@ -825,7 +838,7 @@
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code></td>
 <td><code>True</code></td>
-<td>Whether maintenance refreshes MAL provider cache while building snapshots.</td>
+<td>Whether maintenance refreshes MAL provider cache while building snapshots; also gates maintenance-driven cover synchronization into <code>Item.image</code>.</td>
 </tr>
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES</code></td>
@@ -874,6 +887,7 @@
 </tr>
 </tbody>
 </table>
+<p><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code> also gates maintenance-driven cover synchronization into <code>Item.image</code>; with <code>False</code>, maintenance may rebuild from existing cache but will not sync snapshot images into <code>Item.image</code>.</p>
 <p>Compatibility settings that still exist in settings:</p>
 <table>
 <thead>
