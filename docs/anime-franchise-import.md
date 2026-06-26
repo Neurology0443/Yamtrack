@@ -39,7 +39,7 @@ Existing user MAL anime
  -> profile selection
  -> missing entry creation
  -> scan-state update
- -> notifications
+ -> entry-added notifications
  -> optional cache warmup
 ```
 
@@ -201,3 +201,30 @@ docker compose exec yamtrack python manage.py import_anime_franchise --profile c
 - Per-seed errors are counted and recorded in scan state when not dry-running.
 - A failed seed does not abort the whole import run.
 - Cache warmup scheduling errors are counted separately from entry creation errors.
+
+## Relationship with maintenance and discovery
+
+Import, maintenance, discovery, cache warmup, and Series View refresh are separate consumers around the same canonical franchise snapshot:
+
+```text
+Import creates missing Anime rows.
+Maintenance keeps existing tracked franchise data fresh.
+Discovery records visible missing entries and can notify.
+Cache warmup prepares detail pages.
+Series View refresh keeps list grouping current.
+```
+
+Import uses `AnimeFranchiseBuildSession` for shared per-operation hydration. The same run can build a snapshot, select profile entries, create missing rows, warm cache payloads, process discovery, and refresh Anime Series View memberships without treating those consumers as the same system.
+
+Important boundaries:
+
+- import creates missing user library entries;
+- autonomous franchise maintenance does not directly create missing `Anime` rows;
+- discovery records visible missing entries and can notify users;
+- cache warmup prepares detail-page payloads but does not decide import eligibility;
+- Series View refresh keeps the DB read model current before rendering;
+- import profile selection is not UI placement.
+
+When import creates a row, the entry defaults to `Planning`, queues an entry-added notification, initializes MAL release-date state when metadata is available, and sets `_skip_hot_priority` to avoid recursive hot-priority behavior.
+
+See [anime franchise maintenance](anime-franchise-maintenance.md), [franchise cache](anime-franchise-cache.md), and [Anime Series View](anime-series-view.md).
