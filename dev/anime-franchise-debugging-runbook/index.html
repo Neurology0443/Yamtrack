@@ -637,18 +637,6 @@
 <td>Request context enrichment and local media image lookup</td>
 </tr>
 <tr>
-<td>MAL anime cover stays stale after metadata refresh</td>
-<td>MAL cache payload image, <code>Item.image</code>, and <code>item_image_sync</code> rule</td>
-</tr>
-<tr>
-<td>Maintenance scan refreshed cache but cover did not change</td>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code>, snapshot node image, non-critical maintenance errors</td>
-</tr>
-<tr>
-<td>Season/episode row image did not change</td>
-<td>Expected for provider image sync; only base no-season/no-episode <code>Item</code> rows are targeted</td>
-</tr>
-<tr>
 <td>Alias page misses the franchise cache</td>
 <td>Alias key and canonical payload validity</td>
 </tr>
@@ -699,7 +687,6 @@
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_import_profiles
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.views.test_media_details
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.test_tasks
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.test_item_image_sync
 </span></code></pre></div>
 <p>Docker equivalents:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>app.tests.services.test_anime_franchise_ui_pipeline
@@ -905,7 +892,7 @@
 <li>image data stored in the cached franchise payload;</li>
 <li>image currently available on the Yamtrack media entry.</li>
 </ul>
-<p>A newer local image can be preferred without rebuilding the franchise payload. Fresh provider images may also update the global <code>Item.image</code> through <code>item_image_sync</code> before request-time enrichment displays that local image.</p>
+<p>A newer local image can be preferred without rebuilding the franchise payload.</p>
 <h2 id="docker-commands">Docker commands<a class="headerlink" href="#docker-commands" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>yamtrack
 </span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>redis
@@ -914,129 +901,6 @@
 </span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from app.tasks import build_mal_anime_franchise_payload; build_mal_anime_franchise_payload.delay(&#39;34161&#39;)&quot;</span>
 </span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>celery<span class="w"> </span>-A<span class="w"> </span>config<span class="w"> </span>inspect<span class="w"> </span>active
 </span></code></pre></div>
-<h2 id="inspect-provider-image-synchronization">Inspect provider image synchronization<a class="headerlink" href="#inspect-provider-image-synchronization" title="Permanent link">&para;</a></h2>
-<p>Use this when a MAL anime cover looks stale even though metadata or maintenance recently refreshed.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;from django.core.cache import cache; from app.models import Item, MediaTypes, Sources; from app.providers import mal_cache; media_id=&#39;30831&#39;; item=Item.objects.filter(source=Sources.MAL.value, media_type=MediaTypes.ANIME.value, media_id=media_id, season_number__isnull=True, episode_number__isnull=True).first(); payload=cache.get(mal_cache.get_anime_cache_key(media_id)); print({&#39;item_image&#39;: item.image if item else None, &#39;cache_image&#39;: payload.get(&#39;image&#39;) if payload else None})&quot;</span>
-</span></code></pre></div>
-<p>Interpretation:</p>
-<ul>
-<li><code>cache_image</code> changed but <code>item_image</code> did not: check whether the path used <code>refresh_cache=True</code> and whether <code>item_image_sync</code> rejected the candidate;</li>
-<li><code>item_image</code> is already equal to the provider image: no write is expected;</li>
-<li>image is blank or <code>IMG_NONE</code>: it should be ignored as a provider candidate;</li>
-<li>season/episode rows are intentionally not targeted.</li>
-</ul>
-<h2 id="inspect-autonomous-franchise-maintenance">Inspect autonomous franchise maintenance<a class="headerlink" href="#inspect-autonomous-franchise-maintenance" title="Permanent link">&para;</a></h2>
-<p>Use these commands when franchise pages, discovery notifications, cache payloads, or Anime Series View memberships appear stale even when users are not visiting detail pages.</p>
-<h3 id="inspect-settings">Inspect settings<a class="headerlink" href="#inspect-settings" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
-</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="s">from django.conf import settings</span>
-</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>
-</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="s">entry = settings.CELERY_BEAT_SCHEDULE.get(&quot;scan_mal_anime_franchise_maintenance&quot;)</span>
-</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>
-</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="s">print(&quot;SCAN_ENABLED:&quot;, settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED)</span>
-</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="s">print(&quot;SCAN_INTERVAL_MINUTES:&quot;, settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES)</span>
-</span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="s">print(&quot;SCAN_BATCH_SIZE:&quot;, settings.ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE)</span>
-</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="s">print(&quot;INITIAL_SPREAD_HOURS:&quot;, settings.ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS)</span>
-</span><span id="__span-24-10"><a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="s">print(&quot;beat_entry_exists:&quot;, bool(entry))</span>
-</span><span id="__span-24-11"><a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="s">print(&quot;beat_entry:&quot;, entry)</span>
-</span><span id="__span-24-12"><a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="s">PY</span>
-</span></code></pre></div>
-<h3 id="inspect-all-in-one-container-processes">Inspect all-in-one container processes<a class="headerlink" href="#inspect-all-in-one-container-processes" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>ps<span class="w"> </span>aux
-</span></code></pre></div>
-<p>Some deployments run <code>nginx</code>, <code>gunicorn</code>, <code>celery worker</code>, and <code>celery beat</code> inside one container under <code>supervisord</code>. Other deployments may split web, worker, and beat into separate services.</p>
-<h3 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>--since<span class="o">=</span>90m<span class="w"> </span>yamtrack<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-Ei<span class="w"> </span><span class="s2">&quot;Scan MAL anime franchise maintenance|anime franchise maintenance|Scheduler: Sending due task|succeeded|failed|error&quot;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">true</span>
-</span></code></pre></div>
-<h3 id="db-summary">DB summary<a class="headerlink" href="#db-summary" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
-</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="s">from django.utils import timezone</span>
-</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
-</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>
-</span><span id="__span-27-5"><a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="s">now = timezone.now()</span>
-</span><span id="__span-27-6"><a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a><span class="s">qs = AnimeFranchiseMaintenanceScanState.objects.all()</span>
-</span><span id="__span-27-7"><a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a><span class="s">print({</span>
-</span><span id="__span-27-8"><a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a><span class="s">    &quot;total_states&quot;: qs.count(),</span>
-</span><span id="__span-27-9"><a id="__codelineno-27-9" name="__codelineno-27-9" href="#__codelineno-27-9"></a><span class="s">    &quot;due_now&quot;: qs.filter(next_scan_at__lte=now).count(),</span>
-</span><span id="__span-27-10"><a id="__codelineno-27-10" name="__codelineno-27-10" href="#__codelineno-27-10"></a><span class="s">    &quot;with_success&quot;: qs.filter(last_success_at__isnull=False).count(),</span>
-</span><span id="__span-27-11"><a id="__codelineno-27-11" name="__codelineno-27-11" href="#__codelineno-27-11"></a><span class="s">    &quot;pending_first_success&quot;: qs.filter(last_success_at__isnull=True).count(),</span>
-</span><span id="__span-27-12"><a id="__codelineno-27-12" name="__codelineno-27-12" href="#__codelineno-27-12"></a><span class="s">    &quot;with_error&quot;: qs.exclude(last_error=&quot;&quot;).count(),</span>
-</span><span id="__span-27-13"><a id="__codelineno-27-13" name="__codelineno-27-13" href="#__codelineno-27-13"></a><span class="s">})</span>
-</span><span id="__span-27-14"><a id="__codelineno-27-14" name="__codelineno-27-14" href="#__codelineno-27-14"></a><span class="s">PY</span>
-</span></code></pre></div>
-<h3 id="due-states">Due states<a class="headerlink" href="#due-states" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
-</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="s">from django.utils import timezone</span>
-</span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
-</span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>
-</span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="s">for state in AnimeFranchiseMaintenanceScanState.objects.filter(next_scan_at__lte=timezone.now()).order_by(&quot;next_scan_at&quot;)[:20]:</span>
-</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or &quot;-&quot;, state.next_scan_at, state.last_success_at)</span>
-</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a><span class="s">PY</span>
-</span></code></pre></div>
-<h3 id="error-states">Error states<a class="headerlink" href="#error-states" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
-</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
-</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>
-</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="s">for state in AnimeFranchiseMaintenanceScanState.objects.exclude(last_error=&quot;&quot;).order_by(&quot;-last_error_at&quot;)[:20]:</span>
-</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.last_error_at, state.consecutive_error_count, state.last_error[:200])</span>
-</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a><span class="s">PY</span>
-</span></code></pre></div>
-<h3 id="next-state">Next state<a class="headerlink" href="#next-state" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
-</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="s">from app.models import AnimeFranchiseMaintenanceScanState</span>
-</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>
-</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="s">state = AnimeFranchiseMaintenanceScanState.objects.order_by(&quot;next_scan_at&quot;).first()</span>
-</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="s">if state:</span>
-</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a><span class="s">    print(state.id, state.user_id, state.seed_mal_id, state.component_root_mal_id or &quot;-&quot;, state.next_scan_at)</span>
-</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="s">else:</span>
-</span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a><span class="s">    print(&quot;no maintenance states&quot;)</span>
-</span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="s">PY</span>
-</span></code></pre></div>
-<h3 id="manual-scan">Manual scan<a class="headerlink" href="#manual-scan" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>scan_mal_anime_franchise_maintenance<span class="w"> </span>--limit<span class="w"> </span><span class="m">10</span><span class="w"> </span>--force
-</span></code></pre></div>
-<h3 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Symptom</th>
-<th>Meaning</th>
-<th>First check</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>total_states=0</code></td>
-<td>first scan not run, disabled setting, Beat missing, or no eligible anime</td>
-<td>settings and logs</td>
-</tr>
-<tr>
-<td><code>due_now&gt;0</code> after scan</td>
-<td>state became due after Beat or backlog exceeded batch</td>
-<td><code>next_scan_at</code> and logs</td>
-</tr>
-<tr>
-<td><code>with_error&gt;0</code></td>
-<td>state failure</td>
-<td>error state section</td>
-</tr>
-<tr>
-<td>many <code>root=-</code></td>
-<td>not processed yet or unresolved root</td>
-<td><code>last_success_at</code></td>
-</tr>
-<tr>
-<td><code>with_success</code> jumps faster than <code>processed</code></td>
-<td>one seed covered multiple tracked members</td>
-<td>root grouping</td>
-</tr>
-<tr>
-<td>task skipped <code>already_running</code></td>
-<td>maintenance lock active</td>
-<td>task logs and lock timeout</td>
-</tr>
-</tbody>
-</table>
 
 
 

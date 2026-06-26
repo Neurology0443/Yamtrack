@@ -632,54 +632,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mal-anime-metadata-cache" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        MAL anime metadata cache
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mal-anime-release-date-notifications" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        MAL anime release-date notifications
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#mal-anime-franchise-payload-cache" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
         MAL anime franchise payload cache
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mal-anime-franchise-import-automation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        MAL anime franchise import automation
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mal-anime-franchise-maintenance" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        MAL anime franchise maintenance
       </span>
     </span>
   </a>
@@ -827,10 +783,6 @@
 <td>TMDB metadata language. Uses a language code in ISO 639-1 (e.g., <code>en</code>). Also supports a country code in ISO 3166-1 (e.g., <code>en-US</code>). Metadata is cached for a few hours in Redis. You may need to clear the cache to see the new language immediately.</td>
 </tr>
 <tr>
-<td><code>TVDB_API</code></td>
-<td>TVDB API key. A default key is provided. Used for TVDB-backed metadata where supported.</td>
-</tr>
-<tr>
 <td><code>MAL_API</code></td>
 <td>MyAnimeList API key for anime and manga. A default key is provided.</td>
 </tr>
@@ -855,44 +807,12 @@
 <td>Default to <code>False</code>. Set to <code>True</code> to include adult content in game searches.</td>
 </tr>
 <tr>
-<td><code>BGG_API_TOKEN</code></td>
-<td>BoardGameGeek API token. A default token is provided.</td>
-</tr>
-<tr>
-<td><code>STEAM_API_KEY</code></td>
-<td>Steam Web API key. Default is empty. Set it when Steam metadata/features require a key.</td>
-</tr>
-<tr>
 <td><code>HARDCOVER_API</code></td>
 <td>Hardcover API key for books. A default key is provided, but it's recommended to get your own as it has a low rate limit. Custom values must include the <code>Bearer</code> prefix.</td>
 </tr>
 <tr>
 <td><code>COMICVINE_API</code></td>
 <td>ComicVine API key for comics. A default key is provided, but it's recommended to get your own as it has a low rate limit.</td>
-</tr>
-<tr>
-<td><code>TRAKT_API</code></td>
-<td>Trakt API client ID/key. A default key is provided.</td>
-</tr>
-<tr>
-<td><code>TRAKT_API_SECRET</code></td>
-<td>Trakt API client secret. Default is empty. Set it when Trakt OAuth/client-secret flows require it.</td>
-</tr>
-<tr>
-<td><code>ANILIST_ID</code></td>
-<td>AniList client ID. Default is empty.</td>
-</tr>
-<tr>
-<td><code>ANILIST_SECRET</code></td>
-<td>AniList client secret. Default is empty.</td>
-</tr>
-<tr>
-<td><code>SIMKL_ID</code></td>
-<td>Simkl client ID. A default value is provided.</td>
-</tr>
-<tr>
-<td><code>SIMKL_SECRET</code></td>
-<td>Simkl client secret. A default value is provided.</td>
 </tr>
 </tbody>
 </table>
@@ -951,14 +871,6 @@
 <td><code>TRACK_TIME</code></td>
 <td>Default to <code>True</code>. Set to <code>False</code> to disable time tracking in Yamtrack.</td>
 </tr>
-<tr>
-<td><code>VERSION</code></td>
-<td>Default to <code>dev</code>. Runtime version string usually set from the Docker build argument.</td>
-</tr>
-<tr>
-<td><code>SESSION_COOKIE_AGE</code></td>
-<td>Default to <code>1209600</code> seconds, which is 14 days. Controls Django session lifetime.</td>
-</tr>
 </tbody>
 </table>
 <h2 id="user-and-system-configuration">User and System Configuration<a class="headerlink" href="#user-and-system-configuration" title="Permanent link">&para;</a></h2>
@@ -985,22 +897,6 @@
 <tr>
 <td><code>WEB_CONCURRENCY</code></td>
 <td>Number of web server processes. Default to <code>1</code>.</td>
-</tr>
-<tr>
-<td><code>YAMTRACK_IPV6_ENABLED</code></td>
-<td>Default to <code>False</code>. Set to <code>True</code> to use the nginx config that also listens on IPv6.</td>
-</tr>
-<tr>
-<td><code>ENV_DEBUG</code></td>
-<td>Default to <code>False</code>. Set to <code>True</code> to run Celery worker and beat with debug log level under supervisord.</td>
-</tr>
-<tr>
-<td><code>DAILY_DIGEST_HOUR</code></td>
-<td>Default to <code>8</code>. Hour of day, in the configured timezone, when the daily digest task is scheduled.</td>
-</tr>
-<tr>
-<td><code>USER_MESSAGE_RETENTION_DAYS</code></td>
-<td>Default to <code>30</code>. Number of days shown user messages are kept before cleanup.</td>
 </tr>
 <tr>
 <td><code>SOCIAL_PROVIDERS</code></td>
@@ -1129,10 +1025,6 @@
 <td><code>TMDB_API_FILE</code></td>
 </tr>
 <tr>
-<td><code>TVDB_API</code></td>
-<td><code>TVDB_API_FILE</code></td>
-</tr>
-<tr>
 <td><code>MAL_API</code></td>
 <td><code>MAL_API_FILE</code></td>
 </tr>
@@ -1145,14 +1037,6 @@
 <td><code>IGDB_SECRET_FILE</code></td>
 </tr>
 <tr>
-<td><code>BGG_API_TOKEN</code></td>
-<td><code>BGG_API_TOKEN_FILE</code></td>
-</tr>
-<tr>
-<td><code>STEAM_API_KEY</code></td>
-<td><code>STEAM_API_KEY_FILE</code></td>
-</tr>
-<tr>
 <td><code>HARDCOVER_API</code></td>
 <td><code>HARDCOVER_API_FILE</code></td>
 </tr>
@@ -1163,18 +1047,6 @@
 <tr>
 <td><code>TRAKT_API</code></td>
 <td><code>TRAKT_API_FILE</code></td>
-</tr>
-<tr>
-<td><code>TRAKT_API_SECRET</code></td>
-<td><code>TRAKT_API_SECRET_FILE</code></td>
-</tr>
-<tr>
-<td><code>ANILIST_ID</code></td>
-<td><code>ANILIST_ID_FILE</code></td>
-</tr>
-<tr>
-<td><code>ANILIST_SECRET</code></td>
-<td><code>ANILIST_SECRET_FILE</code></td>
 </tr>
 <tr>
 <td><code>SIMKL_ID</code></td>
@@ -1220,92 +1092,6 @@
 </tr>
 </tbody>
 </table>
-<h2 id="mal-anime-metadata-cache">MAL anime metadata cache<a class="headerlink" href="#mal-anime-metadata-cache" title="Permanent link">&para;</a></h2>
-<p>These settings control individual MAL anime detail metadata cache entries, not the assembled franchise payload cache.</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>MAL_RATE_LIMIT_PER_MINUTE</code></td>
-<td><code>100</code></td>
-<td>Per-minute MyAnimeList API rate limit used by the provider request path. Lower this if MAL returns HTTP 429 responses.</td>
-</tr>
-<tr>
-<td><code>MAL_CACHE_FRESH_DAYS</code></td>
-<td><code>7</code></td>
-<td>Number of days a cached MAL anime detail payload is considered fresh.</td>
-</tr>
-<tr>
-<td><code>MAL_CACHE_KEEP_DAYS</code></td>
-<td><code>365</code></td>
-<td>Sliding TTL, in days, for keeping MAL anime detail payloads and sidecar metadata in Redis.</td>
-</tr>
-<tr>
-<td><code>MAL_CACHE_RETRY_AFTER_ERROR_HOURS</code></td>
-<td><code>12</code></td>
-<td>Cooldown before retrying a MAL anime metadata refresh after a refresh error.</td>
-</tr>
-<tr>
-<td><code>MAL_CACHE_REFRESH_MIN_INTERVAL_HOURS</code></td>
-<td><code>24</code></td>
-<td>Minimum interval before scheduling another background stale-refresh attempt for the same MAL anime metadata payload.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h2>
-<p>This scanner watches MAL anime start-date metadata and is separate from the normal <code>send_release_notifications</code> task.</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code></td>
-<td><code>true</code></td>
-<td>Enables the Celery Beat scanner for MAL anime start-date notifications.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS</code></td>
-<td><code>12</code></td>
-<td>Interval, in hours, for the MAL anime release-date scan schedule.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_BATCH_SIZE</code></td>
-<td><code>25</code></td>
-<td>Maximum number of due MAL anime release-date scan states processed per scan run.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS</code></td>
-<td><code>24</code></td>
-<td>Minimum age, in hours, before refreshing MAL metadata for release-date scanning.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS</code></td>
-<td><code>12</code></td>
-<td>Retry delay, in hours, after a release-date scan error.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS</code></td>
-<td><code>7</code></td>
-<td>Maximum backoff, in days, for release-date scan states.</td>
-</tr>
-<tr>
-<td><code>ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES</code></td>
-<td><code>360</code></td>
-<td>Celery scan lock duration, in minutes, to avoid concurrent release-date scans.</td>
-</tr>
-</tbody>
-</table>
 <h2 id="mal-anime-franchise-payload-cache">MAL anime franchise payload cache<a class="headerlink" href="#mal-anime-franchise-payload-cache" title="Permanent link">&para;</a></h2>
 <p>These settings control the complete assembled MAL anime franchise payload cache. They do not replace or alter the existing individual MAL anime metadata cache settings.</p>
 <table>
@@ -1317,11 +1103,6 @@
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>ANIME_FRANCHISE_GROUPING_ENABLED</code></td>
-<td><code>true</code></td>
-<td>Enables the MAL anime franchise grouping/detail-page feature.</td>
-</tr>
 <tr>
 <td><code>ANIME_FRANCHISE_CACHE_TTL_DAYS</code></td>
 <td><code>365</code></td>
@@ -1366,147 +1147,6 @@
 <td><code>ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION</code></td>
 <td><code>1</code></td>
 <td>Schema version used to invalidate incompatible cached franchise payloads.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="mal-anime-franchise-import-automation">MAL anime franchise import automation<a class="headerlink" href="#mal-anime-franchise-import-automation" title="Permanent link">&para;</a></h2>
-<p>These settings create/update the <code>auto_import_anime_franchise</code> Celery Beat entry only when enabled.</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED</code></td>
-<td><code>false</code></td>
-<td>Enables the optional Celery Beat task that runs automatic MAL anime franchise import.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES</code></td>
-<td><code>1440</code></td>
-<td>Interval, in minutes, for the automatic import task.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code></td>
-<td><code>continuity</code></td>
-<td>Import profile used by automation. Valid profiles are currently <code>continuity</code>, <code>satellites</code>, and <code>complete</code>.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE</code></td>
-<td><code>false</code></td>
-<td>Whether automated import should refresh MAL/provider cache data while building snapshots.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN</code></td>
-<td><code>false</code></td>
-<td>Whether automated import should ignore due-state scheduling and rescan all eligible seeds.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT</code></td>
-<td><code>None</code></td>
-<td>Optional maximum number of due seeds to process per automated import run. Empty value disables the limit.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="mal-anime-franchise-maintenance">MAL anime franchise maintenance<a class="headerlink" href="#mal-anime-franchise-maintenance" title="Permanent link">&para;</a></h2>
-<p>These settings create/update the <code>scan_mal_anime_franchise_maintenance</code> Celery Beat entry only when enabled.</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED</code></td>
-<td><code>false</code></td>
-<td>Enables the autonomous MAL anime franchise maintenance Celery Beat scanner.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES</code></td>
-<td><code>60</code></td>
-<td>Interval, in minutes, for the maintenance scanner schedule.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE</code></td>
-<td><code>10</code></td>
-<td>Maximum number of due maintenance states selected per scan run.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS</code></td>
-<td><code>24</code></td>
-<td>Target sweep window, in hours, used by maintenance cadence calculations.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS</code></td>
-<td><code>24</code></td>
-<td>Spread window, in hours, used when creating initial maintenance states.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE</code></td>
-<td><code>true</code></td>
-<td>Whether maintenance should request fresh MAL/provider cache data while processing seeds.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES</code></td>
-<td><code>360</code></td>
-<td>Celery lock duration, in minutes, to avoid concurrent maintenance scans.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS</code></td>
-<td><code>12</code></td>
-<td>Retry delay, in hours, after a maintenance error.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_CHANGE</code></td>
-<td><code>true</code></td>
-<td>Refreshes Anime Series View memberships when maintenance detects a changed maintenance fingerprint or root.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS</code></td>
-<td><code>false</code></td>
-<td>Refreshes Anime Series View memberships on every successful maintenance run. More aggressive than change-only refresh.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF</code></td>
-<td><code>false</code></td>
-<td>Enables additional stable-franchise backoff behavior for repeatedly unchanged franchises.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS</code></td>
-<td><code>30</code></td>
-<td>Maximum stable-franchise backoff, in days.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_AGE_YEARS</code></td>
-<td><code>15</code></td>
-<td>Minimum franchise age, in years, before a stable franchise can be considered deep-cold.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_STABLE_SCANS</code></td>
-<td><code>8</code></td>
-<td>Minimum consecutive stable scans before deep-cold cadence can apply.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_CHANGE_AGE_DAYS</code></td>
-<td><code>180</code></td>
-<td>Minimum age, in days, since the last detected change before deep-cold cadence can apply.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS</code></td>
-<td><code>21</code></td>
-<td>Minimum deep-cold scan interval, in days.</td>
-</tr>
-<tr>
-<td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS</code></td>
-<td><code>30</code></td>
-<td>Maximum deep-cold scan interval, in days.</td>
 </tr>
 </tbody>
 </table>
