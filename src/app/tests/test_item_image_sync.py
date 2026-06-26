@@ -171,6 +171,157 @@ class ItemImageSyncDatabaseTests(TestCase):
         item.refresh_from_db()
         self.assertEqual(item.image, "new")
 
+    def test_sync_provider_images_skips_nullable_image_entry(self):
+        item = Item.objects.create(
+            media_id="4",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Nullable Image Anime",
+            image="old",
+        )
+
+        count = item_image_sync.sync_provider_images(
+            [
+                item_image_sync.ProviderImageEntry(
+                    Sources.MAL.value, MediaTypes.ANIME.value, "4", None
+                )
+            ]
+        )
+
+        self.assertEqual(count, 0)
+        item.refresh_from_db()
+        self.assertEqual(item.image, "old")
+
+    def test_sync_provider_image_returns_zero_for_blank_required_fields(self):
+        Item.objects.create(
+            media_id="5",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Anime",
+            image="old",
+        )
+        valid_kwargs = {
+            "source": Sources.MAL.value,
+            "media_type": MediaTypes.ANIME.value,
+            "media_id": "5",
+            "image": "new",
+        }
+
+        for field in ("source", "media_type", "media_id", "image"):
+            kwargs = {**valid_kwargs, field: "  "}
+
+            self.assertEqual(item_image_sync.sync_provider_image(**kwargs), 0)
+
+    def test_sync_provider_images_skips_blank_required_fields(self):
+        item = Item.objects.create(
+            media_id="6",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Anime",
+            image="old",
+        )
+        entries = [
+            item_image_sync.ProviderImageEntry(
+                "  ", MediaTypes.ANIME.value, "6", "bad-source"
+            ),
+            item_image_sync.ProviderImageEntry(
+                Sources.MAL.value, "  ", "6", "bad-media-type"
+            ),
+            item_image_sync.ProviderImageEntry(
+                Sources.MAL.value, MediaTypes.ANIME.value, "  ", "bad-media-id"
+            ),
+            item_image_sync.ProviderImageEntry(
+                Sources.MAL.value, MediaTypes.ANIME.value, "6", "  "
+            ),
+        ]
+
+        self.assertEqual(item_image_sync.sync_provider_images(entries), 0)
+        item.refresh_from_db()
+        self.assertEqual(item.image, "old")
+
+    def test_sync_provider_images_last_entry_wins_after_normalization(self):
+        item = Item.objects.create(
+            media_id="7",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Anime",
+            image="old",
+        )
+        entries = [
+            item_image_sync.ProviderImageEntry(" mal ", " anime ", " 7 ", " first "),
+            item_image_sync.ProviderImageEntry(
+                Sources.MAL.value, MediaTypes.ANIME.value, "7", "last"
+            ),
+        ]
+
+        self.assertEqual(item_image_sync.sync_provider_images(entries), 1)
+        item.refresh_from_db()
+        self.assertEqual(item.image, "last")
+
+    def test_sync_provider_images_processes_more_entries_than_chunk_size(self):
+        over_chunk_count = item_image_sync.BULK_SYNC_QUERY_CHUNK_SIZE + 2
+        items = [
+            Item(
+                media_id=str(index),
+                source=Sources.MAL.value,
+                media_type=MediaTypes.ANIME.value,
+                title=f"Anime {index}",
+                image="old",
+            )
+            for index in range(1000, 1000 + over_chunk_count)
+        ]
+        Item.objects.bulk_create(items)
+        entries = [
+            item_image_sync.ProviderImageEntry(
+                Sources.MAL.value, MediaTypes.ANIME.value, str(index), "new"
+            )
+            for index in range(1000, 1000 + over_chunk_count)
+        ]
+
+        count = item_image_sync.sync_provider_images(entries)
+
+        self.assertEqual(count, over_chunk_count)
+        self.assertEqual(
+            Item.objects.filter(
+                media_id__in=[
+                    str(index) for index in range(1000, 1000 + over_chunk_count)
+                ],
+                image="new",
+            ).count(),
+            over_chunk_count,
+        )
+
+    def test_sync_provider_images_chunking_does_not_update_season_rows(self):
+        item = Item.objects.create(
+            media_id="8",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.ANIME.value,
+            title="Anime",
+            image="old",
+        )
+        season_item = Item.objects.create(
+            media_id="8",
+            source=Sources.MAL.value,
+            media_type=MediaTypes.SEASON.value,
+            title="Season",
+            image="season-old",
+            season_number=1,
+        )
+
+        count = item_image_sync.sync_provider_images(
+            [
+                item_image_sync.ProviderImageEntry(
+                    Sources.MAL.value, MediaTypes.ANIME.value, "8", "new"
+                )
+            ]
+        )
+
+        self.assertEqual(count, 1)
+        item.refresh_from_db()
+        season_item.refresh_from_db()
+        self.assertEqual(item.image, "new")
+        self.assertEqual(season_item.image, "season-old")
+
 
 class ItemImageSyncIntegrationTests(TestCase):
     def test_refresh_item_image_if_missing_uses_centralized_behavior(self):
