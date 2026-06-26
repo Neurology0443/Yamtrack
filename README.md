@@ -83,14 +83,6 @@ This fork extends Yamtrack with additional features focused on MyAnimeList (MAL)
 - Refreshes Anime Series View memberships when franchise structure changes.
 - Uses persistent scan state, batch limits, adaptive cadence, and jitter.
 
-### 🛠 Autonomous franchise maintenance
-
-- Keeps tracked MAL anime franchises fresh in the background.
-- Rebuilds franchise cache payloads.
-- Updates discovery state for newly visible entries.
-- Refreshes Anime Series View memberships when franchise structure changes.
-- Uses persistent scan state, batch limits, adaptive cadence, and jitter.
-
 Detailed fork docs are available in `docs/`:
 
 - [Architecture overview](docs/architecture-overview.md)
