@@ -81,7 +81,7 @@ Detail page        Notifications       Planning entries    Anime list cards   Fu
 
 `AnimeFranchiseBuildSession` owns per-operation hydration. It memoizes MAL anime payloads for one operation and creates graph builders and snapshot services that share that hydration context.
 
-This matters when one operation has several consumers. Import and maintenance can build a snapshot, warm cache, process discovery, initialize release-date state, and refresh Series View without repeatedly hydrating the same MAL IDs.
+This matters when one operation has several consumers. Import and maintenance can reuse the same build session for snapshot, cache, discovery, and Anime Series View work. Import-created entries can additionally initialize MAL release-date state when metadata is available.
 
 The session has operation-local freshness rules:
 
@@ -356,6 +356,7 @@ Event/release notifications use the existing `Send release notifications` task f
 
 | Area | Files |
 | --- | --- |
+| Provider metadata | `src/app/providers/mal.py`, `src/app/providers/mal_cache.py` |
 | Shared build session | `src/app/services/anime_franchise_build_session.py` |
 | Graph and snapshot | `src/app/services/anime_franchise_graph.py`, `src/app/services/anime_franchise_snapshot.py` |
 | Detail-page cache | `src/app/services/anime_franchise_cache.py`, `src/app/services/anime_franchise_cache_builder.py`, `src/app/services/anime_franchise_context.py`, `src/app/services/anime_franchise_scoped_payload.py` |
@@ -364,6 +365,7 @@ Event/release notifications use the existing `Send release notifications` task f
 | Metadata invalidation | `src/app/services/anime_franchise_continuity_invalidation.py` |
 | Discovery | `src/app/services/anime_franchise_discovery.py`, `src/events/notifications.py` |
 | Series View | `src/app/services/anime_series_view.py`, `src/app/services/anime_series_view_projection.py`, `src/app/services/anime_series_view_franchise_refresh.py`, `src/app/services/anime_series_view_refresh_triggers.py`, `src/app/management/commands/rebuild_anime_series_view.py` |
+| Views and templates | `src/app/views.py`, `src/templates/app/media_details.html`, `src/templates/app/media_list.html`, `src/templates/app/components/anime_series_groups.html`, `src/templates/app/components/anime_series_group_card.html` |
 | Release dates | `src/events/services/anime_release_date_notifications.py`, `src/events/tasks.py` |
 | Tasks and schedules | `src/app/tasks.py`, `src/app/schedules.py`, `src/config/settings.py` |
 

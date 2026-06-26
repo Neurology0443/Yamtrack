@@ -41,8 +41,6 @@ Groupable relations are:
 - `full_story`
 - `side_story`
 - `spin_off`
-- `alternative_setting`
-- `alternative_version`
 
 Compatible root media types are:
 
@@ -53,8 +51,10 @@ Compatible root media types are:
 
 Independent continuity boundaries are intentionally narrow:
 
-- `alternative_version` is the only alternative relation used as a boundary.
-- `alternative_setting` remains groupable and is not a boundary.
+- `alternative_version` is not a normal groupable relation in Series View. It is
+  treated as a narrow boundary signal when the projection builder detects
+  autonomous old/remake-style continuities.
+- `alternative_setting` is not part of the Series View groupable relation set.
 - The independent continuity media types affected by the boundary are `tv`, `ona`, and `ova`.
 - `movie` is a compatible root media type, but it does not trigger the autonomous `alternative_version` boundary behavior.
 
