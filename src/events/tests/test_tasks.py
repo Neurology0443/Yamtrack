@@ -154,6 +154,11 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         )
         self.assertEqual(result["title"], self.discovery.title)
         self.assertEqual(result["root_media_id"], self.discovery.component_root_mal_id)
+        self.assertEqual(
+            result["component_root_mal_id"],
+            self.discovery.component_root_mal_id,
+        )
+        self.assertEqual(result["reason"], "send_failed")
         mock_send.assert_called_once_with(self.user, self.discovery)
         self.assertIsNone(self.discovery.notified_at)
 
@@ -175,7 +180,12 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         )
         self.assertEqual(result["title"], self.discovery.title)
         self.assertEqual(result["root_media_id"], self.discovery.component_root_mal_id)
+        self.assertEqual(
+            result["component_root_mal_id"],
+            self.discovery.component_root_mal_id,
+        )
         self.assertEqual(result["root_title"], self.discovery.root_title)
+        self.assertNotIn("reason", result)
         mock_send.assert_called_once_with(self.user, self.discovery)
         self.assertIsNotNone(self.discovery.notified_at)
 
@@ -228,6 +238,25 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         self.assertTrue(result["skipped"])
         self.assertIsNone(result["notified_at"])
         self.assertEqual(result["notification_suppressed_reason"], "already_tracked")
+        mock_send.assert_not_called()
+
+    def test_task_returns_already_notified_when_notified_at_set(self):
+        self.discovery.notified_at = timezone.now()
+        self.discovery.save(update_fields=["notified_at"])
+
+        with patch(
+            "events.tasks.notifications.send_franchise_discovery_notification"
+        ) as mock_send:
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
+
+        self.assertEqual(result["reason"], "already_notified_or_suppressed")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
+        self.assertIsInstance(result["notified_at"], str)
+        self.assertIn("T", result["notified_at"])
+        self.assertEqual(result["notification_suppressed_reason"], "")
         mock_send.assert_not_called()
 
     def test_task_suppresses_when_entry_is_tracked_before_send(self):

@@ -180,6 +180,7 @@ def send_franchise_discovery_notification_task(user_id, discovery_id):  # noqa: 
             user_id=user_id,
             discovery_id=discovery_id,
             sent=bool(sent),
+            reason=None if sent else "send_failed",
             discovery=discovery,
         )
     finally:
@@ -212,6 +213,7 @@ def _franchise_discovery_task_result(
                 "discovered_media_id": discovery.discovered_media_id,
                 "title": discovery.title,
                 "root_media_id": discovery.component_root_mal_id,
+                "component_root_mal_id": discovery.component_root_mal_id,
                 "root_title": discovery.root_title,
                 "section_label": discovery.section_label,
                 "relation_type": discovery.relation_type,
