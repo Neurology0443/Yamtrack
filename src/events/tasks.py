@@ -83,11 +83,16 @@ def send_entry_added_notification_task(user_id, media_label):
 
 
 @shared_task(name="Send franchise discovery notification")
-def send_franchise_discovery_notification_task(user_id, discovery_id):
+def send_franchise_discovery_notification_task(user_id, discovery_id):  # noqa: PLR0911
     """Send queued MAL franchise discovery notification to a user."""
     lock_key = f"franchise-discovery-notification:{discovery_id}"
     if not cache.add(lock_key, "1", timeout=300):
-        return
+        return _franchise_discovery_task_result(
+            user_id=user_id,
+            discovery_id=discovery_id,
+            skipped=True,
+            reason="already_running",
+        )
 
     try:
         user = get_user_model().objects.filter(id=user_id).first()
@@ -99,7 +104,12 @@ def send_franchise_discovery_notification_task(user_id, discovery_id):
                 ),
                 user_id,
             )
-            return
+            return _franchise_discovery_task_result(
+                user_id=user_id,
+                discovery_id=discovery_id,
+                skipped=True,
+                reason="user_not_found",
+            )
 
         discovery = AnimeFranchiseDiscoveredEntry.objects.filter(
             id=discovery_id,
@@ -114,10 +124,27 @@ def send_franchise_discovery_notification_task(user_id, discovery_id):
                 discovery_id,
                 user_id,
             )
-            return
+            return _franchise_discovery_task_result(
+                user_id=user_id,
+                discovery_id=discovery_id,
+                skipped=True,
+                reason="discovery_not_found",
+            )
 
         if discovery.notified_at or discovery.notification_suppressed_reason:
-            return
+            return _franchise_discovery_task_result(
+                user_id=user_id,
+                discovery_id=discovery_id,
+                skipped=True,
+                reason="already_notified_or_suppressed",
+                notified_at=(
+                    discovery.notified_at.isoformat() if discovery.notified_at else None
+                ),
+                notification_suppressed_reason=(
+                    discovery.notification_suppressed_reason
+                ),
+                include_suppression_details=True,
+            )
 
         if (
             not user.franchise_discovery_notifications_enabled
@@ -126,21 +153,75 @@ def send_franchise_discovery_notification_task(user_id, discovery_id):
             if discovery.notification_queued_at:
                 discovery.notification_queued_at = None
                 discovery.save(update_fields=["notification_queued_at"])
-            return
+            return _franchise_discovery_task_result(
+                user_id=user_id,
+                discovery_id=discovery_id,
+                skipped=True,
+                reason="notifications_disabled",
+            )
 
         if is_mal_anime_tracked(
             user_id=user_id,
             media_id=discovery.discovered_media_id,
         ):
             _set_discovery_suppression_reason(discovery, "already_tracked")
-            return
+            return _franchise_discovery_task_result(
+                user_id=user_id,
+                discovery_id=discovery_id,
+                skipped=True,
+                reason="already_tracked",
+            )
 
         sent = notifications.send_franchise_discovery_notification(user, discovery)
         if sent:
             discovery.notified_at = timezone.now()
             discovery.save(update_fields=["notified_at"])
+        return _franchise_discovery_task_result(
+            user_id=user_id,
+            discovery_id=discovery_id,
+            sent=bool(sent),
+            discovery=discovery,
+        )
     finally:
         cache.delete(lock_key)
+
+
+def _franchise_discovery_task_result(
+    *,
+    user_id,
+    discovery_id,
+    sent=False,
+    skipped=False,
+    reason=None,
+    discovery=None,
+    notified_at=None,
+    notification_suppressed_reason=None,
+    include_suppression_details=False,
+):
+    result = {
+        "sent": sent,
+        "skipped": skipped,
+        "user_id": user_id,
+        "discovery_id": discovery_id,
+    }
+    if reason:
+        result["reason"] = reason
+    if discovery is not None:
+        result.update(
+            {
+                "discovered_media_id": discovery.discovered_media_id,
+                "title": discovery.title,
+                "root_media_id": discovery.component_root_mal_id,
+                "root_title": discovery.root_title,
+                "section_label": discovery.section_label,
+                "relation_type": discovery.relation_type,
+            }
+        )
+    if include_suppression_details or notified_at is not None:
+        result["notified_at"] = notified_at
+    if include_suppression_details or notification_suppressed_reason is not None:
+        result["notification_suppressed_reason"] = notification_suppressed_reason
+    return result
 
 
 def _set_discovery_suppression_reason(discovery, reason):

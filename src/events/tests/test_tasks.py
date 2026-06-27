@@ -73,7 +73,6 @@ class EntryAddedNotificationTaskTests(TestCase):
         )
 
 
-
 class FranchiseDiscoveryNotificationTaskTests(TestCase):
     """Tests for the franchise discovery notification task."""
 
@@ -103,9 +102,14 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         with patch(
             "events.tasks.notifications.send_franchise_discovery_notification"
         ) as mock_send:
-            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertEqual(result["reason"], "notifications_disabled")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
         self.assertEqual(self.discovery.notification_suppressed_reason, "")
@@ -120,9 +124,14 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         with patch(
             "events.tasks.notifications.send_franchise_discovery_notification"
         ) as mock_send:
-            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertEqual(result["reason"], "notifications_disabled")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
         self.assertEqual(self.discovery.notification_suppressed_reason, "")
@@ -133,9 +142,18 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
             "events.tasks.notifications.send_franchise_discovery_notification",
             return_value=False,
         ) as mock_send:
-            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertFalse(result["sent"])
+        self.assertFalse(result["skipped"])
+        self.assertEqual(
+            result["discovered_media_id"], self.discovery.discovered_media_id
+        )
+        self.assertEqual(result["title"], self.discovery.title)
+        self.assertEqual(result["root_media_id"], self.discovery.component_root_mal_id)
         mock_send.assert_called_once_with(self.user, self.discovery)
         self.assertIsNone(self.discovery.notified_at)
 
@@ -144,9 +162,20 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
             "events.tasks.notifications.send_franchise_discovery_notification",
             return_value=True,
         ) as mock_send:
-            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertTrue(result["sent"])
+        self.assertFalse(result["skipped"])
+        self.assertEqual(result["discovery_id"], self.discovery.id)
+        self.assertEqual(
+            result["discovered_media_id"], self.discovery.discovered_media_id
+        )
+        self.assertEqual(result["title"], self.discovery.title)
+        self.assertEqual(result["root_media_id"], self.discovery.component_root_mal_id)
+        self.assertEqual(result["root_title"], self.discovery.root_title)
         mock_send.assert_called_once_with(self.user, self.discovery)
         self.assertIsNotNone(self.discovery.notified_at)
 
@@ -159,11 +188,47 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         with patch(
             "events.tasks.notifications.send_franchise_discovery_notification"
         ) as mock_send:
-            send_franchise_discovery_notification_task(other_user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                other_user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertEqual(result["reason"], "discovery_not_found")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
+
+    def test_task_returns_user_not_found_when_user_missing(self):
+        with patch(
+            "events.tasks.notifications.send_franchise_discovery_notification"
+        ) as mock_send:
+            result = send_franchise_discovery_notification_task(
+                999999, self.discovery.id
+            )
+
+        self.assertEqual(result["reason"], "user_not_found")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
+        mock_send.assert_not_called()
+
+    def test_task_returns_already_notified_or_suppressed(self):
+        self.discovery.notification_suppressed_reason = "already_tracked"
+        self.discovery.save(update_fields=["notification_suppressed_reason"])
+
+        with patch(
+            "events.tasks.notifications.send_franchise_discovery_notification"
+        ) as mock_send:
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
+
+        self.assertEqual(result["reason"], "already_notified_or_suppressed")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
+        self.assertIsNone(result["notified_at"])
+        self.assertEqual(result["notification_suppressed_reason"], "already_tracked")
+        mock_send.assert_not_called()
 
     def test_task_suppresses_when_entry_is_tracked_before_send(self):
         item = Item.objects.create(
@@ -178,15 +243,36 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
         with patch(
             "events.tasks.notifications.send_franchise_discovery_notification"
         ) as mock_send:
-            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
 
         self.discovery.refresh_from_db()
+        self.assertEqual(result["reason"], "already_tracked")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
         mock_send.assert_not_called()
         self.assertIsNone(self.discovery.notified_at)
         self.assertEqual(
             self.discovery.notification_suppressed_reason,
             "already_tracked",
         )
+
+    def test_task_returns_already_running_when_lock_exists(self):
+        lock_key = f"franchise-discovery-notification:{self.discovery.id}"
+        cache.add(lock_key, "1", timeout=300)
+
+        with patch(
+            "events.tasks.notifications.send_franchise_discovery_notification"
+        ) as mock_send:
+            result = send_franchise_discovery_notification_task(
+                self.user.id, self.discovery.id
+            )
+
+        self.assertEqual(result["reason"], "already_running")
+        self.assertFalse(result["sent"])
+        self.assertTrue(result["skipped"])
+        mock_send.assert_not_called()
 
     def test_cache_lock_is_released_when_send_returns_false(self):
         with patch(
@@ -197,7 +283,9 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
             send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
 
         self.assertEqual(mock_send.call_count, 2)
-        self.assertIsNone(cache.get(f"franchise-discovery-notification:{self.discovery.id}"))
+        self.assertIsNone(
+            cache.get(f"franchise-discovery-notification:{self.discovery.id}")
+        )
 
     def test_cache_lock_is_released_when_send_raises(self):
         with (
@@ -207,11 +295,11 @@ class FranchiseDiscoveryNotificationTaskTests(TestCase):
             ),
             self.assertRaises(RuntimeError),
         ):
-            send_franchise_discovery_notification_task(
-                self.user.id, self.discovery.id
-            )
+            send_franchise_discovery_notification_task(self.user.id, self.discovery.id)
 
-        self.assertIsNone(cache.get(f"franchise-discovery-notification:{self.discovery.id}"))
+        self.assertIsNone(
+            cache.get(f"franchise-discovery-notification:{self.discovery.id}")
+        )
 
 
 class NotificationHelperReturnValueTests(TestCase):
