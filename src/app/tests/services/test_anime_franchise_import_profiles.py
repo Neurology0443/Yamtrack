@@ -522,7 +522,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
 
         selection = SatellitesImportProfile().select(snapshot)
 
-        self.assertNotIn("11757", selection.media_ids)
+        self.assertEqual(selection.media_ids, set())
 
     def test_satellites_profile_keeps_alternative_version_with_series_line(self):
         nodes = {
@@ -569,23 +569,67 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
 
         self.assertIn("20", selection.media_ids)
 
+    def _snapshot_for_no_series_line_normal_satellite(
+        self,
+        *,
+        relation_type: str,
+    ) -> AnimeFranchiseSnapshot:
+        nodes = {
+            "10": AnimeNode(
+                "10",
+                "Standalone Root",
+                "mal",
+                "movie",
+                "img",
+                date(2020, 1, 1),
+                [],
+                runtime_minutes=90,
+                episode_count=1,
+            ),
+            "20": AnimeNode(
+                "20",
+                "Normal Satellite",
+                "mal",
+                "movie",
+                "img",
+                date(2021, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=13,
+            ),
+        }
+        relation = AnimeRelation("10", "20", relation_type)
+        return AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[relation],
+            continuity_component=[nodes["10"]],
+            series_line=[],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[relation],
+            has_series_line=False,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
+        )
+
     def test_satellites_profile_keeps_normal_satellites_without_series_line(self):
         for relation_type in ("spin_off", "side_story"):
             with self.subTest(relation_type=relation_type):
-                snapshot = self._snapshot_for_no_series_line_root_relation(
+                snapshot = self._snapshot_for_no_series_line_normal_satellite(
                     relation_type=relation_type,
                 )
 
                 selection = SatellitesImportProfile().select(snapshot)
 
-                self.assertIn("11757", selection.media_ids)
+                self.assertEqual(selection.media_ids, {"20"})
 
     def test_complete_profile_blocks_root_alternative_version_without_series_line(self):
         snapshot = self._snapshot_for_no_series_line_root_relation()
 
         selection = CompleteImportProfile().select(snapshot)
 
-        self.assertNotIn("11757", selection.media_ids)
+        self.assertEqual(selection.media_ids, {"42916"})
 
     def test_satellites_profile_excludes_runtime_below_15_minutes(self):
         nodes = {

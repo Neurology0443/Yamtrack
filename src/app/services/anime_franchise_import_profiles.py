@@ -1,13 +1,14 @@
-# ruff: noqa: D101,D102,D103,D107,ARG002,SIM102,TC001
 """Import profiles powered by AnimeFranchiseSnapshot."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
-from app.services.anime_franchise_types import AnimeNode, AnimeRelation
+if TYPE_CHECKING:
+    from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
+    from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
 class SeedMode(StrEnum):
@@ -26,6 +27,8 @@ class ProfileSelection:
 
 
 class BaseImportProfile:
+    """Base contract for anime franchise import profiles."""
+
     key = "base"
     seed_mode = SeedMode.ALL_LIBRARY
     continuity_mode = "none"
@@ -34,8 +37,10 @@ class BaseImportProfile:
     include_relation_types: frozenset[str] = frozenset()
 
     def select(
-        self, snapshot: AnimeFranchiseSnapshot
+        self,
+        snapshot: AnimeFranchiseSnapshot,
     ) -> ProfileSelection:  # pragma: no cover
+        """Select media IDs from an anime franchise snapshot."""
         raise NotImplementedError
 
     def component_root_media_id(self, snapshot: AnimeFranchiseSnapshot) -> str:
@@ -47,8 +52,8 @@ class BaseImportProfile:
 
     def detail_cache_warm_media_ids(
         self,
-        snapshot: AnimeFranchiseSnapshot,
-        created_ids: set[str],
+        snapshot: AnimeFranchiseSnapshot,  # noqa: ARG002
+        created_ids: set[str],  # noqa: ARG002
     ) -> set[str]:
         """Return created media IDs that should receive a detail/scoped cache warm.
 
@@ -69,6 +74,7 @@ class BaseImportProfile:
         seed_mal_id: str,
         known_canonical_root: str | None,
     ) -> bool:
+        """Return whether a seed may run this profile."""
         if self.seed_mode == SeedMode.ALL_LIBRARY:
             return True
         if self.seed_mode == SeedMode.CANONICAL_ONLY:
@@ -78,6 +84,8 @@ class BaseImportProfile:
 
 
 class ContinuityImportProfile(BaseImportProfile):
+    """Import profile for continuity entries only."""
+
     key = "continuity"
     continuity_mode = "transitive"
     ignored_media_types = {"cm", "pv"}
@@ -85,12 +93,14 @@ class ContinuityImportProfile(BaseImportProfile):
 
     def detail_cache_warm_media_ids(
         self,
-        snapshot: AnimeFranchiseSnapshot,
-        created_ids: set[str],
+        snapshot: AnimeFranchiseSnapshot,  # noqa: ARG002
+        created_ids: set[str],  # noqa: ARG002
     ) -> set[str]:
+        """Return media IDs to warm after continuity imports."""
         return set()
 
     def is_runtime_eligible(self, node: AnimeNode) -> bool:
+        """Return whether a continuity node passes runtime filters."""
         runtime_minutes = node.runtime_minutes
         if runtime_minutes is None:
             return True
@@ -104,6 +114,7 @@ class ContinuityImportProfile(BaseImportProfile):
         }
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
+        """Select continuity media IDs from the snapshot."""
         summary_target_ids = self._summary_target_ids(snapshot)
         ids = {
             node.media_id
@@ -122,6 +133,8 @@ class ContinuityImportProfile(BaseImportProfile):
 
 
 class SatellitesImportProfile(BaseImportProfile):
+    """Import profile for direct satellite entries around a franchise."""
+
     key = "satellites"
     seed_mode = SeedMode.CANONICAL_ONLY
     satellites_mode = "direct_only"
@@ -136,9 +149,10 @@ class SatellitesImportProfile(BaseImportProfile):
 
     def detail_cache_warm_media_ids(
         self,
-        snapshot: AnimeFranchiseSnapshot,
+        snapshot: AnimeFranchiseSnapshot,  # noqa: ARG002
         created_ids: set[str],
     ) -> set[str]:
+        """Return created satellite IDs to warm after import."""
         return {str(media_id) for media_id in created_ids}
 
     def is_no_series_line_root_ambiguous_relation(
@@ -159,6 +173,7 @@ class SatellitesImportProfile(BaseImportProfile):
         snapshot: AnimeFranchiseSnapshot,
         target_node: AnimeNode,
     ) -> bool:
+        """Return whether a satellite target passes runtime and episode filters."""
         runtime_minutes = target_node.runtime_minutes
 
         if target_node.media_type == "tv_special":
@@ -178,6 +193,7 @@ class SatellitesImportProfile(BaseImportProfile):
         return True
 
     def is_short_single_episode(self, target_node: AnimeNode) -> bool:
+        """Return whether a target is a short single-episode entry."""
         return (
             target_node.episode_count == 1
             and target_node.runtime_minutes is not None
@@ -189,6 +205,7 @@ class SatellitesImportProfile(BaseImportProfile):
         snapshot: AnimeFranchiseSnapshot,
         target_node: AnimeNode,
     ) -> bool:
+        """Return whether a short target belongs to a clean local branch."""
         component, is_complete = self.local_continuity_component(
             snapshot,
             target_node.media_id,
@@ -209,6 +226,7 @@ class SatellitesImportProfile(BaseImportProfile):
         snapshot: AnimeFranchiseSnapshot,
         root_media_id: str,
     ) -> tuple[list[AnimeNode], bool]:
+        """Return the local continuity component and whether it is complete."""
         queue = [str(root_media_id)]
         seen = set()
         component = []
@@ -236,13 +254,16 @@ class SatellitesImportProfile(BaseImportProfile):
                     if relation.target_media_id not in seen:
                         queue.append(relation.target_media_id)
 
-                elif relation.target_media_id == media_id:
-                    if relation.source_media_id not in seen:
-                        queue.append(relation.source_media_id)
+                elif (
+                    relation.target_media_id == media_id
+                    and relation.source_media_id not in seen
+                ):
+                    queue.append(relation.source_media_id)
 
         return component, is_complete
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
+        """Select direct satellite media IDs from the snapshot."""
         continuity_ids = {node.media_id for node in snapshot.continuity_component}
         selected = []
         for relation in snapshot.direct_candidates:
@@ -288,11 +309,14 @@ class SatellitesImportProfile(BaseImportProfile):
 
 
 class CompleteImportProfile(BaseImportProfile):
+    """Import profile combining continuity and satellite selections."""
+
     key = "complete"
     continuity_mode = "transitive"
     satellites_mode = "direct_only"
 
     def __init__(self):
+        """Initialize delegated profile selectors."""
         self.continuity = ContinuityImportProfile()
         self.satellites = SatellitesImportProfile()
 
@@ -301,6 +325,7 @@ class CompleteImportProfile(BaseImportProfile):
         snapshot: AnimeFranchiseSnapshot,
         created_ids: set[str],
     ) -> set[str]:
+        """Return created satellite IDs to warm after complete imports."""
         satellite_ids = {
             str(media_id) for media_id in self.satellites.select(snapshot).media_ids
         }
@@ -309,6 +334,7 @@ class CompleteImportProfile(BaseImportProfile):
         }
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
+        """Select the union of continuity and satellite media IDs."""
         continuity = self.continuity.select(snapshot)
         satellites = self.satellites.select(snapshot)
         ids = set(continuity.media_ids) | set(satellites.media_ids)
@@ -321,6 +347,7 @@ class CompleteImportProfile(BaseImportProfile):
 
 
 def get_import_profile(profile_key: str) -> BaseImportProfile:
+    """Return the import profile matching a profile key."""
     profiles = {
         "continuity": ContinuityImportProfile,
         "satellites": SatellitesImportProfile,
