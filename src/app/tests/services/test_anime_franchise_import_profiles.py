@@ -789,7 +789,7 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
                 all_normalized_relations=[AnimeRelation("20", "21", "sequel")],
             )
         )
-        self.assertEqual(selection.media_ids, {"20"})
+        self.assertEqual(selection.media_ids, {"20", "21"})
 
     def test_satellites_profile_excludes_single_episode_30_minutes_with_short_local_branch_node(
         self,
@@ -1245,3 +1245,134 @@ class AnimeFranchiseImportProfilesTests(SimpleTestCase):
                 seed_mal_id="1",
                 known_canonical_root="1",
             )
+
+    def test_satellites_profile_imports_local_continuity_but_not_other_branches(self):
+        nodes = {
+            "10": AnimeNode(
+                "10",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [],
+                runtime_minutes=24,
+            ),
+            "20": AnimeNode(
+                "20",
+                "Satellite",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+            "21": AnimeNode(
+                "21",
+                "Satellite S2",
+                "mal",
+                "tv",
+                "img",
+                date(2022, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+            "30": AnimeNode(
+                "30",
+                "Other Branch",
+                "mal",
+                "tv",
+                "img",
+                date(2023, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+            "31": AnimeNode(
+                "31",
+                "Extra",
+                "mal",
+                "tv",
+                "img",
+                date(2023, 6, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[
+                AnimeRelation("10", "20", "spin_off"),
+                AnimeRelation("20", "21", "sequel"),
+                AnimeRelation("20", "30", "alternative_version"),
+                AnimeRelation("20", "31", "side_story"),
+            ],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "spin_off")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+
+        self.assertEqual(selection.media_ids, {"20", "21"})
+        self.assertNotIn("30", selection.media_ids)
+        self.assertNotIn("31", selection.media_ids)
+        self.assertEqual(selection.fingerprint_payload["direct_satellite_ids"], ["20"])
+        self.assertEqual(selection.fingerprint_payload["local_continuity_ids"], ["21"])
+
+    def test_satellites_profile_keeps_direct_satellite_when_local_component_incomplete(
+        self,
+    ):
+        nodes = {
+            "10": AnimeNode(
+                "10",
+                "Main",
+                "mal",
+                "tv",
+                "img",
+                date(2020, 1, 1),
+                [],
+                runtime_minutes=24,
+            ),
+            "20": AnimeNode(
+                "20",
+                "Satellite",
+                "mal",
+                "tv",
+                "img",
+                date(2021, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+        }
+        snapshot = AnimeFranchiseSnapshot(
+            root_node=nodes["10"],
+            nodes_by_media_id=nodes,
+            all_normalized_relations=[
+                AnimeRelation("10", "20", "spin_off"),
+                AnimeRelation("20", "21", "sequel"),
+            ],
+            continuity_component=[nodes["10"]],
+            series_line=[nodes["10"]],
+            direct_anchors=[nodes["10"]],
+            direct_candidates=[AnimeRelation("10", "20", "spin_off")],
+            has_series_line=True,
+            fallback_anchor_media_id="10",
+            canonical_root_media_id="10",
+            promoted_continuity_candidates=[],
+        )
+
+        selection = SatellitesImportProfile().select(snapshot)
+
+        self.assertEqual(selection.media_ids, {"20"})

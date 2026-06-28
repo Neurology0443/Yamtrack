@@ -27,6 +27,7 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         profile.component_root_media_id.return_value = "100"
         profile.select.return_value = selection
         profile.detail_cache_warm_media_ids.return_value = {"200"}
+        profile.local_continuity_expansion_seed_ids.return_value = set()
         state_service = Mock()
         state_service.select_due_seeds.return_value = ([due_seed], 0)
         state_service.build_fingerprint.return_value = "fingerprint"
@@ -116,6 +117,7 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         profile.component_root_media_id.return_value = "100"
         profile.select.return_value = selection
         profile.detail_cache_warm_media_ids.return_value = set()
+        profile.local_continuity_expansion_seed_ids.return_value = set()
         state_service = Mock()
         state_service.select_due_seeds.return_value = ([due_seed], 0)
         state_service.build_fingerprint.return_value = "fingerprint"
@@ -215,4 +217,38 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         self.assertIs(
             service.series_view_refresh_service,
             refresh_service_class.return_value,
+        )
+
+    def test_build_profile_snapshot_rebuilds_with_local_continuity_seed_ids(self):
+        base_snapshot = SimpleNamespace(name="base")
+        expanded_snapshot = SimpleNamespace(name="expanded")
+        snapshot_service = Mock()
+        snapshot_service.build.side_effect = [base_snapshot, expanded_snapshot]
+        profile = Mock()
+        profile.local_continuity_expansion_seed_ids.return_value = [20]
+        service = AnimeFranchiseImportService(
+            build_session=Mock(),
+            snapshot_service=snapshot_service,
+            state_service=Mock(),
+            cache_build_service=Mock(),
+            series_view_refresh_service=Mock(),
+            discovery_service=Mock(),
+        )
+
+        snapshot = service._build_profile_snapshot(
+            seed_mal_id="10",
+            profile=profile,
+            refresh_cache=True,
+        )
+
+        self.assertIs(snapshot, expanded_snapshot)
+        self.assertEqual(snapshot_service.build.call_args_list[0].args, ("10",))
+        self.assertEqual(
+            snapshot_service.build.call_args_list[0].kwargs,
+            {"refresh_cache": True},
+        )
+        self.assertEqual(snapshot_service.build.call_args_list[1].args, ("10",))
+        self.assertEqual(
+            snapshot_service.build.call_args_list[1].kwargs,
+            {"refresh_cache": True, "local_continuity_start_media_ids": {"20"}},
         )
