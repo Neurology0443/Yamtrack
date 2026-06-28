@@ -91,7 +91,7 @@
                       title="Add to tracker"
                       hx-get="{% media_view_url 'track_modal' item %}"
                       hx-vals='{"return_url": "{{ request.get_full_path|urlencode }}", "instance_id": "{{ media.id }}"}'
-                      hx-target="#{% component_id 'track' item media.id %}"
+                      hx-target="#{% component_id 'track-card' item media.id %}"
                       hx-trigger="click once"
                       @click="trackOpen = true">{% include "app/icons/edit.svg" with classes="w-4 h-4" %}</button>
             {% endif %}
@@ -101,7 +101,7 @@
                     title="Add to custom lists"
                     hx-get="{% media_view_url 'lists_modal' item %}"
                     hx-vals='{"return_url": "{{ request.get_full_path|urlencode }}"}'
-                    hx-target="#{% component_id 'lists' item %}"
+                    hx-target="#{% component_id 'lists-card' item media.id %}"
                     hx-trigger="click once"
                     @click="listsOpen = true">{% include "app/icons/list-add.svg" with classes="w-4 h-4" %}</button>
 
@@ -110,7 +110,7 @@
                     title="View your activity history"
                     hx-get="{% media_view_url 'history_modal' item %}"
                     hx-vals='{"return_url": "{{ request.get_full_path|urlencode }}"}'
-                    hx-target="#{% component_id 'history' item %}"
+                    hx-target="#{% component_id 'history-card' item media.id %}"
                     hx-trigger="click once"
                     @click="historyOpen = true">{% include "app/icons/history.svg" with classes="w-4 h-4" %}</button>
           </div>
@@ -134,7 +134,7 @@
          class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="w-152 max-h-[90vh] px-4 md:px-0 relative z-60"
            @click.outside="trackOpen = false">
-        <div id="{% component_id 'track' item media.id %}"></div>
+        <div id="{% component_id 'track-card' item media.id %}"></div>
       </div>
     </div>
   {% endif %}
@@ -145,7 +145,7 @@
        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div class="w-96 max-h-[90vh] px-4 md:px-0 relative z-60"
          @click.outside="listsOpen = false">
-      <div id="{% component_id 'lists' item %}"></div>
+      <div id="{% component_id 'lists-card' item media.id %}"></div>
     </div>
   </div>
 
@@ -155,7 +155,7 @@
        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
     <div class="w-96 max-h-[90vh] px-4 md:px-0 relative z-60"
          @click.outside="historyOpen = false">
-      <div id="{% component_id 'history' item %}"></div>
+      <div id="{% component_id 'history-card' item media.id %}"></div>
     </div>
   </div>
   {% with user=target_user|default:user %}

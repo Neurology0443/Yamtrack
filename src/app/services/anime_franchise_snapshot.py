@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 ROOT_STORY_PARENT_RELATIONS = {"full_story"}
 
 
+LOCAL_CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
+
+
 NO_SERIES_LINE_SECONDARY_RELATIONS = {
     "side_story",
     "spin_off",
@@ -64,6 +67,7 @@ class AnimeFranchiseSnapshotService:
         *,
         refresh_cache: bool = False,
         include_series_view_branch_continuations: bool = False,
+        local_continuity_start_media_ids: set[str] | None = None,
     ) -> AnimeFranchiseSnapshot:
         """Build a normalized franchise snapshot for one MAL anime ID."""
         self.graph_builder.refresh_cache = refresh_cache
@@ -127,6 +131,11 @@ class AnimeFranchiseSnapshotService:
                 nodes_by_media_id=nodes_by_media_id,
                 series_line=series_line,
             )
+        if local_continuity_start_media_ids:
+            self._expand_local_continuity_start_nodes(
+                nodes_by_media_id=nodes_by_media_id,
+                start_media_ids=local_continuity_start_media_ids,
+            )
 
         all_relations = [
             relation
@@ -150,6 +159,49 @@ class AnimeFranchiseSnapshotService:
             canonical_root_media_id=canonical_root_media_id,
             is_truncated=bool(getattr(self.graph_builder, "truncated", False)),
         )
+
+    def _expand_local_continuity_start_nodes(
+        self,
+        *,
+        nodes_by_media_id: dict[str, AnimeNode],
+        start_media_ids: set[str],
+    ) -> None:
+        """Hydrate local prequel/sequel continuations from explicit starts."""
+        queue = deque(str(media_id) for media_id in start_media_ids)
+        visited = set()
+        while queue:
+            media_id = queue.popleft()
+            if media_id in visited:
+                continue
+            visited.add(media_id)
+
+            if not self._ensure_loaded_node(nodes_by_media_id, media_id):
+                continue
+
+            for relation in self.graph_builder.get_direct_neighbors(media_id):
+                if relation.relation_type not in LOCAL_CONTINUITY_RELATIONS:
+                    continue
+                other_id = self._other_relation_endpoint(relation, media_id)
+                if other_id is None:
+                    continue
+                if not self._ensure_loaded_node(nodes_by_media_id, other_id):
+                    continue
+                if other_id not in visited:
+                    queue.append(other_id)
+
+    def _ensure_loaded_node(
+        self,
+        nodes_by_media_id: dict[str, AnimeNode],
+        media_id: str,
+    ) -> bool:
+        """Ensure a media node is loaded into the snapshot node map."""
+        if media_id in nodes_by_media_id:
+            return True
+        node = self.graph_builder.ensure_node(media_id)
+        if node is None:
+            return False
+        nodes_by_media_id[media_id] = node
+        return True
 
     def _expand_series_view_branch_continuations(
         self,
