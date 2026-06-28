@@ -1,12 +1,13 @@
+# ruff: noqa: D101,D102,D103,D107,ARG002,SIM102,TC001
 """Import profiles powered by AnimeFranchiseSnapshot."""
 
 from __future__ import annotations
 
-from enum import StrEnum
 from dataclasses import dataclass
+from enum import StrEnum
 
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshot
-from app.services.anime_franchise_types import AnimeNode
+from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
 
 class SeedMode(StrEnum):
@@ -32,7 +33,9 @@ class BaseImportProfile:
     component_root_mode = "canonical_component_root"
     include_relation_types: frozenset[str] = frozenset()
 
-    def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:  # pragma: no cover
+    def select(
+        self, snapshot: AnimeFranchiseSnapshot
+    ) -> ProfileSelection:  # pragma: no cover
         raise NotImplementedError
 
     def component_root_media_id(self, snapshot: AnimeFranchiseSnapshot) -> str:
@@ -112,10 +115,7 @@ class ContinuityImportProfile(BaseImportProfile):
         payload = {
             "continuity_ids": sorted(ids),
             "media_types": sorted(
-                {
-                    snapshot.nodes_by_media_id[media_id].media_type
-                    for media_id in ids
-                }
+                {snapshot.nodes_by_media_id[media_id].media_type for media_id in ids}
             ),
         }
         return ProfileSelection(media_ids=ids, fingerprint_payload=payload)
@@ -132,6 +132,7 @@ class SatellitesImportProfile(BaseImportProfile):
     min_runtime_minutes = 15
     single_episode_max_runtime_minutes = 30
     local_continuity_relation_types = frozenset({"prequel", "sequel"})
+    no_series_line_root_ambiguous_relation_types = frozenset({"alternative_version"})
 
     def detail_cache_warm_media_ids(
         self,
@@ -139,6 +140,19 @@ class SatellitesImportProfile(BaseImportProfile):
         created_ids: set[str],
     ) -> set[str]:
         return {str(media_id) for media_id in created_ids}
+
+    def is_no_series_line_root_ambiguous_relation(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        relation: AnimeRelation,
+    ) -> bool:
+        """Return whether a root direct relation is unsafe without a series line."""
+        return (
+            not snapshot.has_series_line
+            and relation.source_media_id == snapshot.root_node.media_id
+            and relation.relation_type
+            in self.no_series_line_root_ambiguous_relation_types
+        )
 
     def is_runtime_episode_eligible(
         self,
@@ -229,16 +243,15 @@ class SatellitesImportProfile(BaseImportProfile):
         return component, is_complete
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
-        continuity_ids = {
-            node.media_id
-            for node in snapshot.continuity_component
-        }
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
         selected = []
         for relation in snapshot.direct_candidates:
             if (
                 self.include_relation_types
                 and relation.relation_type not in self.include_relation_types
             ):
+                continue
+            if self.is_no_series_line_root_ambiguous_relation(snapshot, relation):
                 continue
             target_node = snapshot.nodes_by_media_id[relation.target_media_id]
             if target_node.media_type in self.ignored_media_types:
@@ -258,11 +271,17 @@ class SatellitesImportProfile(BaseImportProfile):
                         "source_id": relation.source_media_id,
                         "target_id": relation.target_media_id,
                         "relation_type": relation.relation_type,
-                        "media_type": snapshot.nodes_by_media_id[relation.target_media_id].media_type,
+                        "media_type": snapshot.nodes_by_media_id[
+                            relation.target_media_id
+                        ].media_type,
                     }
                     for relation in selected
                 ],
-                key=lambda row: (row["source_id"], row["target_id"], row["relation_type"]),
+                key=lambda row: (
+                    row["source_id"],
+                    row["target_id"],
+                    row["relation_type"],
+                ),
             ),
         }
         return ProfileSelection(media_ids=ids, fingerprint_payload=payload)
@@ -283,13 +302,10 @@ class CompleteImportProfile(BaseImportProfile):
         created_ids: set[str],
     ) -> set[str]:
         satellite_ids = {
-            str(media_id)
-            for media_id in self.satellites.select(snapshot).media_ids
+            str(media_id) for media_id in self.satellites.select(snapshot).media_ids
         }
         return {
-            str(media_id)
-            for media_id in created_ids
-            if str(media_id) in satellite_ids
+            str(media_id) for media_id in created_ids if str(media_id) in satellite_ids
         }
 
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
