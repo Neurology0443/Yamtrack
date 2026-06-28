@@ -50,6 +50,13 @@ class BaseImportProfile:
         """
         return snapshot.canonical_root_media_id
 
+    def local_continuity_expansion_seed_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,  # noqa: ARG002
+    ) -> set[str]:
+        """Return media IDs that should receive local continuity hydration."""
+        return set()
+
     def detail_cache_warm_media_ids(
         self,
         snapshot: AnimeFranchiseSnapshot,  # noqa: ARG002
@@ -168,6 +175,20 @@ class SatellitesImportProfile(BaseImportProfile):
             in self.no_series_line_root_ambiguous_relation_types
         )
 
+    def is_preliminary_runtime_eligible(self, target_node: AnimeNode) -> bool:
+        """Return whether a target is plausible enough to hydrate locally."""
+        runtime_minutes = target_node.runtime_minutes
+
+        if target_node.media_type == "tv_special":
+            return (
+                runtime_minutes is not None
+                and runtime_minutes > self.min_runtime_minutes
+            )
+
+        return (
+            runtime_minutes is not None and runtime_minutes >= self.min_runtime_minutes
+        )
+
     def is_runtime_episode_eligible(
         self,
         snapshot: AnimeFranchiseSnapshot,
@@ -262,8 +283,60 @@ class SatellitesImportProfile(BaseImportProfile):
 
         return component, is_complete
 
+    def local_continuity_expansion_seed_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+    ) -> set[str]:
+        """Return selected direct satellite IDs worth local prequel/sequel hydration."""
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
+        seed_ids = set()
+        for relation in snapshot.direct_candidates:
+            if (
+                self.include_relation_types
+                and relation.relation_type not in self.include_relation_types
+            ):
+                continue
+            if self.is_no_series_line_root_ambiguous_relation(snapshot, relation):
+                continue
+            target_node = snapshot.nodes_by_media_id.get(relation.target_media_id)
+            if target_node is None:
+                continue
+            if target_node.media_type in self.ignored_media_types:
+                continue
+            if relation.target_media_id in continuity_ids:
+                continue
+            if not self.is_preliminary_runtime_eligible(target_node):
+                continue
+            seed_ids.add(relation.target_media_id)
+        return seed_ids
+
+    def local_continuity_import_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+        satellite_id: str,
+    ) -> set[str]:
+        """Return eligible local prequel/sequel IDs for a selected satellite."""
+        component, is_complete = self.local_continuity_component(
+            snapshot,
+            satellite_id,
+        )
+        if not is_complete:
+            return set()
+
+        continuity_ids = {node.media_id for node in snapshot.continuity_component}
+        ids = set()
+        for node in component:
+            if node.media_id in continuity_ids:
+                continue
+            if node.media_type in self.ignored_media_types:
+                continue
+            if not self.is_runtime_episode_eligible(snapshot, node):
+                continue
+            ids.add(node.media_id)
+        return ids
+
     def select(self, snapshot: AnimeFranchiseSnapshot) -> ProfileSelection:
-        """Select direct satellite media IDs from the snapshot."""
+        """Select direct satellite IDs plus their local continuity continuations."""
         continuity_ids = {node.media_id for node in snapshot.continuity_component}
         selected = []
         for relation in snapshot.direct_candidates:
@@ -283,9 +356,17 @@ class SatellitesImportProfile(BaseImportProfile):
                 continue
             selected.append(relation)
 
-        ids = {relation.target_media_id for relation in selected}
+        direct_ids = {relation.target_media_id for relation in selected}
+        local_extension_ids = set()
+        for satellite_id in direct_ids:
+            local_extension_ids.update(
+                self.local_continuity_import_ids(snapshot, satellite_id) - direct_ids
+            )
+        ids = direct_ids | local_extension_ids
         payload = {
             "satellite_ids": sorted(ids),
+            "direct_satellite_ids": sorted(direct_ids),
+            "local_continuity_ids": sorted(local_extension_ids),
             "relations": sorted(
                 [
                     {
@@ -319,6 +400,13 @@ class CompleteImportProfile(BaseImportProfile):
         """Initialize delegated profile selectors."""
         self.continuity = ContinuityImportProfile()
         self.satellites = SatellitesImportProfile()
+
+    def local_continuity_expansion_seed_ids(
+        self,
+        snapshot: AnimeFranchiseSnapshot,
+    ) -> set[str]:
+        """Return satellite IDs that need local continuity hydration."""
+        return self.satellites.local_continuity_expansion_seed_ids(snapshot)
 
     def detail_cache_warm_media_ids(
         self,

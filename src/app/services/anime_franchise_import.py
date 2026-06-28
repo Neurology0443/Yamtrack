@@ -223,8 +223,9 @@ class AnimeFranchiseImportService:
                 )
                 continue
             try:
-                snapshot = self.snapshot_service.build(
-                    due_seed.seed_mal_id,
+                snapshot = self._build_profile_snapshot(
+                    seed_mal_id=due_seed.seed_mal_id,
+                    profile=profile,
                     refresh_cache=refresh_cache,
                 )
                 component_root_mal_id = str(profile.component_root_media_id(snapshot))
@@ -391,6 +392,27 @@ class AnimeFranchiseImportService:
                         stats.state_rows_updated += 1
 
         return stats
+
+    def _build_profile_snapshot(
+        self,
+        *,
+        seed_mal_id: str,
+        profile,
+        refresh_cache: bool,
+    ):
+        """Build a snapshot, optionally hydrating profile-requested local branches."""
+        snapshot = self.snapshot_service.build(
+            seed_mal_id,
+            refresh_cache=refresh_cache,
+        )
+        local_start_ids = profile.local_continuity_expansion_seed_ids(snapshot)
+        if not isinstance(local_start_ids, set | frozenset) or not local_start_ids:
+            return snapshot
+        return self.snapshot_service.build(
+            seed_mal_id,
+            refresh_cache=refresh_cache,
+            local_continuity_start_media_ids=local_start_ids,
+        )
 
     @transaction.atomic
     def _create_anime_entry(

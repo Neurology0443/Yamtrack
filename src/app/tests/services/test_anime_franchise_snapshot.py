@@ -4,6 +4,7 @@ from datetime import date
 from django.test import SimpleTestCase
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
+from app.services.anime_franchise_import_profiles import SatellitesImportProfile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
@@ -912,3 +913,70 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
                 "related": {"related_anime": []},
             },
         }
+
+    def test_local_continuity_start_ids_expand_only_prequel_sequel(self):
+        metadata_map = {
+            "10": {
+                "media_id": "10",
+                "title": "Main",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2020-01-01"},
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "20", "relation_type": "spin_off"},
+                    ],
+                },
+            },
+            "20": {
+                "media_id": "20",
+                "title": "Satellite",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2021-01-01"},
+                "image": "img",
+                "related": {
+                    "related_anime": [
+                        {"media_id": "21", "relation_type": "sequel"},
+                        {"media_id": "30", "relation_type": "side_story"},
+                    ]
+                },
+            },
+            "21": {
+                "media_id": "21",
+                "title": "Satellite S2",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2022-01-01"},
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+            "30": {
+                "media_id": "30",
+                "title": "Extra",
+                "source": "mal",
+                "details": {"raw_media_type": "tv", "start_date": "2023-01-01"},
+                "image": "img",
+                "related": {"related_anime": []},
+            },
+        }
+        builder = AnimeFranchiseGraphBuilder(
+            metadata_fetcher=lambda media_id, refresh_cache=False: metadata_map[
+                str(media_id)
+            ],
+        )
+
+        snapshot = AnimeFranchiseSnapshotService(graph_builder=builder).build(
+            "10",
+            local_continuity_start_media_ids={"20"},
+        )
+
+        self.assertIn(
+            "20",
+            {relation.target_media_id for relation in snapshot.direct_candidates},
+        )
+        self.assertIn("21", snapshot.nodes_by_media_id)
+        self.assertNotIn("30", snapshot.nodes_by_media_id)
+        component, is_complete = SatellitesImportProfile().local_continuity_component(
+            snapshot, "20"
+        )
+        self.assertTrue(is_complete)
+        self.assertEqual({node.media_id for node in component}, {"20", "21"})
