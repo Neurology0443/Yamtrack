@@ -405,8 +405,9 @@ class AnimeFranchiseImportService:
             seed_mal_id,
             refresh_cache=refresh_cache,
         )
-        local_start_ids = profile.local_continuity_expansion_seed_ids(snapshot)
-        if not isinstance(local_start_ids, set | frozenset) or not local_start_ids:
+        raw_local_start_ids = profile.local_continuity_expansion_seed_ids(snapshot)
+        local_start_ids = {str(media_id) for media_id in raw_local_start_ids}
+        if not local_start_ids:
             return snapshot
         return self.snapshot_service.build(
             seed_mal_id,

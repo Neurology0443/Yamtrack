@@ -4,7 +4,6 @@ from datetime import date
 from django.test import SimpleTestCase
 
 from app.services.anime_franchise_graph import AnimeFranchiseGraphBuilder
-from app.services.anime_franchise_import_profiles import SatellitesImportProfile
 from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService
 from app.services.anime_franchise_types import AnimeNode, AnimeRelation
 
@@ -975,8 +974,7 @@ class AnimeFranchiseGraphBuilderRuntimeParsingTests(SimpleTestCase):
         )
         self.assertIn("21", snapshot.nodes_by_media_id)
         self.assertNotIn("30", snapshot.nodes_by_media_id)
-        component, is_complete = SatellitesImportProfile().local_continuity_component(
-            snapshot, "20"
+        self.assertIn(
+            AnimeRelation("20", "21", "sequel"),
+            snapshot.all_normalized_relations,
         )
-        self.assertTrue(is_complete)
-        self.assertEqual({node.media_id for node in component}, {"20", "21"})

@@ -27,6 +27,7 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         profile.component_root_media_id.return_value = "100"
         profile.select.return_value = selection
         profile.detail_cache_warm_media_ids.return_value = {"200"}
+        profile.local_continuity_expansion_seed_ids.return_value = set()
         state_service = Mock()
         state_service.select_due_seeds.return_value = ([due_seed], 0)
         state_service.build_fingerprint.return_value = "fingerprint"
@@ -116,6 +117,7 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         profile.component_root_media_id.return_value = "100"
         profile.select.return_value = selection
         profile.detail_cache_warm_media_ids.return_value = set()
+        profile.local_continuity_expansion_seed_ids.return_value = set()
         state_service = Mock()
         state_service.select_due_seeds.return_value = ([due_seed], 0)
         state_service.build_fingerprint.return_value = "fingerprint"
@@ -223,7 +225,7 @@ class AnimeFranchiseImportBuildSessionTests(TestCase):
         snapshot_service = Mock()
         snapshot_service.build.side_effect = [base_snapshot, expanded_snapshot]
         profile = Mock()
-        profile.local_continuity_expansion_seed_ids.return_value = {"20"}
+        profile.local_continuity_expansion_seed_ids.return_value = [20]
         service = AnimeFranchiseImportService(
             build_session=Mock(),
             snapshot_service=snapshot_service,

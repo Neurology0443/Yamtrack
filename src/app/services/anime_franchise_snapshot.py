@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 ROOT_STORY_PARENT_RELATIONS = {"full_story"}
 
 
+LOCAL_CONTINUITY_RELATIONS = frozenset({"prequel", "sequel"})
+
+
 NO_SERIES_LINE_SECONDARY_RELATIONS = {
     "side_story",
     "spin_off",
@@ -166,8 +169,6 @@ class AnimeFranchiseSnapshotService:
         """Hydrate local prequel/sequel continuations from explicit starts."""
         queue = deque(str(media_id) for media_id in start_media_ids)
         visited = set()
-        local_relation_types = {"prequel", "sequel"}
-
         while queue:
             media_id = queue.popleft()
             if media_id in visited:
@@ -178,7 +179,7 @@ class AnimeFranchiseSnapshotService:
                 continue
 
             for relation in self.graph_builder.get_direct_neighbors(media_id):
-                if relation.relation_type not in local_relation_types:
+                if relation.relation_type not in LOCAL_CONTINUITY_RELATIONS:
                     continue
                 other_id = self._other_relation_endpoint(relation, media_id)
                 if other_id is None:
