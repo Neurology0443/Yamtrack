@@ -189,6 +189,53 @@ for state in AnimeFranchiseMaintenanceScanState.objects.exclude(last_error="").o
 PY
 ```
 
+### Inspect branch-root preservation candidates
+
+Use this read-only diagnostic when a tracked local franchise branch appears to be covered by a parent root and you want to confirm whether the maintenance scanner currently recognizes it as a branch-root candidate. It only reads maintenance scan state and does not trigger scans.
+
+`branch_root_candidates` is the scanner's eligible/known-state view and is the authoritative preservation signal for this diagnostic. `states_by_root` is a raw maintenance-state grouping for context and may include stale state rows for anime that are no longer currently eligible or tracked, so do not treat every grouped child as proof that the root should be preserved.
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from collections import defaultdict
+
+from app.models import AnimeFranchiseMaintenanceScanState
+from app.services.anime_franchise_maintenance_scan import AnimeFranchiseMaintenanceScanService
+
+service = AnimeFranchiseMaintenanceScanService()
+
+user_ids = set(
+    AnimeFranchiseMaintenanceScanState.objects
+    .values_list("user_id", flat=True)
+    .distinct()
+)
+
+branch_candidates_by_user = service._branch_root_candidate_seed_ids_by_user(
+    user_ids=user_ids
+)
+
+print("branch_root_candidates:")
+for user_id, seed_ids in sorted(branch_candidates_by_user.items()):
+    print(f"user={user_id}", sorted(seed_ids, key=lambda value: int(value) if str(value).isdigit() else str(value)))
+
+print()
+print("states_by_root:")
+for user_id in sorted(user_ids):
+    groups = defaultdict(list)
+    for state in (
+        AnimeFranchiseMaintenanceScanState.objects
+        .filter(user_id=user_id)
+        .order_by("component_root_mal_id", "seed_mal_id")
+    ):
+        root = state.component_root_mal_id or "-"
+        groups[root].append(state.seed_mal_id)
+
+    print(f"user={user_id}")
+    for root, seeds in sorted(groups.items(), key=lambda item: item[0]):
+        print(" ", root, sorted(seeds, key=lambda value: int(value) if str(value).isdigit() else str(value)))
+PY
+```
+
 ### Next state
 
 ```bash
