@@ -30,6 +30,7 @@
 | Franchise appears split into multiple Series View cards | `AnimeSeriesViewProjectionBuilder` root/component/boundaries |
 | Old/remake continuity incorrectly merged | `alternative_version` boundary rules |
 | Series View rebuild triggers MAL 504 | provider cache completeness / rebuild by batches / sleep between seeds |
+| Local branch root appears swallowed by a parent maintenance root | Maintenance scan state branch-root candidates and `component_root_mal_id` groups |
 
 Most franchise display bugs fall into one of four layers: snapshot facts, UI placement, cache delivery, or request rendering. Start with the layer that owns the symptom.
 
@@ -106,6 +107,23 @@ Inspect the projection produced from one seed:
 ```bash
 docker compose exec yamtrack python manage.py shell -c "from app.services.anime_franchise_snapshot import AnimeFranchiseSnapshotService; from app.services.anime_series_view_projection import AnimeSeriesViewProjectionBuilder; s=AnimeFranchiseSnapshotService().build('11757'); p=AnimeSeriesViewProjectionBuilder().build(s); print(p)"
 ```
+
+## Debug branch-root maintenance preservation
+
+Use this when a tracked seed should remain a local branch root but appears to be covered by a parent franchise root. Check maintenance scan state for the affected user: if another tracked state resolves to that seed as `component_root_mal_id`, that seed should appear in branch-root candidates and should not be duplicate-covered by the parent scan.
+
+This preservation is DB-local and known-state based. It protects branch roots already represented in maintenance scan state; it does not infer unseen MAL branches during scheduling. The canonical feature explanation remains in `docs/anime-franchise-maintenance.md`.
+
+```text
+Healthy SAO-style shape:
+
+11757 -> root 11757
+36474 -> root 11757
+42916 -> root 42916
+50275 -> root 42916
+```
+
+Use the branch-root preservation candidate command in `docs/operational-commands.md` to print current candidates and `states_by_root` groups without triggering scans.
 
 ## Inspect service payload
 
