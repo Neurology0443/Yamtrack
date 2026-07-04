@@ -41,6 +41,13 @@ class AnimeFranchiseMaintenanceResult:
     discovery_processed: bool = False
     series_view_attempted: bool = False
     series_view_refreshed: bool = False
+    post_discovery_cache_sync_attempted: bool = False
+    post_discovery_cache_synced: bool = False
+    post_discovery_cache_sync_error: str = ""
+    post_discovery_series_view_refresh_requested: bool = False
+    discovery_notifications_queued: int = 0
+    discoveries_created: int = 0
+    discovery_baseline_created: bool = False
     discovery_fingerprint: str = ""
     maintenance_fingerprint: str = ""
     first_observation: bool = False
@@ -84,7 +91,7 @@ class AnimeFranchiseMaintenanceService:
         )
         self.series_view_refresh_service_factory = series_view_refresh_service_factory
 
-    def process_seed(
+    def process_seed(  # noqa: C901, PLR0912, PLR0915
         self,
         *,
         user,
@@ -164,10 +171,11 @@ class AnimeFranchiseMaintenanceService:
                 )
                 result.critical_errors.append(str(error)[:250])
 
+        discovery_stats = None
         if process_discovery:
             result.discovery_attempted = True
             try:
-                self.discovery_service.process_snapshot(
+                discovery_stats = self.discovery_service.process_snapshot(
                     user=user,
                     snapshot=snapshot,
                     component_root_mal_id=result.component_root_mal_id,
@@ -177,6 +185,15 @@ class AnimeFranchiseMaintenanceService:
                     force_baseline_suppression=force_baseline_suppression,
                 )
                 result.discovery_processed = True
+                result.discovery_notifications_queued = int(
+                    getattr(discovery_stats, "notifications_queued", 0) or 0
+                )
+                result.discoveries_created = int(
+                    getattr(discovery_stats, "discoveries_created", 0) or 0
+                )
+                result.discovery_baseline_created = bool(
+                    getattr(discovery_stats, "baseline_created", 0) or 0
+                )
             except Exception as error:
                 logger.exception(
                     "Maintenance discovery processing failed",
@@ -184,12 +201,64 @@ class AnimeFranchiseMaintenanceService:
                 )
                 result.critical_errors.append(str(error)[:250])
 
+        should_sync_after_discovery = self._should_sync_cache_after_discovery(
+            discovery_stats
+        )
+        if update_ui_cache and should_sync_after_discovery:
+            canonical_root_mal_id = str(result.component_root_mal_id or "").strip()
+            seed_mal_id_str = str(seed_mal_id or "").strip()
+            canonical_already_built = (
+                result.cache_built
+                and canonical_root_mal_id
+                and seed_mal_id_str == canonical_root_mal_id
+            )
+            if canonical_root_mal_id:
+                result.post_discovery_cache_sync_attempted = True
+                if canonical_already_built:
+                    result.post_discovery_cache_synced = True
+                else:
+                    try:
+                        canonical_cache_result = self.cache_build_service_factory(
+                            build_session
+                        ).build_and_save_from_snapshot(
+                            canonical_root_mal_id,
+                            snapshot=snapshot,
+                            graph_builder=snapshot_service.graph_builder,
+                            force_cache_rebuild=True,
+                        )
+                        canonical_built = bool(canonical_cache_result.get("built"))
+                        result.cache_built = result.cache_built or canonical_built
+                        result.post_discovery_cache_synced = canonical_built
+                        if not canonical_built:
+                            result.post_discovery_cache_sync_error = str(
+                                canonical_cache_result.get("error")
+                                or "post_discovery_cache_sync_failed"
+                            )[:250]
+                            result.non_critical_errors.append(
+                                result.post_discovery_cache_sync_error
+                            )
+                    except Exception as error:
+                        logger.exception(
+                            "Post-discovery canonical cache sync failed",
+                            extra={
+                                "component_root_mal_id": canonical_root_mal_id,
+                                "seed_mal_id": seed_mal_id,
+                                "user_id": user.id,
+                            },
+                        )
+                        result.post_discovery_cache_sync_error = str(error)[:250]
+                        result.non_critical_errors.append(str(error)[:250])
+
         should_refresh_series_view = (
             refresh_series_view
             or refresh_series_view_on_success
             or result.first_observation
             or result.root_changed
             or (refresh_series_view_on_change and result.changed)
+            or should_sync_after_discovery
+        )
+        result.post_discovery_series_view_refresh_requested = bool(
+            should_sync_after_discovery and should_refresh_series_view
         )
         if should_refresh_series_view:
             result.series_view_attempted = True
@@ -211,6 +280,22 @@ class AnimeFranchiseMaintenanceService:
                 result.critical_errors.append(str(error)[:250])
 
         return result
+
+    def _should_sync_cache_after_discovery(self, discovery_stats) -> bool:
+        """Return whether discovery stats require canonical UI cache sync."""
+        if discovery_stats is None:
+            return False
+        notifications_queued = int(
+            getattr(discovery_stats, "notifications_queued", 0) or 0
+        )
+        discoveries_created = int(
+            getattr(discovery_stats, "discoveries_created", 0) or 0
+        )
+        baseline_created = bool(getattr(discovery_stats, "baseline_created", 0) or 0)
+        return bool(
+            notifications_queued > 0
+            or (discoveries_created > 0 and not baseline_created)
+        )
 
     def _sync_snapshot_images_if_fresh(
         self,
