@@ -63,7 +63,7 @@ class AnimeFranchiseCacheBuildService:
             )
             return {"media_id": media_id, "built": False, "error": error_message[:250]}
 
-    def build_and_save_from_snapshot(  # noqa: C901, PLR0912, PLR0915
+    def build_and_save_from_snapshot(  # noqa: C901
         self,
         media_id,
         *,
@@ -126,7 +126,7 @@ class AnimeFranchiseCacheBuildService:
 
             alias_count = 0
             canonical_payload_for_aliases = None
-            if is_canonical_build:
+            if is_canonical_build or force_cache_rebuild:
                 anime_franchise_cache.save_payload(
                     canonical_media_id,
                     canonical_payload,
@@ -141,18 +141,7 @@ class AnimeFranchiseCacheBuildService:
                 existing_canonical_payload, existing_canonical_meta = (
                     anime_franchise_cache.load_payload(canonical_media_id)
                 )
-                if force_cache_rebuild:
-                    anime_franchise_cache.save_payload(
-                        canonical_media_id,
-                        canonical_payload,
-                        fetched_at=timezone.now(),
-                        node_count=node_count,
-                        build_duration_seconds=duration,
-                        truncated=truncated,
-                        truncation_reason=truncation_reason,
-                    )
-                    canonical_payload_for_aliases = canonical_payload
-                elif existing_canonical_payload:
+                if existing_canonical_payload:
                     canonical_payload_for_aliases = existing_canonical_payload
                 else:
                     anime_franchise_cache.maybe_schedule_build(

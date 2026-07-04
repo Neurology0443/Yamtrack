@@ -192,6 +192,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             fresh_canonical_payload,
             truncated=False,
         )
+        mock_cache.load_payload.assert_not_called()
         mock_cache.delete_direct_payload.assert_called_once_with("58567")
         self.assertNotIn(
             ("58567",),
@@ -241,6 +242,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             existing_canonical_payload,
             truncated=False,
         )
+        mock_cache.load_payload.assert_called_once_with("52299")
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
     @patch("app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot")
@@ -280,6 +282,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             fresh_canonical_payload,
             truncated=False,
         )
+        mock_cache.load_payload.assert_not_called()
         mock_cache.delete_direct_payload.assert_not_called()
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
