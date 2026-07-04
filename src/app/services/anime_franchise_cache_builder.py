@@ -122,10 +122,20 @@ class AnimeFranchiseCacheBuildService:
                     "truncated": truncated,
                     "truncation_reason": truncation_reason,
                     "alias_count": 0,
+                    "canonical_payload_saved": False,
+                    "canonical_payload_saved_media_id": "",
+                    "canonical_payload_source": "valid_alias_shortcut",
+                    "direct_payload_deleted": True,
+                    "scoped_payload_saved": False,
                 }
 
             alias_count = 0
             canonical_payload_for_aliases = None
+            canonical_payload_saved = False
+            canonical_payload_saved_media_id = ""
+            canonical_payload_source = ""
+            direct_payload_deleted = False
+            scoped_payload_saved = False
             if is_canonical_build:
                 anime_franchise_cache.save_payload(
                     canonical_media_id,
@@ -137,6 +147,9 @@ class AnimeFranchiseCacheBuildService:
                     truncation_reason=truncation_reason,
                 )
                 canonical_payload_for_aliases = canonical_payload
+                canonical_payload_saved = True
+                canonical_payload_saved_media_id = canonical_media_id
+                canonical_payload_source = "fresh_snapshot"
             else:
                 existing_canonical_payload, existing_canonical_meta = (
                     anime_franchise_cache.load_payload(canonical_media_id)
@@ -152,9 +165,14 @@ class AnimeFranchiseCacheBuildService:
                         truncation_reason=truncation_reason,
                     )
                     canonical_payload_for_aliases = canonical_payload
+                    canonical_payload_saved = True
+                    canonical_payload_saved_media_id = canonical_media_id
+                    canonical_payload_source = "fresh_snapshot"
                 elif existing_canonical_payload:
                     canonical_payload_for_aliases = existing_canonical_payload
+                    canonical_payload_source = "existing_cache"
                 else:
+                    canonical_payload_source = "scheduled_canonical_build"
                     anime_franchise_cache.maybe_schedule_build(
                         canonical_media_id,
                         existing_canonical_meta,
@@ -184,6 +202,7 @@ class AnimeFranchiseCacheBuildService:
             )
             if not is_canonical_build and seed_is_aliasable_in_canonical:
                 anime_franchise_cache.delete_direct_payload(media_id)
+                direct_payload_deleted = True
             if (
                 scoped_payload is not None
                 and not is_canonical_build
@@ -201,6 +220,7 @@ class AnimeFranchiseCacheBuildService:
                     truncated=False,
                     truncation_reason="",
                 )
+                scoped_payload_saved = True
 
             return {  # noqa: TRY300
                 "media_id": media_id,
@@ -211,6 +231,11 @@ class AnimeFranchiseCacheBuildService:
                 "truncated": truncated,
                 "truncation_reason": truncation_reason,
                 "alias_count": alias_count,
+                "canonical_payload_saved": canonical_payload_saved,
+                "canonical_payload_saved_media_id": canonical_payload_saved_media_id,
+                "canonical_payload_source": canonical_payload_source,
+                "direct_payload_deleted": direct_payload_deleted,
+                "scoped_payload_saved": scoped_payload_saved,
             }
         except Exception as error:  # noqa: BLE001
             error_message = str(error) or error.__class__.__name__

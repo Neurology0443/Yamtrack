@@ -44,7 +44,9 @@ class AnimeFranchiseMaintenanceResult:
     post_discovery_cache_sync_attempted: bool = False
     post_discovery_cache_synced: bool = False
     post_discovery_cache_sync_error: str = ""
+    post_discovery_cache_sync_source: str = ""
     post_discovery_series_view_refresh_requested: bool = False
+    initial_cache_synced_canonical: bool = False
     discovery_notifications_queued: int = 0
     discoveries_created: int = 0
     discovery_baseline_created: bool = False
@@ -148,10 +150,11 @@ class AnimeFranchiseMaintenanceService:
             and previous_fingerprint != result.maintenance_fingerprint
         )
 
+        initial_cache_result = None
         if update_ui_cache:
             result.cache_attempted = True
             try:
-                cache_result = self.cache_build_service_factory(
+                initial_cache_result = self.cache_build_service_factory(
                     build_session
                 ).build_and_save_from_snapshot(
                     seed_mal_id,
@@ -159,10 +162,17 @@ class AnimeFranchiseMaintenanceService:
                     graph_builder=snapshot_service.graph_builder,
                     force_cache_rebuild=True,
                 )
-                result.cache_built = bool(cache_result.get("built"))
+                result.cache_built = bool(initial_cache_result.get("built"))
+                result.initial_cache_synced_canonical = (
+                    self._cache_result_synced_canonical(
+                        initial_cache_result, result.component_root_mal_id
+                    )
+                )
                 if not result.cache_built:
                     result.critical_errors.append(
-                        str(cache_result.get("error") or "cache_build_failed")[:250]
+                        str(initial_cache_result.get("error") or "cache_build_failed")[
+                            :250
+                        ]
                     )
             except Exception as error:
                 logger.exception(
@@ -206,16 +216,14 @@ class AnimeFranchiseMaintenanceService:
         )
         if update_ui_cache and should_sync_after_discovery:
             canonical_root_mal_id = str(result.component_root_mal_id or "").strip()
-            seed_mal_id_str = str(seed_mal_id or "").strip()
-            canonical_already_built = (
-                result.cache_built
-                and canonical_root_mal_id
-                and seed_mal_id_str == canonical_root_mal_id
-            )
             if canonical_root_mal_id:
                 result.post_discovery_cache_sync_attempted = True
-                if canonical_already_built:
+                if self._cache_result_synced_canonical(
+                    initial_cache_result,
+                    canonical_root_mal_id,
+                ):
                     result.post_discovery_cache_synced = True
+                    result.post_discovery_cache_sync_source = "initial_cache_build"
                 else:
                     try:
                         canonical_cache_result = self.cache_build_service_factory(
@@ -227,16 +235,25 @@ class AnimeFranchiseMaintenanceService:
                             force_cache_rebuild=True,
                         )
                         canonical_built = bool(canonical_cache_result.get("built"))
+                        canonical_saved = self._cache_result_synced_canonical(
+                            canonical_cache_result,
+                            canonical_root_mal_id,
+                        )
                         result.cache_built = result.cache_built or canonical_built
-                        result.post_discovery_cache_synced = canonical_built
-                        if not canonical_built:
-                            result.post_discovery_cache_sync_error = str(
+                        result.post_discovery_cache_synced = (
+                            canonical_built and canonical_saved
+                        )
+                        if result.post_discovery_cache_synced:
+                            result.post_discovery_cache_sync_source = (
+                                "canonical_post_discovery_build"
+                            )
+                        else:
+                            error = str(
                                 canonical_cache_result.get("error")
                                 or "post_discovery_cache_sync_failed"
                             )[:250]
-                            result.non_critical_errors.append(
-                                result.post_discovery_cache_sync_error
-                            )
+                            result.post_discovery_cache_sync_error = error
+                            result.critical_errors.append(error)
                     except Exception as error:
                         logger.exception(
                             "Post-discovery canonical cache sync failed",
@@ -247,7 +264,9 @@ class AnimeFranchiseMaintenanceService:
                             },
                         )
                         result.post_discovery_cache_sync_error = str(error)[:250]
-                        result.non_critical_errors.append(str(error)[:250])
+                        result.critical_errors.append(
+                            result.post_discovery_cache_sync_error
+                        )
 
         should_refresh_series_view = (
             refresh_series_view
@@ -280,6 +299,22 @@ class AnimeFranchiseMaintenanceService:
                 result.critical_errors.append(str(error)[:250])
 
         return result
+
+    def _cache_result_synced_canonical(
+        self, cache_result, canonical_root_mal_id: str
+    ) -> bool:
+        """Return whether a cache result saved the requested canonical payload."""
+        if not cache_result:
+            return False
+        if not cache_result.get("built"):
+            return False
+        if not cache_result.get("canonical_payload_saved"):
+            return False
+        saved_media_id = str(
+            cache_result.get("canonical_payload_saved_media_id") or ""
+        ).strip()
+        canonical_root_mal_id = str(canonical_root_mal_id or "").strip()
+        return bool(saved_media_id and saved_media_id == canonical_root_mal_id)
 
     def _should_sync_cache_after_discovery(self, discovery_stats) -> bool:
         """Return whether discovery stats require canonical UI cache sync."""

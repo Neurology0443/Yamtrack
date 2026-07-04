@@ -73,6 +73,9 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
         self.assertNotIn("user", canonical_payload)
         self.assertTrue(result["built"])
         self.assertEqual(result["canonical_media_id"], "100")
+        self.assertTrue(result["canonical_payload_saved"])
+        self.assertEqual(result["canonical_payload_saved_media_id"], "100")
+        self.assertEqual(result["canonical_payload_source"], "fresh_snapshot")
 
     @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
     @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
@@ -161,6 +164,11 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             truncated=False,
         )
         mock_cache.delete_direct_payload.assert_called_once_with("123")
+        self.assertTrue(result["canonical_payload_saved"])
+        self.assertEqual(result["canonical_payload_saved_media_id"], "52299")
+        self.assertEqual(result["canonical_payload_source"], "fresh_snapshot")
+        self.assertTrue(result["direct_payload_deleted"])
+        self.assertFalse(result["scoped_payload_saved"])
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
     @patch(
@@ -215,3 +223,6 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             truncated=False,
         )
         mock_cache.delete_direct_payload.assert_called_once_with("123")
+        self.assertFalse(result["canonical_payload_saved"])
+        self.assertEqual(result["canonical_payload_saved_media_id"], "")
+        self.assertEqual(result["canonical_payload_source"], "existing_cache")

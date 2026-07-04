@@ -40,7 +40,11 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
 
         cache_service = Mock()
         cache_service.build_and_save_from_snapshot.side_effect = cache_results or [
-            {"built": True}
+            {
+                "built": True,
+                "canonical_payload_saved": True,
+                "canonical_payload_saved_media_id": canonical_root_mal_id,
+            }
         ]
         cache_factory = Mock(return_value=cache_service)
 
@@ -78,7 +82,18 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
                 baseline_created=0,
                 notifications_queued=1,
             ),
-            cache_results=[{"built": True}, {"built": True}],
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_payload_saved": False,
+                    "canonical_payload_saved_media_id": "",
+                },
+                {
+                    "built": True,
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                },
+            ],
         )
         mock_session_class.return_value = ctx.build_session
 
@@ -111,7 +126,13 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
             seed_mal_id="52299",
             canonical_root_mal_id="52299",
             discovery_stats=AnimeFranchiseDiscoveryStats(discoveries_created=1),
-            cache_results=[{"built": True}],
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                }
+            ],
         )
         mock_session_class.return_value = ctx.build_session
 
@@ -162,7 +183,18 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
                 baseline_created=0,
                 notifications_queued=0,
             ),
-            cache_results=[{"built": True}, {"built": True}],
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_payload_saved": False,
+                    "canonical_payload_saved_media_id": "",
+                },
+                {
+                    "built": True,
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                },
+            ],
         )
         mock_session_class.return_value = ctx.build_session
 
@@ -190,7 +222,18 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
                 notifications_queued=1,
             ),
             tracked_member_media_ids=("123", "52299"),
-            cache_results=[{"built": True}, {"built": True}],
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_payload_saved": False,
+                    "canonical_payload_saved_media_id": "",
+                },
+                {
+                    "built": True,
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                },
+            ],
         )
         mock_session_class.return_value = ctx.build_session
 
@@ -214,3 +257,156 @@ class AnimeFranchiseMaintenanceServiceTests(SimpleTestCase):
             ("64546",),
         )
         self.assertTrue(result.post_discovery_series_view_refresh_requested)
+
+    @patch("app.services.anime_franchise_maintenance.AnimeFranchiseBuildSession")
+    def test_post_baseline_discovery_reuses_initial_canonical_publication(
+        self, mock_session_class
+    ):
+        ctx = self._service_context(
+            discovery_stats=AnimeFranchiseDiscoveryStats(
+                discoveries_created=1,
+                baseline_created=0,
+                notifications_queued=1,
+            ),
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_media_id": "52299",
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                }
+            ],
+        )
+        mock_session_class.return_value = ctx.build_session
+
+        result = ctx.service.process_seed(
+            user=ctx.user,
+            seed_mal_id="123",
+            refresh_cache=False,
+            update_ui_cache=True,
+        )
+
+        ctx.cache_service.build_and_save_from_snapshot.assert_called_once()
+        self.assertEqual(
+            ctx.cache_service.build_and_save_from_snapshot.call_args.args[0], "123"
+        )
+        self.assertTrue(result.initial_cache_synced_canonical)
+        self.assertTrue(result.post_discovery_cache_sync_attempted)
+        self.assertTrue(result.post_discovery_cache_synced)
+        self.assertEqual(result.post_discovery_cache_sync_source, "initial_cache_build")
+
+    @patch("app.services.anime_franchise_maintenance.AnimeFranchiseBuildSession")
+    def test_post_baseline_discovery_builds_canonical_when_initial_not_saved(
+        self, mock_session_class
+    ):
+        ctx = self._service_context(
+            discovery_stats=AnimeFranchiseDiscoveryStats(
+                discoveries_created=1,
+                baseline_created=0,
+                notifications_queued=1,
+            ),
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_media_id": "52299",
+                    "canonical_payload_saved": False,
+                    "canonical_payload_saved_media_id": "",
+                },
+                {
+                    "built": True,
+                    "canonical_media_id": "52299",
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "52299",
+                },
+            ],
+        )
+        mock_session_class.return_value = ctx.build_session
+
+        result = ctx.service.process_seed(
+            user=ctx.user,
+            seed_mal_id="123",
+            refresh_cache=False,
+            update_ui_cache=True,
+        )
+
+        self.assertEqual(ctx.cache_service.build_and_save_from_snapshot.call_count, 2)
+        self.assertEqual(
+            ctx.cache_service.build_and_save_from_snapshot.call_args_list[1].args[0],
+            "52299",
+        )
+        self.assertTrue(result.post_discovery_cache_synced)
+        self.assertEqual(
+            result.post_discovery_cache_sync_source,
+            "canonical_post_discovery_build",
+        )
+
+    @patch("app.services.anime_franchise_maintenance.AnimeFranchiseBuildSession")
+    def test_post_discovery_canonical_sync_failure_is_critical(
+        self, mock_session_class
+    ):
+        ctx = self._service_context(
+            discovery_stats=AnimeFranchiseDiscoveryStats(
+                discoveries_created=1,
+                baseline_created=0,
+                notifications_queued=1,
+            ),
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_media_id": "123",
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "123",
+                },
+                {"built": False, "error": "canonical sync failed"},
+            ],
+        )
+        mock_session_class.return_value = ctx.build_session
+
+        result = ctx.service.process_seed(
+            user=ctx.user,
+            seed_mal_id="123",
+            refresh_cache=False,
+            update_ui_cache=True,
+        )
+
+        self.assertTrue(result.post_discovery_cache_sync_attempted)
+        self.assertFalse(result.post_discovery_cache_synced)
+        self.assertEqual(
+            result.post_discovery_cache_sync_error, "canonical sync failed"
+        )
+        self.assertIn("canonical sync failed", result.critical_errors)
+        self.assertFalse(result.ok)
+
+    @patch("app.services.anime_franchise_maintenance.AnimeFranchiseBuildSession")
+    def test_post_discovery_canonical_sync_exception_is_critical(
+        self, mock_session_class
+    ):
+        ctx = self._service_context(
+            discovery_stats=AnimeFranchiseDiscoveryStats(
+                discoveries_created=1,
+                baseline_created=0,
+                notifications_queued=1,
+            ),
+            cache_results=[
+                {
+                    "built": True,
+                    "canonical_media_id": "123",
+                    "canonical_payload_saved": True,
+                    "canonical_payload_saved_media_id": "123",
+                },
+                RuntimeError("boom"),
+            ],
+        )
+        mock_session_class.return_value = ctx.build_session
+
+        result = ctx.service.process_seed(
+            user=ctx.user,
+            seed_mal_id="123",
+            refresh_cache=False,
+            update_ui_cache=True,
+        )
+
+        self.assertTrue(result.post_discovery_cache_sync_attempted)
+        self.assertFalse(result.post_discovery_cache_synced)
+        self.assertIn("boom", result.critical_errors)
+        self.assertFalse(result.ok)
