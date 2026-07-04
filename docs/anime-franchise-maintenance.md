@@ -166,7 +166,9 @@ After a seed succeeds, tracked members from the same canonical franchise snapsho
 
 Some tracked MAL anime can act as local branch roots. A parent franchise scan can see such a seed as a tracked member without fully covering the local branch opened when that seed is scanned directly.
 
-The maintenance scanner therefore preserves known branch-root seeds during runtime deduplication. A seed is preserved when it is itself a tracked maintenance seed and another maintenance state for the same user already resolves to that seed as its component root.
+The maintenance scanner therefore preserves known branch-root seeds during runtime deduplication. A seed is preserved when it is itself a currently eligible tracked MAL anime seed and another currently eligible tracked MAL anime state for the same user already resolves to that seed as its component root.
+
+This is a known-branch preservation mechanism: it relies on existing eligible maintenance states and does not attempt to infer unseen branch roots from MAL during scheduling.
 
 Preserved branch-root seeds are not marked duplicate-covered by a different component root. They remain eligible to scan in the same batch or a later batch, so their local branch can refresh discovery, cache, and scheduling normally.
 

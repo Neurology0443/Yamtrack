@@ -63,7 +63,7 @@ class AnimeFranchiseMaintenanceScanStats:
     branch_root_state_coverage_skipped: int = 0
     branch_root_duplicate_coverage_bypassed: int = 0
     branch_root_duplicate_root_bypassed: int = 0
-    branch_root_coverage_skipped_seed_ids: list[str] = field(default_factory=list)
+    branch_root_preserved_seed_ids: list[str] = field(default_factory=list)
 
     def to_dict(self):
         """Return JSON-serializable counters."""
@@ -120,7 +120,7 @@ class AnimeFranchiseMaintenanceScanService:
                     ),
                 ):
                     stats.branch_root_duplicate_coverage_bypassed += 1
-                    self._record_branch_root_seed(stats, state.seed_mal_id)
+                    self._record_branch_root_preserved_seed(stats, state.seed_mal_id)
                 else:
                     stats.skipped_duplicate_root += 1
                     self._mark_duplicate_covered(
@@ -145,7 +145,9 @@ class AnimeFranchiseMaintenanceScanService:
                         ),
                     ):
                         stats.branch_root_duplicate_root_bypassed += 1
-                        self._record_branch_root_seed(stats, state.seed_mal_id)
+                        self._record_branch_root_preserved_seed(
+                            stats, state.seed_mal_id
+                        )
                     else:
                         stats.skipped_duplicate_root += 1
                         result = processed_results_by_root.get(root_key)
@@ -215,7 +217,7 @@ class AnimeFranchiseMaintenanceScanService:
                     ),
                 ):
                     stats.branch_root_coverage_skipped += 1
-                    self._record_branch_root_seed(stats, media_id)
+                    self._record_branch_root_preserved_seed(stats, media_id)
                     continue
                 covered_seed_keys.add(member_seed_key)
                 covered_results_by_seed[member_seed_key] = result
@@ -451,29 +453,51 @@ class AnimeFranchiseMaintenanceScanService:
         state.next_scan_at = self._next_error_scan_at(state, now=now)
         state.save()
 
-    def _branch_root_candidate_seed_ids_by_user(
+    def _branch_root_candidate_seed_ids_by_user(  # noqa: C901, PLR0912
         self, *, user_ids
     ) -> dict[int, set[str]]:
         user_ids = {user_id for user_id in user_ids if user_id is not None}
         if not user_ids:
             return {}
+
+        eligible_seed_ids_by_user = defaultdict(set)
+        eligible_rows = (
+            self._eligible_anime_queryset()
+            .filter(user_id__in=user_ids)
+            .values_list("user_id", "item__media_id")
+        )
+        for user_id, raw_media_id in eligible_rows:
+            media_id = str(raw_media_id or "").strip()
+            if media_id:
+                eligible_seed_ids_by_user[user_id].add(media_id)
+
+        if not eligible_seed_ids_by_user:
+            return {}
+
         rows = AnimeFranchiseMaintenanceScanState.objects.filter(
             user_id__in=user_ids
         ).values_list("user_id", "seed_mal_id", "component_root_mal_id")
         seed_ids_by_user = defaultdict(set)
         root_children_by_user = defaultdict(lambda: defaultdict(set))
-        for user_id, seed_mal_id, component_root_mal_id in rows:
-            seed_id = str(seed_mal_id or "").strip()
-            root_id = str(component_root_mal_id or "").strip()
-            if seed_id:
-                seed_ids_by_user[user_id].add(seed_id)
+        for user_id, raw_seed_mal_id, raw_component_root_mal_id in rows:
+            seed_id = str(raw_seed_mal_id or "").strip()
+            root_id = str(raw_component_root_mal_id or "").strip()
+            eligible_seed_ids = eligible_seed_ids_by_user.get(user_id, set())
+            if not seed_id:
+                continue
+            if seed_id not in eligible_seed_ids:
+                continue
+            seed_ids_by_user[user_id].add(seed_id)
             if root_id:
                 root_children_by_user[user_id][root_id].add(seed_id)
 
         candidate_ids_by_user = defaultdict(set)
         for user_id, seed_ids in seed_ids_by_user.items():
+            eligible_seed_ids = eligible_seed_ids_by_user.get(user_id, set())
             for root_id, child_seed_ids in root_children_by_user[user_id].items():
                 if root_id not in seed_ids:
+                    continue
+                if root_id not in eligible_seed_ids:
                     continue
                 if not any(
                     child_seed_id != root_id for child_seed_id in child_seed_ids
@@ -501,18 +525,15 @@ class AnimeFranchiseMaintenanceScanService:
             return False
         return seed_id in branch_root_candidate_seed_ids_by_user.get(user_id, set())
 
-    def _record_branch_root_seed(self, stats, seed_mal_id):
+    def _record_branch_root_preserved_seed(self, stats, seed_mal_id):
         seed_id = str(seed_mal_id or "").strip()
         if not seed_id:
             return
-        if seed_id in stats.branch_root_coverage_skipped_seed_ids:
+        if seed_id in stats.branch_root_preserved_seed_ids:
             return
-        if (
-            len(stats.branch_root_coverage_skipped_seed_ids)
-            >= BRANCH_ROOT_SEED_ID_STATS_LIMIT
-        ):
+        if len(stats.branch_root_preserved_seed_ids) >= BRANCH_ROOT_SEED_ID_STATS_LIMIT:
             return
-        stats.branch_root_coverage_skipped_seed_ids.append(seed_id)
+        stats.branch_root_preserved_seed_ids.append(seed_id)
 
     def _cover_tracked_member_states(
         self,
@@ -542,7 +563,7 @@ class AnimeFranchiseMaintenanceScanService:
             ):
                 if stats is not None:
                     stats.branch_root_state_coverage_skipped += 1
-                    self._record_branch_root_seed(stats, media_id)
+                    self._record_branch_root_preserved_seed(stats, media_id)
                 continue
             member_state, _created = (
                 AnimeFranchiseMaintenanceScanState.objects.get_or_create(

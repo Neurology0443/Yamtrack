@@ -255,7 +255,7 @@ class AnimeFranchiseMaintenanceScanServiceTests(TestCase):
             ["100", "200"],
         )
         self.assertGreaterEqual(stats.branch_root_coverage_skipped, 1)
-        self.assertIn("200", stats.branch_root_coverage_skipped_seed_ids)
+        self.assertIn("200", stats.branch_root_preserved_seed_ids)
 
     def test_cover_tracked_member_states_preserves_branch_root_candidate(self):
         state_a = self._scan_state("100", "100")
@@ -268,7 +268,7 @@ class AnimeFranchiseMaintenanceScanServiceTests(TestCase):
             (),
             {
                 "branch_root_state_coverage_skipped": 0,
-                "branch_root_coverage_skipped_seed_ids": [],
+                "branch_root_preserved_seed_ids": [],
             },
         )()
 
@@ -348,6 +348,36 @@ class AnimeFranchiseMaintenanceScanServiceTests(TestCase):
         self.assertIsNotNone(state_b.last_change_at)
         self.assertEqual(state_b.consecutive_stable_scans, 0)
 
+    def test_branch_root_candidates_ignore_untracked_child_states(self):
+        for media_id in ("100", "200"):
+            self._track(media_id)
+        self._scan_state("100", "100")
+        self._scan_state("200", "100")
+        self._scan_state("300", "200")
+        maintenance_service = Mock()
+        maintenance_service.process_seed.return_value = self._scan_result(
+            "100", "100", ("100", "200")
+        )
+        service = AnimeFranchiseMaintenanceScanService(
+            maintenance_service=maintenance_service
+        )
+
+        stats = service.scan_due(limit=3)
+
+        self.assertEqual(
+            [
+                call.kwargs["seed_mal_id"]
+                for call in maintenance_service.process_seed.mock_calls
+            ],
+            ["100"],
+        )
+        self.assertEqual(stats.skipped_duplicate_root, 1)
+        self.assertEqual(stats.branch_root_coverage_skipped, 0)
+        self.assertEqual(stats.branch_root_state_coverage_skipped, 0)
+        self.assertEqual(stats.branch_root_duplicate_coverage_bypassed, 0)
+        self.assertEqual(stats.branch_root_duplicate_root_bypassed, 0)
+        self.assertEqual(stats.branch_root_preserved_seed_ids, [])
+
     def test_scan_due_keeps_simple_franchise_deduplication(self):
         for media_id in ("100", "200", "400"):
             self._track(media_id)
@@ -372,4 +402,4 @@ class AnimeFranchiseMaintenanceScanServiceTests(TestCase):
             ["100"],
         )
         self.assertEqual(stats.skipped_duplicate_root, 2)
-        self.assertEqual(stats.branch_root_coverage_skipped_seed_ids, [])
+        self.assertEqual(stats.branch_root_preserved_seed_ids, [])
