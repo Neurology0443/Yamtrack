@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import asdict, dataclass
+from collections import defaultdict
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
 
 from django.conf import settings
@@ -25,6 +26,8 @@ from app.services.anime_franchise_maintenance_cadence import (
 )
 
 logger = logging.getLogger(__name__)
+
+BRANCH_ROOT_SEED_ID_STATS_LIMIT = 25
 
 ELIGIBLE_STATUSES = [
     Status.PLANNING.value,
@@ -56,6 +59,11 @@ class AnimeFranchiseMaintenanceScanStats:
     critical_errors: int = 0
     non_critical_errors: int = 0
     backlog: int = 0
+    branch_root_coverage_skipped: int = 0
+    branch_root_state_coverage_skipped: int = 0
+    branch_root_duplicate_coverage_bypassed: int = 0
+    branch_root_duplicate_root_bypassed: int = 0
+    branch_root_preserved_seed_ids: list[str] = field(default_factory=list)
 
     def to_dict(self):
         """Return JSON-serializable counters."""
@@ -71,7 +79,7 @@ class AnimeFranchiseMaintenanceScanService:
             maintenance_service or AnimeFranchiseMaintenanceService()
         )
 
-    def scan_due(self, *, limit=None) -> AnimeFranchiseMaintenanceScanStats:  # noqa: C901, PLR0915
+    def scan_due(self, *, limit=None) -> AnimeFranchiseMaintenanceScanStats:  # noqa: C901, PLR0912, PLR0915
         """Create missing states and process a bounded batch of due seeds."""
         now = timezone.now()
         stats = AnimeFranchiseMaintenanceScanStats()
@@ -88,17 +96,39 @@ class AnimeFranchiseMaintenanceScanService:
         processed_results_by_root = {}
         covered_seed_keys = set()
         covered_results_by_seed = {}
+        branch_root_candidate_seed_ids_by_user = (
+            self._branch_root_candidate_seed_ids_by_user(
+                user_ids={state.user_id for state in states},
+            )
+        )
 
         for state in states:
             seed_key = (state.user_id, state.seed_mal_id)
             if seed_key in covered_seed_keys:
-                stats.skipped_duplicate_root += 1
-                self._mark_duplicate_covered(
-                    state,
-                    now=now,
-                    result=covered_results_by_seed.get(seed_key),
+                covered_result = covered_results_by_seed.get(seed_key)
+                covered_root_id = (
+                    getattr(covered_result, "component_root_mal_id", "")
+                    if covered_result is not None
+                    else state.component_root_mal_id
                 )
-                continue
+                if self._is_branch_root_candidate(
+                    user_id=state.user_id,
+                    seed_mal_id=state.seed_mal_id,
+                    current_component_root_mal_id=covered_root_id,
+                    branch_root_candidate_seed_ids_by_user=(
+                        branch_root_candidate_seed_ids_by_user
+                    ),
+                ):
+                    stats.branch_root_duplicate_coverage_bypassed += 1
+                    self._record_branch_root_preserved_seed(stats, state.seed_mal_id)
+                else:
+                    stats.skipped_duplicate_root += 1
+                    self._mark_duplicate_covered(
+                        state,
+                        now=now,
+                        result=covered_result,
+                    )
+                    continue
             if not self._is_seed_tracked(state):
                 stats.skipped_not_tracked += 1
                 self._push_state_forward(state, now=now)
@@ -106,13 +136,26 @@ class AnimeFranchiseMaintenanceScanService:
             if state.component_root_mal_id:
                 root_key = (state.user_id, state.component_root_mal_id)
                 if root_key in processed_roots_by_user:
-                    stats.skipped_duplicate_root += 1
-                    result = processed_results_by_root.get(root_key)
-                    self._mark_duplicate_covered(state, now=now, result=result)
-                    covered_seed_keys.add(seed_key)
-                    if result is not None:
-                        covered_results_by_seed[seed_key] = result
-                    continue
+                    if self._is_branch_root_candidate(
+                        user_id=state.user_id,
+                        seed_mal_id=state.seed_mal_id,
+                        current_component_root_mal_id=state.component_root_mal_id,
+                        branch_root_candidate_seed_ids_by_user=(
+                            branch_root_candidate_seed_ids_by_user
+                        ),
+                    ):
+                        stats.branch_root_duplicate_root_bypassed += 1
+                        self._record_branch_root_preserved_seed(
+                            stats, state.seed_mal_id
+                        )
+                    else:
+                        stats.skipped_duplicate_root += 1
+                        result = processed_results_by_root.get(root_key)
+                        self._mark_duplicate_covered(state, now=now, result=result)
+                        covered_seed_keys.add(seed_key)
+                        if result is not None:
+                            covered_results_by_seed[seed_key] = result
+                        continue
             try:
                 result = self.maintenance_service.process_seed(
                     user=state.user,
@@ -160,15 +203,37 @@ class AnimeFranchiseMaintenanceScanService:
             self._mark_success(state, result=result, now=now)
             covered_seed_keys.add(seed_key)
             covered_results_by_seed[seed_key] = result
-            for media_id in result.tracked_member_media_ids:
-                member_seed_key = (state.user_id, str(media_id))
+            for raw_media_id in result.tracked_member_media_ids:
+                media_id = str(raw_media_id)
+                member_seed_key = (state.user_id, media_id)
+                if media_id != str(
+                    state.seed_mal_id
+                ) and self._is_branch_root_candidate(
+                    user_id=state.user_id,
+                    seed_mal_id=media_id,
+                    current_component_root_mal_id=result.component_root_mal_id,
+                    branch_root_candidate_seed_ids_by_user=(
+                        branch_root_candidate_seed_ids_by_user
+                    ),
+                ):
+                    stats.branch_root_coverage_skipped += 1
+                    self._record_branch_root_preserved_seed(stats, media_id)
+                    continue
                 covered_seed_keys.add(member_seed_key)
                 covered_results_by_seed[member_seed_key] = result
             if result.component_root_mal_id:
                 root_key = (state.user_id, result.component_root_mal_id)
                 processed_roots_by_user.add(root_key)
                 processed_results_by_root[root_key] = result
-            self._cover_tracked_member_states(state, result=result, now=now)
+            self._cover_tracked_member_states(
+                state,
+                result=result,
+                now=now,
+                branch_root_candidate_seed_ids_by_user=(
+                    branch_root_candidate_seed_ids_by_user
+                ),
+                stats=stats,
+            )
         return stats
 
     def ensure_states(self, *, now=None) -> int:
@@ -388,14 +453,117 @@ class AnimeFranchiseMaintenanceScanService:
         state.next_scan_at = self._next_error_scan_at(state, now=now)
         state.save()
 
-    def _cover_tracked_member_states(self, state, *, result, now):
+    def _branch_root_candidate_seed_ids_by_user(  # noqa: C901, PLR0912
+        self, *, user_ids
+    ) -> dict[int, set[str]]:
+        user_ids = {user_id for user_id in user_ids if user_id is not None}
+        if not user_ids:
+            return {}
+
+        eligible_seed_ids_by_user = defaultdict(set)
+        eligible_rows = (
+            self._eligible_anime_queryset()
+            .filter(user_id__in=user_ids)
+            .values_list("user_id", "item__media_id")
+        )
+        for user_id, raw_media_id in eligible_rows:
+            media_id = str(raw_media_id or "").strip()
+            if media_id:
+                eligible_seed_ids_by_user[user_id].add(media_id)
+
+        if not eligible_seed_ids_by_user:
+            return {}
+
+        rows = AnimeFranchiseMaintenanceScanState.objects.filter(
+            user_id__in=user_ids
+        ).values_list("user_id", "seed_mal_id", "component_root_mal_id")
+        seed_ids_by_user = defaultdict(set)
+        root_children_by_user = defaultdict(lambda: defaultdict(set))
+        for user_id, raw_seed_mal_id, raw_component_root_mal_id in rows:
+            seed_id = str(raw_seed_mal_id or "").strip()
+            root_id = str(raw_component_root_mal_id or "").strip()
+            eligible_seed_ids = eligible_seed_ids_by_user.get(user_id, set())
+            if not seed_id:
+                continue
+            if seed_id not in eligible_seed_ids:
+                continue
+            seed_ids_by_user[user_id].add(seed_id)
+            if root_id:
+                root_children_by_user[user_id][root_id].add(seed_id)
+
+        candidate_ids_by_user = defaultdict(set)
+        for user_id, seed_ids in seed_ids_by_user.items():
+            eligible_seed_ids = eligible_seed_ids_by_user.get(user_id, set())
+            for root_id, child_seed_ids in root_children_by_user[user_id].items():
+                if root_id not in seed_ids:
+                    continue
+                if root_id not in eligible_seed_ids:
+                    continue
+                if not any(
+                    child_seed_id != root_id for child_seed_id in child_seed_ids
+                ):
+                    continue
+                candidate_ids_by_user[user_id].add(root_id)
+        return {
+            user_id: set(candidate_ids)
+            for user_id, candidate_ids in candidate_ids_by_user.items()
+        }
+
+    def _is_branch_root_candidate(
+        self,
+        *,
+        user_id,
+        seed_mal_id,
+        current_component_root_mal_id,
+        branch_root_candidate_seed_ids_by_user,
+    ) -> bool:
+        seed_id = str(seed_mal_id or "").strip()
+        current_root_id = str(current_component_root_mal_id or "").strip()
+        if not seed_id:
+            return False
+        if seed_id == current_root_id:
+            return False
+        return seed_id in branch_root_candidate_seed_ids_by_user.get(user_id, set())
+
+    def _record_branch_root_preserved_seed(self, stats, seed_mal_id):
+        seed_id = str(seed_mal_id or "").strip()
+        if not seed_id:
+            return
+        if seed_id in stats.branch_root_preserved_seed_ids:
+            return
+        if len(stats.branch_root_preserved_seed_ids) >= BRANCH_ROOT_SEED_ID_STATS_LIMIT:
+            return
+        stats.branch_root_preserved_seed_ids.append(seed_id)
+
+    def _cover_tracked_member_states(
+        self,
+        state,
+        *,
+        result,
+        now,
+        branch_root_candidate_seed_ids_by_user=None,
+        stats=None,
+    ):
         tracked_ids = self._tracked_seed_ids_for_user(
             user_id=state.user_id,
             media_ids=result.tracked_member_media_ids,
         )
         current_seed_mal_id = str(state.seed_mal_id)
-        for media_id in tracked_ids:
-            if str(media_id) == current_seed_mal_id:
+        for raw_media_id in tracked_ids:
+            media_id = str(raw_media_id)
+            if media_id == current_seed_mal_id:
+                continue
+            if self._is_branch_root_candidate(
+                user_id=state.user_id,
+                seed_mal_id=media_id,
+                current_component_root_mal_id=result.component_root_mal_id,
+                branch_root_candidate_seed_ids_by_user=(
+                    branch_root_candidate_seed_ids_by_user or {}
+                ),
+            ):
+                if stats is not None:
+                    stats.branch_root_state_coverage_skipped += 1
+                    self._record_branch_root_preserved_seed(stats, media_id)
                 continue
             member_state, _created = (
                 AnimeFranchiseMaintenanceScanState.objects.get_or_create(
@@ -486,9 +654,7 @@ class AnimeFranchiseMaintenanceScanService:
 
     def _spread_delta(self, user_id, key, purpose, hours):
         minutes = max(1, int(hours * 60))
-        return timedelta(
-            minutes=self._hash_int(user_id, key, purpose) % minutes
-        )
+        return timedelta(minutes=self._hash_int(user_id, key, purpose) % minutes)
 
     def _spread_minutes(self, user_id, key, purpose, min_minutes, max_minutes):
         max_minutes = max(max_minutes, min_minutes)
