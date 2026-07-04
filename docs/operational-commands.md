@@ -193,6 +193,8 @@ PY
 
 Use this read-only diagnostic when a tracked local franchise branch appears to be covered by a parent root and you want to confirm whether the maintenance scanner currently recognizes it as a branch-root candidate. It only reads maintenance scan state and does not trigger scans.
 
+`branch_root_candidates` is the scanner's eligible/known-state view and is the authoritative preservation signal for this diagnostic. `states_by_root` is a raw maintenance-state grouping for context and may include stale state rows for anime that are no longer currently eligible or tracked, so do not treat every grouped child as proof that the root should be preserved.
+
 ```bash
 docker compose exec -T yamtrack python manage.py shell <<'PY'
 from collections import defaultdict
