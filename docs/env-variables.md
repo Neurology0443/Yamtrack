@@ -147,11 +147,11 @@ These settings control individual MAL anime detail metadata cache entries, not t
 
 ## MAL anime release-date notifications
 
-This scanner watches MAL anime start-date metadata and is separate from the normal `send_release_notifications` task.
+This scanner watches MAL anime start-date metadata and is separate from the normal `send_release_notifications` task. The global scanner and the per-user delivery preference are separate: `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED` controls whether the Beat scan exists, while users only receive delivery when `anime_release_date_notifications_enabled` is enabled and `notification_urls` contains at least one usable Apprise URL.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED` | `true` | Enables the Celery Beat scanner for MAL anime start-date notifications. |
+| `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED` | `true` | Enables the Celery Beat scanner for MAL anime start-date notifications. This global default is enabled, but per-user delivery remains opt-in through `anime_release_date_notifications_enabled` (`false` by default). |
 | `ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS` | `12` | Interval, in hours, for the MAL anime release-date scan schedule. |
 | `ANIME_RELEASE_DATE_SCAN_BATCH_SIZE` | `25` | Maximum number of due MAL anime release-date scan states processed per scan run. |
 | `ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS` | `24` | Minimum age, in hours, before refreshing MAL metadata for release-date scanning. |
@@ -198,15 +198,15 @@ These settings create/update the `scan_mal_anime_franchise_maintenance` Celery B
 | `ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED` | `false` | Enables the autonomous MAL anime franchise maintenance Celery Beat scanner. |
 | `ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES` | `60` | Interval, in minutes, for the maintenance scanner schedule. |
 | `ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE` | `10` | Maximum number of due maintenance states selected per scan run. |
-| `ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS` | `24` | Target sweep window, in hours, used by maintenance cadence calculations. |
+| `ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS` | `24` | Compatibility setting kept for older deployments. The current maintenance cadence is primarily driven by the activity-based HOT/COOL/DEEP_COLD scan windows documented in `anime-franchise-maintenance.md`. |
 | `ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS` | `24` | Spread window, in hours, used when creating initial maintenance states. |
 | `ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE` | `true` | Whether maintenance should request fresh MAL/provider cache data while processing seeds. |
 | `ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES` | `360` | Celery lock duration, in minutes, to avoid concurrent maintenance scans. |
 | `ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS` | `12` | Retry delay, in hours, after a maintenance error. |
 | `ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_CHANGE` | `true` | Refreshes Anime Series View memberships when maintenance detects a changed maintenance fingerprint or root. |
 | `ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS` | `false` | Refreshes Anime Series View memberships on every successful maintenance run. More aggressive than change-only refresh. |
-| `ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF` | `false` | Enables additional stable-franchise backoff behavior for repeatedly unchanged franchises. |
-| `ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS` | `30` | Maximum stable-franchise backoff, in days. |
+| `ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF` | `false` | Compatibility setting kept for older deployments. The current maintenance scanner does not use this as the primary stable cadence switch. |
+| `ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS` | `30` | Compatibility setting for the older stable-backoff path. The active cadence uses the profile windows below instead. |
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_AGE_YEARS` | `15` | Minimum franchise age, in years, before a stable franchise can be considered deep-cold. |
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_STABLE_SCANS` | `8` | Minimum consecutive stable scans before deep-cold cadence can apply. |
 | `ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_CHANGE_AGE_DAYS` | `180` | Minimum age, in days, since the last detected change before deep-cold cadence can apply. |

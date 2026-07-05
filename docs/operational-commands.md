@@ -104,6 +104,107 @@ List memberships by root when a franchise appears split or merged incorrectly:
 docker compose exec yamtrack python manage.py shell -c "from app.models import AnimeSeriesViewMembership; from collections import defaultdict; rows=AnimeSeriesViewMembership.objects.filter(user_id=1).order_by('root_media_id','media_id').values_list('root_media_id','media_id','display_title','group_kind','projection_version'); roots=defaultdict(list); [roots[root].append((media,title,kind,version)) for root,media,title,kind,version in rows]; [print(root, members) for root,members in roots.items()]"
 ```
 
+
+## MAL anime release-date notifications
+
+The global scanner and per-user delivery preference are separate. The scanner can be scheduled while no user is eligible for delivery.
+
+### Inspect scanner settings and Beat entry
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.conf import settings
+
+entry = settings.CELERY_BEAT_SCHEDULE.get("scan_mal_anime_release_dates")
+for name in [
+    "ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED",
+    "ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS",
+    "ANIME_RELEASE_DATE_SCAN_BATCH_SIZE",
+    "ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS",
+    "ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS",
+    "ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS",
+    "ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES",
+]:
+    print(f"{name}:", getattr(settings, name))
+print("beat_entry_exists:", bool(entry))
+print("beat_entry:", entry)
+PY
+```
+
+### Run one scan now
+
+There is no dedicated management command. Invoke the Celery task function from Django shell for an operational one-off scan:
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from events.tasks import scan_mal_anime_release_dates
+print(scan_mal_anime_release_dates())
+PY
+```
+
+A disabled scanner returns `reason=disabled`. A concurrent run returns `reason=already_running`. A scan with no due states or no eligible users can legitimately return zero sent notifications.
+
+### Inspect tracked scan states
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from django.utils import timezone
+from events.models import AnimeReleaseDateScanState
+
+now = timezone.now()
+qs = AnimeReleaseDateScanState.objects.select_related("item")
+print({
+    "states": qs.count(),
+    "due": qs.filter(disabled=False, next_scan_at__lte=now).count(),
+    "disabled": qs.filter(disabled=True).count(),
+    "with_errors": qs.exclude(last_error="").count(),
+})
+for state in qs.order_by("next_scan_at")[:20]:
+    print(state.item.media_id, state.item.title, state.disabled, state.next_scan_at, state.last_seen_start_date_text, state.last_seen_start_date_precision, state.last_error[:120])
+PY
+```
+
+### Inspect eligible users for one MAL anime
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from app.models import Item, MediaTypes, Sources, Status
+
+media_id = "30831"
+item = Item.objects.get(source=Sources.MAL.value, media_type=MediaTypes.ANIME.value, media_id=media_id)
+for anime in item.anime_set.select_related("user").filter(status__in=[Status.PLANNING.value, Status.IN_PROGRESS.value]):
+    user = anime.user
+    excluded = user.notification_excluded_items.filter(id=item.id).exists()
+    print(user.id, {
+        "anime_release_date_notifications_enabled": user.anime_release_date_notifications_enabled,
+        "has_notification_urls": bool(user.notification_urls.strip()),
+        "excluded": excluded,
+        "status": anime.status,
+    })
+PY
+```
+
+### Inspect deliveries and deduplication
+
+```bash
+docker compose exec -T yamtrack python manage.py shell <<'PY'
+from events.models import AnimeReleaseDateNotificationDelivery
+
+for delivery in AnimeReleaseDateNotificationDelivery.objects.select_related("user", "item").order_by("-detected_at")[:20]:
+    print(delivery.user_id, delivery.item.media_id, delivery.change_kind, delivery.previous_start_date_text or "-", "->", delivery.start_date_text, delivery.sent_at, delivery.failed_at, delivery.error[:120])
+PY
+```
+
+### Logs
+
+```bash
+docker compose logs --since=90m yamtrack | grep -Ei "Anime release date|Scan MAL anime release dates|anime-release-date|notification" || true
+```
+
+## Franchise discovery notification checks
+
+For discovery-specific state, see [anime franchise discovery notifications](anime-franchise-discovery-notifications.md). The quick checks are the user's `franchise_discovery_notifications_enabled`, non-empty `notification_urls`, an existing `AnimeFranchiseDiscoveryState` baseline, and `AnimeFranchiseDiscoveredEntry` rows without permanent suppression.
+
 ## Autonomous franchise maintenance
 
 The checked-in Compose service is `yamtrack`, but some deployments may split web, worker, and beat into separate services. In the all-in-one image, nginx, gunicorn, celery worker, and celery beat may run inside the same container under supervisord.

@@ -12,6 +12,8 @@
 - [Anime franchise maintenance](anime-franchise-maintenance.md)
 - [Anime franchise customization](anime-franchise-customization.md)
 - [Anime franchise debugging runbook](anime-franchise-debugging-runbook.md)
+- [Anime notifications overview](anime-notifications-overview.md)
+- [Anime franchise discovery notifications](anime-franchise-discovery-notifications.md)
 - [Anime release-date notifications](anime-release-date-notifications.md)
 - [Docker testing runbook](docker-testing-runbook.md)
 - [Operational commands](operational-commands.md)
