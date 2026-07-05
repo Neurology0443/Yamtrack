@@ -31,6 +31,7 @@
 | Old/remake continuity incorrectly merged | `alternative_version` boundary rules |
 | Series View rebuild triggers MAL 504 | provider cache completeness / rebuild by batches / sleep between seeds |
 | Local branch root appears swallowed by a parent maintenance root | Maintenance scan state branch-root candidates and `component_root_mal_id` groups |
+| Franchise discovery notification missing or unexpected | `AnimeFranchiseDiscoveryState`, `AnimeFranchiseDiscoveredEntry`, user `franchise_discovery_notifications_enabled`, and [discovery notifications](anime-franchise-discovery-notifications.md) |
 
 Most franchise display bugs fall into one of four layers: snapshot facts, UI placement, cache delivery, or request rendering. Start with the layer that owns the symptom.
 

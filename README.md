@@ -143,7 +143,7 @@ Detailed fork docs are available in `docs/`:
 <img src="docs/assets/overlord-related-series-grouping-thumb.png" width="260">
 </a>
 <br>
-<b>Overlord Related Serie Grouping</b>
+<b>Overlord Related Series Grouping</b>
 <br>
 </td>
 
@@ -152,7 +152,7 @@ Detailed fork docs are available in `docs/`:
 <img src="docs/assets/sao-alternative-grouping-thumb.png" width="260">
 </a>
 <br>
-<b>SAO Alternative Serie Grouping</b>
+<b>SAO Alternative Series Grouping</b>
 <br>
 </td>
 </tr>

@@ -5,9 +5,12 @@
 Yamtrack can notify a user when the start date of an actively tracked
 MyAnimeList anime is announced, becomes more precise, or changes.
 
-The feature is opt-in per user. It is disabled by default and applies only to
-MAL anime in `Planning` or `In progress` with at least one notification URL.
-Items excluded from notifications are ignored.
+There are two separate controls:
+
+- the global Beat scanner is controlled by `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED`, which defaults to `true`;
+- actual user delivery is opt-in through `anime_release_date_notifications_enabled`, which defaults to `False` on the user model.
+
+The scanner may therefore be enabled globally while no user receives anything. A user receives a MAL release-date notification only when they track the MAL anime as `Planning` or `In progress`, enable `anime_release_date_notifications_enabled`, have at least one usable Apprise URL in `notification_urls`, and have not excluded the item from notifications.
 
 ## Source of truth
 
@@ -122,6 +125,8 @@ The default schedule runs every 12 hours with a batch of 25 and a minimum
 
 ## Settings
 
+`ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED` controls the global scanner, not every user's delivery preference. Delivery still requires the per-user `anime_release_date_notifications_enabled` flag and configured `notification_urls`.
+
 - `ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED`
 - `ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS`
 - `ANIME_RELEASE_DATE_SCAN_BATCH_SIZE`
@@ -143,7 +148,7 @@ Franchise discovery notifications are a separate franchise feature: they notify
 about newly visible franchise entries, while release-date notifications watch MAL
 start-date value transitions.
 
-See [anime franchise maintenance](anime-franchise-maintenance.md).
+See [anime franchise maintenance](anime-franchise-maintenance.md), [franchise discovery notifications](anime-franchise-discovery-notifications.md), and [anime notifications overview](anime-notifications-overview.md).
 
 ## Difference from event release notifications
 

@@ -1,117 +1,134 @@
 # Testing Runbook (fork features)
 
-This runbook is the quick reference for franchise grouping/import and notifications.
+This runbook is the complete host/local test matrix for fork-specific MAL anime franchise, notification, cache, and Anime Series View work. The Docker runbook contains the equivalent `docker compose exec` commands for the same families.
 
 ## Test modules to run
 
+### Franchise grouping and snapshot
+
 - `app.tests.services.test_anime_franchise`
+- `app.tests.services.test_anime_franchise_graph`
 - `app.tests.services.test_anime_franchise_snapshot`
-- `app.tests.services.test_anime_series_view_projection`
 - `app.tests.services.test_anime_franchise_ui_pipeline`
-- `app.tests.services.test_anime_franchise_import_profiles`
-- `app.tests.services.test_anime_import_state`
+- `app.tests.services.test_anime_franchise_context`
+- `app.tests.test_anime_franchise_footer`
 - `app.tests.views.test_media_details`
+
+### Franchise import and automation
+
+- `app.tests.services.test_anime_franchise_import_profiles`
+- `app.tests.services.test_anime_franchise_import_build_session`
+- `app.tests.services.test_anime_import_state`
 - `app.tests.test_anime_franchise_import`
 - `app.tests.test_import_anime_franchise_command`
 - `app.tests.test_schedules`
 - `app.tests.test_tasks`
+
+### Franchise cache and provider metadata
+
+- `app.tests.services.test_anime_franchise_cache`
+- `app.tests.services.test_anime_franchise_cache_builder`
+- `app.tests.services.test_anime_franchise_scoped_payload`
+- `app.tests.test_anime_franchise_cache_warmer`
+- `app.tests.test_item_image_sync`
+
+### Franchise maintenance and discovery notifications
+
+- `app.tests.services.test_anime_franchise_maintenance_cadence`
+- `app.tests.services.test_anime_franchise_maintenance_scan`
+- `app.tests.test_anime_franchise_discovery`
+- `app.tests.test_manual_anime_franchise_task`
+- `events.tests.test_notification`
+- `events.tests.test_tasks`
+
+### Anime Series View
+
+- `app.tests.services.test_anime_series_view`
+- `app.tests.services.test_anime_series_view_projection`
+- `app.tests.services.test_anime_series_view_franchise_refresh`
+- `app.tests.services.test_anime_series_view_refresh_queue`
+- `app.tests.services.test_anime_series_view_refresh_triggers`
+- `app.tests.test_anime_series_view_import_integration`
+- `app.tests.test_anime_series_view_task`
+- `app.tests.test_rebuild_anime_series_view_command`
+- `app.tests.views.test_anime_series_view`
+
+### MAL release-date notifications
+
+- `events.tests.test_anime_release_date_notifications`
 - `events.tests.test_notification`
 - `events.tests.test_tasks`
 
 ## Host commands
 
-From repo root:
+From repo root, use `uv` so the command works without changing directories:
 
 ```bash
-cd src
-python manage.py test app.tests.services.test_anime_franchise
-python manage.py test app.tests.services.test_anime_franchise_snapshot
-python manage.py test app.tests.services.test_anime_series_view_projection
-python manage.py test app.tests.services.test_anime_franchise_ui_pipeline
-python manage.py test app.tests.services.test_anime_franchise_import_profiles
-python manage.py test app.tests.services.test_anime_import_state
-python manage.py test app.tests.views.test_media_details
-python manage.py test app.tests.test_anime_franchise_import
-python manage.py test app.tests.test_import_anime_franchise_command
-python manage.py test app.tests.test_schedules
-python manage.py test app.tests.test_tasks
-python manage.py test events.tests.test_notification
-python manage.py test events.tests.test_tasks
+uv run --directory . python src/manage.py test \
+  app.tests.services.test_anime_franchise \
+  app.tests.services.test_anime_franchise_graph \
+  app.tests.services.test_anime_franchise_snapshot \
+  app.tests.services.test_anime_franchise_ui_pipeline \
+  app.tests.services.test_anime_franchise_context \
+  app.tests.test_anime_franchise_footer \
+  app.tests.views.test_media_details
 ```
 
-Optional grouped run:
-
 ```bash
-cd src
-python manage.py test \
-  app.tests.services.test_anime_franchise \
-  app.tests.services.test_anime_franchise_snapshot \
-  app.tests.services.test_anime_series_view_projection \
-  app.tests.services.test_anime_franchise_ui_pipeline \
+uv run --directory . python src/manage.py test \
   app.tests.services.test_anime_franchise_import_profiles \
+  app.tests.services.test_anime_franchise_import_build_session \
   app.tests.services.test_anime_import_state \
-  app.tests.views.test_media_details \
   app.tests.test_anime_franchise_import \
   app.tests.test_import_anime_franchise_command \
   app.tests.test_schedules \
-  app.tests.test_tasks \
-  events.tests.test_notification \
-  events.tests.test_tasks
+  app.tests.test_tasks
 ```
-
-## Docker commands
-
-```bash
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_snapshot"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_series_view_projection"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_ui_pipeline"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_franchise_import_profiles"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.services.test_anime_import_state"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.views.test_media_details"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.test_anime_franchise_import"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.test_import_anime_franchise_command"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.test_schedules"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test app.tests.test_tasks"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test events.tests.test_notification"
-docker compose exec yamtrack sh -lc "cd /yamtrack && python manage.py test events.tests.test_tasks"
-```
-
-## When to run which tests
-
-- Changed grouping graph/snapshot/assembler/rules/UI profile/UI pipeline:
-  - run service tests (including `app.tests.services.test_anime_series_view_projection` for Anime Series View grouping/projection semantics and `app.tests.services.test_anime_franchise_ui_pipeline` for promoted continuity + section placement flow) + `test_media_details`.
-  - when changing Series View relation semantics, also verify the alternative-separation tests, weak-reroot safety tests, and parent/full-story reroot priority tests in `test_anime_series_view_projection`.
-- Changed import profiles/state/task/schedule/command:
-  - run import/state/task/schedule/command tests.
-- Changed entry-added notification behavior:
-  - run `events.tests.test_notification` and `events.tests.test_tasks`.
-
-## Async MAL anime franchise payload cache checks
-
-From repo root, run the targeted async franchise cache suite with `uv`:
 
 ```bash
 uv run --directory . python src/manage.py test \
   app.tests.services.test_anime_franchise_cache \
-  app.tests.services.test_anime_franchise_context \
-  app.tests.test_tasks.BuildMALAnimeFranchisePayloadTaskTests \
-  app.tests.views.test_media_details \
-  app.tests.services.test_anime_franchise_snapshot
+  app.tests.services.test_anime_franchise_cache_builder \
+  app.tests.services.test_anime_franchise_scoped_payload \
+  app.tests.test_anime_franchise_cache_warmer \
+  app.tests.test_item_image_sync
 ```
-
-Run lint for the affected files:
 
 ```bash
-uv run --directory . ruff check \
-  src/app/services/anime_franchise_cache.py \
-  src/app/services/anime_franchise_context.py \
-  src/app/services/anime_franchise_graph.py \
-  src/app/services/anime_franchise_snapshot.py \
-  src/app/tasks.py \
-  src/app/views.py \
-  src/app/tests/services/test_anime_franchise_cache.py \
-  src/app/tests/services/test_anime_franchise_context.py \
-  src/app/tests/test_tasks.py \
-  src/app/tests/views/test_media_details.py
+uv run --directory . python src/manage.py test \
+  app.tests.services.test_anime_franchise_maintenance_cadence \
+  app.tests.services.test_anime_franchise_maintenance_scan \
+  app.tests.test_anime_franchise_discovery \
+  app.tests.test_manual_anime_franchise_task \
+  events.tests.test_notification \
+  events.tests.test_tasks
 ```
+
+```bash
+uv run --directory . python src/manage.py test \
+  app.tests.services.test_anime_series_view \
+  app.tests.services.test_anime_series_view_projection \
+  app.tests.services.test_anime_series_view_franchise_refresh \
+  app.tests.services.test_anime_series_view_refresh_queue \
+  app.tests.services.test_anime_series_view_refresh_triggers \
+  app.tests.test_anime_series_view_import_integration \
+  app.tests.test_anime_series_view_task \
+  app.tests.test_rebuild_anime_series_view_command \
+  app.tests.views.test_anime_series_view
+```
+
+```bash
+uv run --directory . python src/manage.py test \
+  events.tests.test_anime_release_date_notifications \
+  events.tests.test_notification \
+  events.tests.test_tasks
+```
+
+## When to run which tests
+
+- Changed grouping graph/snapshot/assembler/rules/UI profile/UI pipeline: run franchise grouping and snapshot tests plus `app.tests.views.test_media_details`.
+- Changed import profiles/state/task/schedule/command: run franchise import and automation tests.
+- Changed cache payloads, provider MAL cache refresh/invalidation, or image sync: run franchise cache and provider metadata tests.
+- Changed maintenance cadence, scan state, or discovery notifications: run maintenance and discovery tests.
+- Changed Anime Series View projection/refresh/list rendering: run Anime Series View tests.
+- Changed MAL release-date notifications: run `events.tests.test_anime_release_date_notifications`, `events.tests.test_notification`, and `events.tests.test_tasks`.
