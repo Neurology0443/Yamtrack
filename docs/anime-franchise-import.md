@@ -49,6 +49,17 @@ Execution surfaces:
 - Celery task `Import anime franchise`;
 - optional Beat schedule entry `auto_import_anime_franchise`.
 
+
+## Entry points and profile defaults
+
+Different execution surfaces have different profile behavior. Automation is the configured production path; direct task calls should not be treated as configuration.
+
+| Entry point | Profile behavior |
+| --- | --- |
+| Automation / Celery Beat | Uses `ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE`, default `continuity`. Beat passes this as `profile_key` explicitly. |
+| Management command | Requires `--profile`; there is no implicit CLI default. |
+| Direct Celery task call | `import_anime_franchise()` has an internal fallback of `satellites`, but production automation should not rely on that fallback because Celery Beat passes the configured profile explicitly. |
+
 ## When to use each profile
 
 ### `continuity`
@@ -227,4 +238,4 @@ Important boundaries:
 
 When import creates a row, the entry defaults to `Planning`, queues an entry-added notification, initializes MAL release-date state when metadata is available, and sets `_skip_hot_priority` to avoid recursive hot-priority behavior.
 
-See [anime franchise maintenance](anime-franchise-maintenance.md), [franchise cache](anime-franchise-cache.md), and [Anime Series View](anime-series-view.md).
+See [anime franchise maintenance](anime-franchise-maintenance.md), [franchise discovery notifications](anime-franchise-discovery-notifications.md), [franchise cache](anime-franchise-cache.md), and [Anime Series View](anime-series-view.md).

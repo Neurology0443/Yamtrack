@@ -2,7 +2,7 @@
 
 Autonomous franchise maintenance keeps tracked MAL anime franchise data fresh without relying on page visits or import runs.
 
-Related docs: [architecture overview](architecture-overview.md), [franchise cache](anime-franchise-cache.md), [franchise import](anime-franchise-import.md), [Anime Series View](anime-series-view.md), [debugging runbook](anime-franchise-debugging-runbook.md), and [operational commands](operational-commands.md).
+Related docs: [architecture overview](architecture-overview.md), [franchise cache](anime-franchise-cache.md), [franchise import](anime-franchise-import.md), [Anime Series View](anime-series-view.md), [franchise discovery notifications](anime-franchise-discovery-notifications.md), [debugging runbook](anime-franchise-debugging-runbook.md), and [operational commands](operational-commands.md).
 
 ## Product behavior
 
