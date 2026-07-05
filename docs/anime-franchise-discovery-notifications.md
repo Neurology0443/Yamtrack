@@ -60,7 +60,7 @@ Imported entries may still queue the separate entry-added notification when that
 
 Autonomous maintenance can detect post-baseline franchise changes even when users do not visit detail pages. It processes the current snapshot, updates discovery state, persists newly visible candidates, and queues eligible notifications.
 
-Maintenance discovery errors are treated as non-critical maintenance errors so cache rebuild and Anime Series View refresh work can continue.
+Maintenance discovery errors are recorded as critical errors for the processed seed. Cache update is attempted before discovery, but the maintenance result is marked as failed or partial-failed when discovery processing raises, then retried according to the maintenance error cadence.
 
 ## What this is not
 
