@@ -1259,7 +1259,7 @@
 </tbody>
 </table>
 <h2 id="mal-anime-release-date-notifications">MAL anime release-date notifications<a class="headerlink" href="#mal-anime-release-date-notifications" title="Permanent link">&para;</a></h2>
-<p>This scanner watches MAL anime start-date metadata and is separate from the normal <code>send_release_notifications</code> task.</p>
+<p>This scanner watches MAL anime start-date metadata and is separate from the normal <code>send_release_notifications</code> task. The global scanner and the per-user delivery preference are separate: <code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code> controls whether the Beat scan exists, while users only receive delivery when <code>anime_release_date_notifications_enabled</code> is enabled and <code>notification_urls</code> contains at least one usable Apprise URL.</p>
 <table>
 <thead>
 <tr>
@@ -1272,7 +1272,7 @@
 <tr>
 <td><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code></td>
 <td><code>true</code></td>
-<td>Enables the Celery Beat scanner for MAL anime start-date notifications.</td>
+<td>Enables the Celery Beat scanner for MAL anime start-date notifications. This global default is enabled, but per-user delivery remains opt-in through <code>anime_release_date_notifications_enabled</code> (<code>false</code> by default).</td>
 </tr>
 <tr>
 <td><code>ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS</code></td>
@@ -1441,7 +1441,7 @@
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS</code></td>
 <td><code>24</code></td>
-<td>Target sweep window, in hours, used by maintenance cadence calculations.</td>
+<td>Compatibility setting kept for older deployments. The current maintenance cadence is primarily driven by the activity-based HOT/COOL/DEEP_COLD scan windows documented in <code>anime-franchise-maintenance.md</code>.</td>
 </tr>
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS</code></td>
@@ -1476,12 +1476,12 @@
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_USE_STABLE_BACKOFF</code></td>
 <td><code>false</code></td>
-<td>Enables additional stable-franchise backoff behavior for repeatedly unchanged franchises.</td>
+<td>Compatibility setting kept for older deployments. The current maintenance scanner does not use this as the primary stable cadence switch.</td>
 </tr>
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_MAX_STABLE_BACKOFF_DAYS</code></td>
 <td><code>30</code></td>
-<td>Maximum stable-franchise backoff, in days.</td>
+<td>Compatibility setting for the older stable-backoff path. The active cadence uses the profile windows below instead.</td>
 </tr>
 <tr>
 <td><code>ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_AGE_YEARS</code></td>

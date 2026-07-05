@@ -583,9 +583,12 @@
 <h2 id="purpose">Purpose<a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h2>
 <p>Yamtrack can notify a user when the start date of an actively tracked
 MyAnimeList anime is announced, becomes more precise, or changes.</p>
-<p>The feature is opt-in per user. It is disabled by default and applies only to
-MAL anime in <code>Planning</code> or <code>In progress</code> with at least one notification URL.
-Items excluded from notifications are ignored.</p>
+<p>There are two separate controls:</p>
+<ul>
+<li>the global Beat scanner is controlled by <code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code>, which defaults to <code>true</code>;</li>
+<li>actual user delivery is opt-in through <code>anime_release_date_notifications_enabled</code>, which defaults to <code>False</code> on the user model.</li>
+</ul>
+<p>The scanner may therefore be enabled globally while no user receives anything. A user receives a MAL release-date notification only when they track the MAL anime as <code>Planning</code> or <code>In progress</code>, enable <code>anime_release_date_notifications_enabled</code>, have at least one usable Apprise URL in <code>notification_urls</code>, and have not excluded the item from notifications.</p>
 <h2 id="source-of-truth">Source of truth<a class="headerlink" href="#source-of-truth" title="Permanent link">&para;</a></h2>
 <p>The only release-date source is:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;details&quot;</span><span class="p">][</span><span class="s2">&quot;start_date&quot;</span><span class="p">]</span>
@@ -680,6 +683,7 @@ known dates from producing a notification storm when the feature is deployed.</p
 24-hour refresh interval. This caps the theoretical provider refresh volume at
 50 anime per day, while recent cache entries reduce it further.</p>
 <h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<p><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code> controls the global scanner, not every user's delivery preference. Delivery still requires the per-user <code>anime_release_date_notifications_enabled</code> flag and configured <code>notification_urls</code>.</p>
 <ul>
 <li><code>ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED</code></li>
 <li><code>ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS</code></li>
@@ -699,7 +703,7 @@ known dates from producing a notification storm when the feature is deployed.</p
 <p>Franchise discovery notifications are a separate franchise feature: they notify
 about newly visible franchise entries, while release-date notifications watch MAL
 start-date value transitions.</p>
-<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>.</p>
+<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>, <a href="../anime-franchise-discovery-notifications/">franchise discovery notifications</a>, and <a href="../anime-notifications-overview/">anime notifications overview</a>.</p>
 <h2 id="difference-from-event-release-notifications">Difference from event release notifications<a class="headerlink" href="#difference-from-event-release-notifications" title="Permanent link">&para;</a></h2>
 <p><code>send_release_notifications</code> sends notifications for existing <code>Event</code> rows from the normal release/calendar system. It is not the MAL release-date scanner.</p>
 <p>The dedicated MAL start-date scan is <code>scan_mal_anime_release_dates</code>, exposed as the Celery task <code>Scan MAL anime release dates</code>.</p>

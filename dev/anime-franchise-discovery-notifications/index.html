@@ -12,7 +12,7 @@
         <meta name="author" content="FuzzyGrim">
       
       
-        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/testing-runbook/">
+        <link rel="canonical" href="https://FuzzyGrim.github.io/Yamtrack/dev/anime-franchise-discovery-notifications/">
       
       
       
@@ -25,7 +25,7 @@
     
     
       
-        <title>Testing Runbook (fork features) - Yamtrack Documentation</title>
+        <title>Anime franchise discovery notifications - Yamtrack Documentation</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#testing-runbook-fork-features" class="md-skip">
+        <a href="#anime-franchise-discovery-notifications" class="md-skip">
           Skip to content
         </a>
       
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Testing Runbook (fork features)
+              Anime franchise discovery notifications
             
           </span>
         </div>
@@ -563,7 +563,7 @@
                 
                   
   
-    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/testing-runbook.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/edit/dev/docs/anime-franchise-discovery-notifications.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -572,130 +572,101 @@
     
       
     
-    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/testing-runbook.md" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/FuzzyGrim/Yamtrack/raw/dev/docs/anime-franchise-discovery-notifications.md" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-code-2" viewBox="0 0 24 24"><path d="M4 12.15V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-3.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5M5 16l-3 3 3 3M9 22l3-3-3-3"/></svg>
     </a>
   
 
 
-<h1 id="testing-runbook-fork-features">Testing Runbook (fork features)<a class="headerlink" href="#testing-runbook-fork-features" title="Permanent link">&para;</a></h1>
-<p>This runbook is the complete host/local test matrix for fork-specific MAL anime franchise, notification, cache, and Anime Series View work. The Docker runbook contains the equivalent <code>docker compose exec</code> commands for the same families.</p>
-<h2 id="test-modules-to-run">Test modules to run<a class="headerlink" href="#test-modules-to-run" title="Permanent link">&para;</a></h2>
-<h3 id="franchise-grouping-and-snapshot">Franchise grouping and snapshot<a class="headerlink" href="#franchise-grouping-and-snapshot" title="Permanent link">&para;</a></h3>
+<h1 id="anime-franchise-discovery-notifications">Anime franchise discovery notifications<a class="headerlink" href="#anime-franchise-discovery-notifications" title="Permanent link">&para;</a></h1>
+<h2 id="product-behavior">Product behavior<a class="headerlink" href="#product-behavior" title="Permanent link">&para;</a></h2>
+<p>Franchise discovery notifications tell a user when a new visible MAL anime entry appears in an important part of a franchise they already track.</p>
+<p>The notification is informational only. It says that the entry was detected from MAL franchise data and was not automatically added to the user's tracking.</p>
+<h2 id="what-counts-as-a-discovery">What counts as a discovery<a class="headerlink" href="#what-counts-as-a-discovery" title="Permanent link">&para;</a></h2>
+<p>Discovery candidates are projected from the same franchise snapshot used by the detail-page franchise UI. The projection keeps visible, notification-worthy entries from:</p>
 <ul>
-<li><code>app.tests.services.test_anime_franchise</code></li>
-<li><code>app.tests.services.test_anime_franchise_graph</code></li>
-<li><code>app.tests.services.test_anime_franchise_snapshot</code></li>
-<li><code>app.tests.services.test_anime_franchise_ui_pipeline</code></li>
-<li><code>app.tests.services.test_anime_franchise_context</code></li>
-<li><code>app.tests.test_anime_franchise_footer</code></li>
-<li><code>app.tests.views.test_media_details</code></li>
+<li>the fixed <code>Series</code> block;</li>
+<li>visible dynamic sections such as <code>Spin Offs</code>, <code>Alternatives</code>, and <code>Specials</code> when the section is eligible;</li>
+<li>supported anime formats.</li>
 </ul>
-<h3 id="franchise-import-and-automation">Franchise import and automation<a class="headerlink" href="#franchise-import-and-automation" title="Permanent link">&para;</a></h3>
+<p>The discovery path skips invalid media IDs, excluded anime formats such as commercials and promotional videos, and non-notifiable sections such as broad <code>Related Series</code> placements.</p>
+<h2 id="baseline-and-deduplication">Baseline and deduplication<a class="headerlink" href="#baseline-and-deduplication" title="Permanent link">&para;</a></h2>
+<p>Discovery is baseline-based to avoid notifying the whole history of a franchise that is already known.</p>
 <ul>
-<li><code>app.tests.services.test_anime_franchise_import_profiles</code></li>
-<li><code>app.tests.services.test_anime_franchise_import_build_session</code></li>
-<li><code>app.tests.services.test_anime_import_state</code></li>
-<li><code>app.tests.test_anime_franchise_import</code></li>
-<li><code>app.tests.test_import_anime_franchise_command</code></li>
-<li><code>app.tests.test_schedules</code></li>
-<li><code>app.tests.test_tasks</code></li>
+<li><code>AnimeFranchiseDiscoveryState</code> stores the per-user, per-root baseline and last observed fingerprint.</li>
+<li>The first observation creates the baseline and suppresses notification for existing visible candidates.</li>
+<li>A later visible candidate after the baseline can become notification-eligible.</li>
+<li><code>AnimeFranchiseDiscoveredEntry</code> persists one discovered media ID per user and component root, including title, section, relation metadata, queue/send timestamps, and any suppression reason.</li>
 </ul>
-<h3 id="franchise-cache-and-provider-metadata">Franchise cache and provider metadata<a class="headerlink" href="#franchise-cache-and-provider-metadata" title="Permanent link">&para;</a></h3>
+<p>This means no notification on the first scan is expected behavior, not a delivery failure.</p>
+<h2 id="trigger-paths">Trigger paths<a class="headerlink" href="#trigger-paths" title="Permanent link">&para;</a></h2>
+<p>Discovery processing is invoked by:</p>
 <ul>
-<li><code>app.tests.services.test_anime_franchise_cache</code></li>
-<li><code>app.tests.services.test_anime_franchise_cache_builder</code></li>
-<li><code>app.tests.services.test_anime_franchise_scoped_payload</code></li>
-<li><code>app.tests.test_anime_franchise_cache_warmer</code></li>
-<li><code>app.tests.test_item_image_sync</code></li>
+<li>franchise import, after the import run builds the snapshot and creates any selected entries;</li>
+<li>autonomous franchise maintenance, when a due tracked seed is processed.</li>
 </ul>
-<h3 id="franchise-maintenance-and-discovery-notifications">Franchise maintenance and discovery notifications<a class="headerlink" href="#franchise-maintenance-and-discovery-notifications" title="Permanent link">&para;</a></h3>
+<p>Manual post-add franchise processing intentionally calls maintenance with <code>process_discovery=False</code>. It refreshes the detail-page cache and Anime Series View quickly, but does not create discovery notifications.</p>
+<h2 id="delivery-and-user-preferences">Delivery and user preferences<a class="headerlink" href="#delivery-and-user-preferences" title="Permanent link">&para;</a></h2>
+<p>Delivery requires all of these conditions:</p>
 <ul>
-<li><code>app.tests.services.test_anime_franchise_maintenance_cadence</code></li>
-<li><code>app.tests.services.test_anime_franchise_maintenance_scan</code></li>
-<li><code>app.tests.test_anime_franchise_discovery</code></li>
-<li><code>app.tests.test_manual_anime_franchise_task</code></li>
-<li><code>events.tests.test_notification</code></li>
-<li><code>events.tests.test_tasks</code></li>
+<li>the user has <code>franchise_discovery_notifications_enabled=True</code>;</li>
+<li><code>notification_urls</code> contains at least one usable Apprise URL;</li>
+<li>the discovered MAL anime is not already tracked by that user;</li>
+<li>the discovery is not permanently suppressed as <code>baseline</code>, <code>imported_in_same_run</code>, or <code>already_tracked</code>;</li>
+<li>the discovery is inside the retry/reactivation windows.</li>
 </ul>
-<h3 id="anime-series-view">Anime Series View<a class="headerlink" href="#anime-series-view" title="Permanent link">&para;</a></h3>
+<p>Eligible discoveries queue <code>Send franchise discovery notification</code>, implemented by <code>send_franchise_discovery_notification_task</code>. The task sends through the same Apprise delivery helper used by other Yamtrack notifications. A successful delivery writes <code>notified_at</code> on <code>AnimeFranchiseDiscoveredEntry</code>.</p>
+<p>If notifications are disabled when a discovery is seen, the row is still persisted with a temporary delivery block. Re-enabling the preference does not send immediately; a later normal franchise scan can requeue the still-visible discovery while it is still inside the reactivation window.</p>
+<h2 id="import-interaction">Import interaction<a class="headerlink" href="#import-interaction" title="Permanent link">&para;</a></h2>
+<p>Franchise import can both create missing library entries and process discovery in the same run. Entries imported in that run are passed as <code>imported_media_ids</code>, so they are suppressed with <code>imported_in_same_run</code> and do not generate a redundant discovery notification for themselves.</p>
+<p>Imported entries may still queue the separate entry-added notification when that user preference is enabled.</p>
+<h2 id="maintenance-interaction">Maintenance interaction<a class="headerlink" href="#maintenance-interaction" title="Permanent link">&para;</a></h2>
+<p>Autonomous maintenance can detect post-baseline franchise changes even when users do not visit detail pages. It processes the current snapshot, updates discovery state, persists newly visible candidates, and queues eligible notifications.</p>
+<p>Maintenance discovery errors are recorded as critical errors for the processed seed. Cache update is attempted before discovery, but the maintenance result is marked as failed or partial-failed when discovery processing raises, then retried according to the maintenance error cadence.</p>
+<h2 id="what-this-is-not">What this is not<a class="headerlink" href="#what-this-is-not" title="Permanent link">&para;</a></h2>
+<p>This is not:</p>
 <ul>
-<li><code>app.tests.services.test_anime_series_view</code></li>
-<li><code>app.tests.services.test_anime_series_view_projection</code></li>
-<li><code>app.tests.services.test_anime_series_view_franchise_refresh</code></li>
-<li><code>app.tests.services.test_anime_series_view_refresh_queue</code></li>
-<li><code>app.tests.services.test_anime_series_view_refresh_triggers</code></li>
-<li><code>app.tests.test_anime_series_view_import_integration</code></li>
-<li><code>app.tests.test_anime_series_view_task</code></li>
-<li><code>app.tests.test_rebuild_anime_series_view_command</code></li>
-<li><code>app.tests.views.test_anime_series_view</code></li>
+<li>the generic entry-added notification;</li>
+<li>the MAL release-date notification scanner;</li>
+<li>the native event/release notification flow.</li>
 </ul>
-<h3 id="mal-release-date-notifications">MAL release-date notifications<a class="headerlink" href="#mal-release-date-notifications" title="Permanent link">&para;</a></h3>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<p>Use Django shell checks rather than direct SQL so model names stay authoritative.</p>
+<p>Check the user preference and delivery URLs:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="s">from django.contrib.auth import get_user_model</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="s">user = get_user_model().objects.get(id=1)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="s">print({</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="s">    &quot;franchise_discovery_notifications_enabled&quot;: user.franchise_discovery_notifications_enabled,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="s">    &quot;has_notification_urls&quot;: bool(user.notification_urls.strip()),</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="s">})</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Check whether a baseline exists for a user/root:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="s">from app.models import AnimeFranchiseDiscoveryState</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="s">for state in AnimeFranchiseDiscoveryState.objects.filter(user_id=1).order_by(&quot;component_root_mal_id&quot;)[:20]:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="s">    print(state.component_root_mal_id, state.baseline_completed_at, state.last_seen_count, state.last_error[:160])</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Inspect discovered entries and suppression/delivery state:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-T<span class="w"> </span>yamtrack<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>shell<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="s">from app.models import AnimeFranchiseDiscoveredEntry</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="s">for entry in AnimeFranchiseDiscoveredEntry.objects.filter(user_id=1).order_by(&quot;-last_seen_at&quot;)[:20]:</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="s">    print(entry.discovered_media_id, entry.title, entry.section_label, entry.notification_suppressed_reason or &quot;-&quot;, entry.notification_queued_at, entry.notified_at)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="s">PY</span>
+</span></code></pre></div>
+<p>Inspect logs for queue and delivery failures:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>logs<span class="w"> </span>--since<span class="o">=</span>90m<span class="w"> </span>yamtrack<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-Ei<span class="w"> </span><span class="s2">&quot;franchise discovery|Send franchise discovery notification|notification&quot;</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">true</span>
+</span></code></pre></div>
+<h2 id="related-docs">Related docs<a class="headerlink" href="#related-docs" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>events.tests.test_anime_release_date_notifications</code></li>
-<li><code>events.tests.test_notification</code></li>
-<li><code>events.tests.test_tasks</code></li>
-</ul>
-<h2 id="host-commands">Host commands<a class="headerlink" href="#host-commands" title="Permanent link">&para;</a></h2>
-<p>From repo root, use <code>uv</code> so the command works without changing directories:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>app.tests.services.test_anime_franchise<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>app.tests.services.test_anime_franchise_graph<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>app.tests.services.test_anime_franchise_snapshot<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>app.tests.services.test_anime_franchise_ui_pipeline<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>app.tests.services.test_anime_franchise_context<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>app.tests.test_anime_franchise_footer<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>app.tests.views.test_media_details
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>app.tests.services.test_anime_franchise_import_profiles<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>app.tests.services.test_anime_franchise_import_build_session<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>app.tests.services.test_anime_import_state<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span>app.tests.test_anime_franchise_import<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>app.tests.test_import_anime_franchise_command<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span>app.tests.test_schedules<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span>app.tests.test_tasks
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>app.tests.services.test_anime_franchise_cache<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>app.tests.services.test_anime_franchise_cache_builder<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>app.tests.services.test_anime_franchise_scoped_payload<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>app.tests.test_anime_franchise_cache_warmer<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>app.tests.test_item_image_sync
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>app.tests.services.test_anime_franchise_maintenance_cadence<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>app.tests.services.test_anime_franchise_maintenance_scan<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>app.tests.test_anime_franchise_discovery<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>app.tests.test_manual_anime_franchise_task<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>events.tests.test_notification<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span>events.tests.test_tasks
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>app.tests.services.test_anime_series_view<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>app.tests.services.test_anime_series_view_projection<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>app.tests.services.test_anime_series_view_franchise_refresh<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>app.tests.services.test_anime_series_view_refresh_queue<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span>app.tests.services.test_anime_series_view_refresh_triggers<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span>app.tests.test_anime_series_view_import_integration<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span>app.tests.test_anime_series_view_task<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span>app.tests.test_rebuild_anime_series_view_command<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span>app.tests.views.test_anime_series_view
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--directory<span class="w"> </span>.<span class="w"> </span>python<span class="w"> </span>src/manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>events.tests.test_anime_release_date_notifications<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>events.tests.test_notification<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>events.tests.test_tasks
-</span></code></pre></div>
-<h2 id="when-to-run-which-tests">When to run which tests<a class="headerlink" href="#when-to-run-which-tests" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Changed grouping graph/snapshot/assembler/rules/UI profile/UI pipeline: run franchise grouping and snapshot tests plus <code>app.tests.views.test_media_details</code>.</li>
-<li>Changed import profiles/state/task/schedule/command: run franchise import and automation tests.</li>
-<li>Changed cache payloads, provider MAL cache refresh/invalidation, or image sync: run franchise cache and provider metadata tests.</li>
-<li>Changed maintenance cadence, scan state, or discovery notifications: run maintenance and discovery tests.</li>
-<li>Changed Anime Series View projection/refresh/list rendering: run Anime Series View tests.</li>
-<li>Changed MAL release-date notifications: run <code>events.tests.test_anime_release_date_notifications</code>, <code>events.tests.test_notification</code>, and <code>events.tests.test_tasks</code>.</li>
+<li><a href="../anime-notifications-overview/">Anime notifications overview</a></li>
+<li><a href="../anime-franchise-import/">Anime franchise import</a></li>
+<li><a href="../anime-franchise-maintenance/">Anime franchise maintenance</a></li>
+<li><a href="../anime-release-date-notifications/">Anime release-date notifications</a></li>
+<li><a href="../operational-commands/">Operational commands</a></li>
 </ul>
 
 

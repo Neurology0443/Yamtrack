@@ -616,6 +616,30 @@
 <li>Celery task <code>Import anime franchise</code>;</li>
 <li>optional Beat schedule entry <code>auto_import_anime_franchise</code>.</li>
 </ul>
+<h2 id="entry-points-and-profile-defaults">Entry points and profile defaults<a class="headerlink" href="#entry-points-and-profile-defaults" title="Permanent link">&para;</a></h2>
+<p>Different execution surfaces have different profile behavior. Automation is the configured production path; direct task calls should not be treated as configuration.</p>
+<table>
+<thead>
+<tr>
+<th>Entry point</th>
+<th>Profile behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Automation / Celery Beat</td>
+<td>Uses <code>ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE</code>, default <code>continuity</code>. Beat passes this as <code>profile_key</code> explicitly.</td>
+</tr>
+<tr>
+<td>Management command</td>
+<td>Requires <code>--profile</code>; there is no implicit CLI default.</td>
+</tr>
+<tr>
+<td>Direct Celery task call</td>
+<td><code>import_anime_franchise()</code> has an internal fallback of <code>satellites</code>, but production automation should not rely on that fallback because Celery Beat passes the configured profile explicitly.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="when-to-use-each-profile">When to use each profile<a class="headerlink" href="#when-to-use-each-profile" title="Permanent link">&para;</a></h2>
 <h3 id="continuity"><code>continuity</code><a class="headerlink" href="#continuity" title="Permanent link">&para;</a></h3>
 <ul>
@@ -795,7 +819,7 @@
 <li>import profile selection is not UI placement.</li>
 </ul>
 <p>When import creates a row, the entry defaults to <code>Planning</code>, queues an entry-added notification, initializes MAL release-date state when metadata is available, and sets <code>_skip_hot_priority</code> to avoid recursive hot-priority behavior.</p>
-<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>, <a href="../anime-franchise-cache/">franchise cache</a>, and <a href="../anime-series-view/">Anime Series View</a>.</p>
+<p>See <a href="../anime-franchise-maintenance/">anime franchise maintenance</a>, <a href="../anime-franchise-discovery-notifications/">franchise discovery notifications</a>, <a href="../anime-franchise-cache/">franchise cache</a>, and <a href="../anime-series-view/">Anime Series View</a>.</p>
 
 
 
