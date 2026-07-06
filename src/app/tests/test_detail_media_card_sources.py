@@ -21,6 +21,21 @@ class DetailMediaCardSourceTests(SimpleTestCase):
         self.assertIn("from_grid", source)
         self.assertIn("aspect-2/3", source)
         self.assertIn("{% if not detail_card_layout %}", source)
+        self.assertIn(
+            'class="media-card-detail-title-link">{{ title }}</a>',
+            source,
+        )
+        detail_link_classes = (
+            'class="media-card-detail-title-link hover:text-indigo-400 '
+            'transition duration-300"'
+        )
+        standard_link_classes = (
+            'class="text-sm font-semibold text-white hover:text-indigo-400 '
+            'transition duration-300 line-clamp-1"'
+        )
+        self.assertNotIn(detail_link_classes, source)
+        self.assertIn(standard_link_classes, source)
+        self.assertIn('title="{{ title }}">{{ title }}</a>', source)
 
     def assert_detail_card_css_rules(self, source):
         for expected in (
@@ -40,6 +55,11 @@ class DetailMediaCardSourceTests(SimpleTestCase):
             "border-top: 1px solid rgba(255, 255, 255, 0.06)",
             "font-size: 0.80rem",
             "line-height: 1.05rem",
+            "font-weight: 660",
+            "transition-property: color",
+            "transition-duration: 300ms",
+            ".media-card-detail-title-link:hover",
+            "color: var(--color-indigo-400)",
             "-webkit-line-clamp: 4",
             "bottom: 0",
             "z-index: 2",
@@ -71,6 +91,55 @@ class DetailMediaCardSourceTests(SimpleTestCase):
         self.assertIn(franchise_firstof, source)
         self.assertIn(related_firstof, source)
         self.assertIn("title=display_title", source)
+        media_title_firstof = (
+            "{% firstof media.alternative_title_en "
+            "media.title as media_display_title %}"
+        )
+        self.assertIn(media_title_firstof, source)
+        self.assertIn("{{ media_display_title }}", source)
+        self.assertIn("media-detail-original-title", source)
+        self.assertIn(
+            "media.alternative_title_en and media.alternative_title_en != media.title",
+            source,
+        )
+
+    def test_media_detail_h1_prefers_alternative_title_with_original_subtitle(self):
+        template = Template(
+            "{% firstof media.alternative_title_en "
+            "media.title as media_display_title %}"
+            "<h1>{{ media_display_title }}</h1>"
+            "{% if media.alternative_title_en "
+            "and media.alternative_title_en != media.title %}"
+            '<p class="media-detail-original-title">{{ media.title }}</p>'
+            "{% endif %}"
+        )
+
+        cases = (
+            (
+                {"alternative_title_en": "English Title", "title": "Original Title"},
+                "<h1>English Title</h1>",
+                '<p class="media-detail-original-title">Original Title</p>',
+            ),
+            (
+                {"alternative_title_en": "", "title": "Original Title"},
+                "<h1>Original Title</h1>",
+                "media-detail-original-title",
+            ),
+            (
+                {"alternative_title_en": "Original Title", "title": "Original Title"},
+                "<h1>Original Title</h1>",
+                "media-detail-original-title",
+            ),
+        )
+        for media, expected, unexpected_or_expected in cases:
+            with self.subTest(media=media):
+                rendered = template.render(Context({"media": media}))
+
+                self.assertIn(expected, rendered)
+                if media["alternative_title_en"] == "English Title":
+                    self.assertIn(unexpected_or_expected, rendered)
+                else:
+                    self.assertNotIn(unexpected_or_expected, rendered)
 
     def test_related_title_firstof_falls_back_when_season_title_is_absent(self):
         template = Template(

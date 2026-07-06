@@ -122,8 +122,7 @@
   {% if detail_card_layout %}
     <div class="media-card-detail-title">
       <a href="{{ item|media_url }}"
-         class="media-card-detail-title-link hover:text-indigo-400 transition duration-300"
-         title="{{ title }}">{{ title }}</a>
+         class="media-card-detail-title-link">{{ title }}</a>
       {% with user=target_user|default:user %}
         {% if media.status and user.progress_bar %}
           <div class="media-card-detail-progress">

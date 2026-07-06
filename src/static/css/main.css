@@ -2998,12 +2998,18 @@
   overflow: hidden;
   font-size: 0.80rem;
   line-height: 1.05rem;
+  font-weight: 660;
   color: white;
   text-align: center;
   text-shadow: none;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   line-clamp: 4;
+  transition-property: color;
+  transition-duration: 300ms;
+}
+.media-card-detail-title-link:hover {
+  color: var(--color-indigo-400);
 }
 .media-card-detail-progress {
   position: absolute;
@@ -3020,6 +3026,14 @@
   display: block;
   width: 100%;
   margin: 0;
+}
+
+.media-detail-original-title {
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+  color: rgb(156, 163, 175);
+  font-weight: 400;
 }
 .toast-error {
   border-color: var(--color-red-600);

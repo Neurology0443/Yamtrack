@@ -9,6 +9,8 @@
 {% endblock title %}
 
 {% block content %}
+  {% firstof media.alternative_title_en media.title as media_display_title %}
+
   {# Top section #}
   <div class="flex flex-col md:flex-row gap-8 md:gap-10 mb-12 md:mb-8">
     <div class="w-full md:w-1/4 max-w-[250px] mx-auto md:mx-0">
@@ -98,7 +100,12 @@
           </div>
         </div>
       {% else %}
-        <h1 class="text-3xl font-bold mb-4 text-center md:text-start">{{ media.title }}</h1>
+        <div class="mb-4 text-center md:text-start">
+          <h1 class="text-3xl font-bold">{{ media_display_title }}</h1>
+          {% if media.alternative_title_en and media.alternative_title_en != media.title %}
+            <p class="media-detail-original-title">{{ media.title }}</p>
+          {% endif %}
+        </div>
       {% endif %}
 
       {# Genres #}
