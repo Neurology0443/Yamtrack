@@ -193,6 +193,15 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual([entry.media_id for entry in block.entries], ["100", "200"])
         self.assertTrue(block.entries[1].is_current)
 
+    def test_series_builder_copies_alternative_title_en(self):
+        snapshot = self._snapshot()
+        snapshot.series_line[0].alternative_title_en = "English Season 1"
+
+        block = SeriesBuilder().build(snapshot)
+
+        self.assertEqual(block.entries[0].alternative_title_en, "English Season 1")
+        self.assertEqual(block.entries[0].title, "Season 1")
+
     def test_candidate_assembler_excludes_series_and_deduplicates(self):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
@@ -201,6 +210,18 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             {candidate.media_id for candidate in candidates}, {"300", "400"}
         )
         self.assertEqual(len(candidates), 2)
+
+    def test_candidate_assembler_copies_alternative_title_en(self):
+        snapshot = self._snapshot()
+        snapshot.nodes_by_media_id["300"].alternative_title_en = "English Movie"
+
+        candidates = UiCandidateAssembler().build(snapshot)
+        movie_candidate = next(
+            candidate for candidate in candidates if candidate.media_id == "300"
+        )
+
+        self.assertEqual(movie_candidate.alternative_title_en, "English Movie")
+        self.assertEqual(movie_candidate.title, "Movie")
 
     def test_candidate_assembler_preserves_multi_origin_signals_for_same_media(self):
         snapshot = self._snapshot()
@@ -682,7 +703,11 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         )
 
     def test_pipeline_output_contains_root_display_and_expected_sections(self):
-        payload = AnimeFranchiseUiPipeline().run(self._snapshot())
+        snapshot = self._snapshot()
+        snapshot.series_line[0].alternative_title_en = "English Season 1"
+        snapshot.nodes_by_media_id["300"].alternative_title_en = "English Movie"
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
 
         self.assertEqual(payload.root_media_id, "200")
         self.assertEqual(payload.display_title, "Season 2")
@@ -696,6 +721,18 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual(specials["title"], "Specials")
         self.assertIn("media_type", payload.series["entries"][0])
         self.assertIn("anime_media_type", payload.series["entries"][0])
+        self.assertEqual(
+            payload.series["entries"][0]["alternative_title_en"], "English Season 1"
+        )
+        self.assertEqual(payload.series["entries"][0]["title"], "Season 1")
+        section_entries = [
+            entry for section in payload.sections for entry in section["entries"]
+        ]
+        movie_entry = next(
+            entry for entry in section_entries if entry["media_id"] == "300"
+        )
+        self.assertEqual(movie_entry["alternative_title_en"], "English Movie")
+        self.assertEqual(movie_entry["title"], "Movie")
 
     def test_pipeline_prefers_relation_types_for_ambiguous_candidates(self):
         snapshot = self._snapshot()

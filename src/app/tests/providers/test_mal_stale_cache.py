@@ -363,3 +363,56 @@ class MALAnimeAlternativeTitleTests(TestCase):
             result = mal.anime("38002", refresh_cache=True)
 
             self.assertEqual(result["alternative_title_en"], "")
+
+
+class MALRelatedAlternativeTitleTests(TestCase):
+    def test_get_alternative_title_en_defensive_values(self):
+        cases = [
+            ({}, ""),
+            ({"alternative_titles": "invalid"}, ""),
+            ({"alternative_titles": {}}, ""),
+            ({"alternative_titles": {"en": "   "}}, ""),
+            ({"alternative_titles": {"en": None}}, ""),
+            ({"alternative_titles": {"en": " English Title "}}, "English Title"),
+        ]
+
+        for response, expected in cases:
+            with self.subTest(response=response):
+                self.assertEqual(mal._get_alternative_title_en(response), expected)
+
+    def test_get_related_includes_alternative_title_en_from_nested_node(self):
+        related = [
+            {
+                "node": {
+                    "id": 123,
+                    "title": "Original Title",
+                    "alternative_titles": {"en": " English Title "},
+                    "main_picture": {"large": "image-url"},
+                },
+                "relation_type": "sequel",
+            },
+            {
+                "node": {
+                    "id": 456,
+                    "title": "Fallback Title",
+                    "main_picture": {"large": "fallback-image"},
+                },
+                "relation_type": "side_story",
+            },
+        ]
+
+        result = mal.get_related(related, "anime")
+
+        self.assertEqual(
+            result[0],
+            {
+                "media_id": 123,
+                "source": "mal",
+                "title": "Original Title",
+                "alternative_title_en": "English Title",
+                "media_type": "anime",
+                "relation_type": "sequel",
+                "image": "image-url",
+            },
+        )
+        self.assertEqual(result[1]["alternative_title_en"], "")

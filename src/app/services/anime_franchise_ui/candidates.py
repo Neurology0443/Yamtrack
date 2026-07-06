@@ -7,8 +7,10 @@ decide final section placement.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 @dataclass
@@ -31,6 +33,7 @@ class UiCandidate:
     episode_count: int | None
     linked_series_line_media_id: str | None
     linked_series_line_index: int | None
+    alternative_title_en: str = ""
     relation_source_media_id: str | None = None
     linked_root_media_id: str | None = None
     relation_types: list[str] = field(default_factory=list)

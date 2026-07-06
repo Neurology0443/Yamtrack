@@ -244,6 +244,7 @@ class UiCandidateAssembler:
                         if linked_series_line_media_id is not None
                         else None
                     ),
+                    alternative_title_en=node.alternative_title_en or "",
                     relation_source_media_id=relation_source_media_id,
                     linked_root_media_id=linked_root_media_id,
                     relation_types=relation_types,
