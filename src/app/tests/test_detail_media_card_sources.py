@@ -22,9 +22,7 @@ class DetailMediaCardSourceTests(SimpleTestCase):
         self.assertIn("aspect-2/3", source)
         self.assertIn("{% if not detail_card_layout %}", source)
 
-    def test_detail_card_css_defines_console_layout_properties(self):
-        source = (ROOT / "static/css/input.css").read_text()
-
+    def assert_detail_card_css_rules(self, source):
         for expected in (
             ".media-card-detail-image",
             ".media-card-detail-title",
@@ -47,6 +45,16 @@ class DetailMediaCardSourceTests(SimpleTestCase):
             "z-index: 2",
         ):
             self.assertIn(expected, source)
+
+    def test_detail_card_source_css_defines_console_layout_properties(self):
+        source = (ROOT / "static/css/input.css").read_text()
+
+        self.assert_detail_card_css_rules(source)
+
+    def test_detail_card_served_css_defines_console_layout_properties(self):
+        source = (ROOT / "static/css/main.css").read_text()
+
+        self.assert_detail_card_css_rules(source)
 
     def test_media_details_uses_detail_layout_and_firstof_fallbacks(self):
         source = (ROOT / "templates/app/media_details.html").read_text()

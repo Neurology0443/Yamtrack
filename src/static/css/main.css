@@ -2967,6 +2967,60 @@
 .media-list-empty-state {
   grid-column: 1 / -1;
 }
+.media-card-detail-image {
+  height: 14rem;
+  object-fit: cover;
+}
+.media-card-detail-title {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: auto;
+  margin: 0;
+  height: 6rem;
+  min-height: 6rem;
+  padding: 0.35rem 0.6rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(42, 47, 53);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  z-index: auto;
+}
+.media-card-detail-title-link {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.80rem;
+  line-height: 1.05rem;
+  color: white;
+  text-align: center;
+  text-shadow: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+.media-card-detail-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  z-index: 2;
+}
+.media-card-detail-progress > * {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
 .toast-error {
   border-color: var(--color-red-600);
   background-color: color-mix(in srgb, oklch(50.5% 0.213 27.518) 95%, transparent);
