@@ -41,6 +41,25 @@ def no_underscore(arg1):
 
 
 @register.filter
+def display_media_title(item):
+    """Return the preferred display title for media dicts or objects."""
+    if isinstance(item, dict):
+        return (
+            item.get("alternative_title_en")
+            or item.get("season_title")
+            or item.get("title")
+            or ""
+        )
+
+    return (
+        getattr(item, "alternative_title_en", "")
+        or getattr(item, "season_title", "")
+        or getattr(item, "title", "")
+        or ""
+    )
+
+
+@register.filter
 def slug(arg1):
     """Return the slug of the string.
 

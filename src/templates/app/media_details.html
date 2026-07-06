@@ -554,7 +554,7 @@
             <h2 class="text-xl font-bold mb-4">{{ anime_franchise.series.title }}</h2>
             <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
               {% for result in anime_franchise.series.entries %}
-                {% with display_title=result.item.alternative_title_en|default:result.item.title %}
+                {% with display_title=result.item|display_media_title %}
                   {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                 {% endwith %}
               {% endfor %}
@@ -569,7 +569,7 @@
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in section.entries %}
                   <div>
-                    {% with display_title=result.item.alternative_title_en|default:result.item.title %}
+                    {% with display_title=result.item|display_media_title %}
                       {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                     {% endwith %}
                     {% if result.item.footer_format or result.item.footer_relation_value %}
@@ -626,21 +626,21 @@
                   {# Set active to highlight the current movie in a collection. Avoid TV media, since seasons have same ID as the parent show #}
                   {% if media_type == MediaTypes.MOVIE.value %}
                     {% if name == "recommendations" %}
-                      {% with display_title=result.item.alternative_title_en|default:result.item.season_title|default:result.item.title %}
+                      {% with display_title=result.item|display_media_title %}
                         {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                       {% endwith %}
                     {% else %}
-                      {% with display_title=result.item.alternative_title_en|default:result.item.season_title|default:result.item.title %}
+                      {% with display_title=result.item|display_media_title %}
                         {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                       {% endwith %}
                     {% endif %}
                   {% else %}
                     {% if name == "recommendations" %}
-                      {% with display_title=result.item.alternative_title_en|default:result.item.season_title|default:result.item.title %}
+                      {% with display_title=result.item|display_media_title %}
                         {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media detail_card_layout=True %}
                       {% endwith %}
                     {% else %}
-                      {% with display_title=result.item.alternative_title_en|default:result.item.season_title|default:result.item.title %}
+                      {% with display_title=result.item|display_media_title %}
                         {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media detail_card_layout=True %}
                       {% endwith %}
                     {% endif %}
