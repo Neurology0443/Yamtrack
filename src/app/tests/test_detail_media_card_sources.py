@@ -91,6 +91,19 @@ class DetailMediaCardSourceTests(SimpleTestCase):
         self.assertIn(franchise_firstof, source)
         self.assertIn(related_firstof, source)
         self.assertIn("title=display_title", source)
+        self.assertIn("media_type == MediaTypes.ANIME.value", source)
+        self.assertIn("{% elif media_type == MediaTypes.MOVIE.value %}", source)
+        self.assertIn(
+            '{% include "app/components/media_card.html" with '
+            "item=result.item title=display_title media=result.media "
+            "active=media.media_id|str_equals:result.item.media_id %}",
+            source,
+        )
+        self.assertIn(
+            '{% include "app/components/media_card.html" with '
+            "item=result.item title=display_title media=result.media %}",
+            source,
+        )
         media_title_firstof = (
             "{% firstof media.alternative_title_en "
             "media.title as media_display_title %}"
