@@ -547,7 +547,8 @@
             <h2 class="text-xl font-bold mb-4">{{ anime_franchise.series.title }}</h2>
             <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
               {% for result in anime_franchise.series.entries %}
-                {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                {% firstof result.item.alternative_title_en result.item.title as display_title %}
+                {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
               {% endfor %}
             </div>
           </section>
@@ -560,7 +561,8 @@
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in section.entries %}
                   <div>
-                    {% include "app/components/media_card.html" with item=result.item title=result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                    {% firstof result.item.alternative_title_en result.item.title as display_title %}
+                    {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                     {% if result.item.footer_format or result.item.footer_relation_value %}
                       <div class="mt-2 flex items-center justify-between text-xs text-gray-400 px-1">
                         <span>
@@ -612,18 +614,19 @@
               </h2>
               <div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
                 {% for result in related_items %}
+                  {% firstof result.item.alternative_title_en result.item.season_title result.item.title as display_title %}
                   {# Set active to highlight the current movie in a collection. Avoid TV media, since seasons have same ID as the parent show #}
                   {% if media_type == MediaTypes.MOVIE.value %}
                     {% if name == "recommendations" %}
-                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                      {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                     {% else %}
-                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media active=media.media_id|str_equals:result.item.media_id %}
+                      {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                     {% endif %}
                   {% else %}
                     {% if name == "recommendations" %}
-                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
+                      {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media detail_card_layout=True %}
                     {% else %}
-                      {% include "app/components/media_card.html" with item=result.item title=result.item.season_title|default:result.item.title media=result.media %}
+                      {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media detail_card_layout=True %}
                     {% endif %}
                   {% endif %}
                 {% endfor %}

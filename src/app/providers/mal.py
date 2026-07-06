@@ -90,6 +90,14 @@ def search(media_type, query, page):
     return data
 
 
+def _get_alternative_title_en(data):
+    alternative_titles = data.get("alternative_titles")
+    if not isinstance(alternative_titles, dict):
+        return ""
+    value = alternative_titles.get("en")
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _fetch_anime_from_api(media_id):
     url = f"{base_url}/anime/{media_id}"
     params = {
@@ -108,14 +116,7 @@ def _fetch_anime_from_api(media_id):
         handle_error(error)
 
     num_episodes = get_number_of_episodes(response)
-    alternative_titles = response.get("alternative_titles")
-    if not isinstance(alternative_titles, dict):
-        alternative_titles = {}
-    alternative_title_en = alternative_titles.get("en")
-    if isinstance(alternative_title_en, str):
-        alternative_title_en = alternative_title_en.strip()
-    else:
-        alternative_title_en = ""
+    alternative_title_en = _get_alternative_title_en(response)
 
     return {
         "media_id": media_id,
@@ -220,6 +221,7 @@ def anime_related_details(mal_id, *, refresh_cache=False):
             "media_type": item.get("media_type", MediaTypes.ANIME.value),
             "title": item.get("title", ""),
             "image": item.get("image", settings.IMG_NONE),
+            "alternative_title_en": item.get("alternative_title_en", ""),
         }
         for item in related
     ]
@@ -459,6 +461,7 @@ def get_related(related_medias, media_type):
                 "media_id": media["node"]["id"],
                 "source": Sources.MAL.value,
                 "title": media["node"]["title"],
+                "alternative_title_en": _get_alternative_title_en(media["node"]),
                 "media_type": media_type,
                 "relation_type": normalize_relation_type(
                     media.get("relation_type"),
