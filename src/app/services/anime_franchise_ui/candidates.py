@@ -7,8 +7,10 @@ decide final section placement.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 @dataclass
@@ -43,3 +45,4 @@ class UiCandidate:
     hidden: bool = False
     badges: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    alternative_title_en: str = ""

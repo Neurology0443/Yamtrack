@@ -253,6 +253,7 @@ class UiCandidateAssembler:
                     has_non_series_origin=bool(non_series_sources),
                     is_current=node.media_id == snapshot.root_node.media_id,
                     metadata=metadata,
+                    alternative_title_en=node.alternative_title_en,
                 )
             )
 

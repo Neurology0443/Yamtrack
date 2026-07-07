@@ -34,6 +34,80 @@
   grid-column: 1 / -1;
 }
 
+.media-card-detail-image {
+  height: 14rem;
+  object-fit: cover;
+}
+
+.media-card-detail-title {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: auto;
+  margin: 0;
+  height: 6rem;
+  min-height: 6rem;
+  padding: 0.35rem 0.6rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(42, 47, 53);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  box-sizing: border-box;
+  overflow: hidden;
+  z-index: auto;
+}
+
+.media-card-detail-title-link {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.80rem;
+  line-height: 1.05rem;
+  font-weight: 660;
+  color: white;
+  text-align: center;
+  text-shadow: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  transition-property: color;
+  transition-duration: 300ms;
+}
+
+.media-card-detail-title-link:hover {
+  color: var(--color-indigo-400);
+}
+
+.media-card-detail-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  z-index: 2;
+}
+
+.media-card-detail-progress > * {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
+
+.media-detail-original-title {
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+  line-height: 1.25rem;
+  color: rgb(156, 163, 175);
+  font-weight: 400;
+}
+
 /* https://tailwindcss.com/docs/upgrade-guide#hover-styles-on-mobile */
 @custom-variant hover-tap (&:hover);
 @custom-variant parent-hover-tap (.hover-tap:hover &);

@@ -48,6 +48,7 @@ class ViewModelAdapter:
                     {
                         "media_id": entry.media_id,
                         "title": entry.title,
+                        "alternative_title_en": entry.alternative_title_en,
                         "image": entry.image,
                         "source": entry.source,
                         "media_type": "anime",
@@ -75,6 +76,7 @@ class ViewModelAdapter:
                         {
                             "media_id": candidate.media_id,
                             "title": candidate.title,
+                            "alternative_title_en": candidate.alternative_title_en,
                             "image": candidate.image,
                             "source": candidate.source,
                             "media_type": "anime",
