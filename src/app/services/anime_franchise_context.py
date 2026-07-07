@@ -106,7 +106,6 @@ def prepare_anime_franchise_context(
         )
     ]
     copied_sections = []
-    all_footer_entries = [*prepared_series_entries]
     for section in franchise_payload.get("sections", []):
         if not isinstance(section, dict):
             continue
@@ -115,7 +114,6 @@ def prepare_anime_franchise_context(
             for entry in _copy_entries(section.get("entries", []))
         ]
         copied_sections.append((section, copied_entries))
-        all_footer_entries.extend(copied_entries)
 
     franchise_sections = []
     for section, section_entries in copied_sections:
@@ -134,8 +132,6 @@ def prepare_anime_franchise_context(
                     enrich_franchise_entries_for_footer(
                         section_entries,
                         media_metadata,
-                        series_entries=prepared_series_entries,
-                        all_entries=all_footer_entries,
                     ),
                     section_key,
                 ),
