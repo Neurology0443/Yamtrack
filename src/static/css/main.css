@@ -3604,26 +3604,49 @@
   }
 }
 
-.franchise-relation-badge-active {
-  background: rgba(17, 24, 39, 0.98);
-  color: #f8fafc;
-  border: 1px solid rgba(129, 140, 248, 0.70);
+.franchise-footer-badges {
+  margin-top: 0.5rem;
+  padding-inline: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: rgb(156, 163, 175);
 }
 
-.franchise-relation-tooltip-active {
-  background: rgba(17, 24, 39, 0.98);
-  color: #f8fafc;
-  border: 1px solid rgba(129, 140, 248, 0.70);
+.franchise-footer-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-.franchise-relation-badge-inactive {
-  background: rgba(17, 24, 39, 0.80);
-  color: rgba(248, 250, 252, 0.80);
-  border: 1px solid rgba(148, 163, 184, 0.45);
+.franchise-footer-badge-format {
+  color: rgb(209, 213, 219);
+  background: rgba(55, 65, 81, 0.35);
+  border: 1px solid rgba(107, 114, 128, 0.45);
+  opacity: 0.75;
 }
 
-.franchise-relation-tooltip-inactive {
-  background: rgba(17, 24, 39, 0.80);
-  color: rgba(248, 250, 252, 0.80);
-  border: 1px solid rgba(148, 163, 184, 0.45);
+.franchise-footer-badge-relation {
+  border: 1px solid transparent;
+}
+
+.franchise-footer-badge-relation-active {
+  color: white;
+  background: rgba(79, 70, 229, 0.95);
+  border-color: rgba(129, 140, 248, 0.95);
+}
+
+.franchise-footer-badge-relation-inactive {
+  color: rgb(156, 163, 175);
+  background: rgba(31, 41, 55, 0.45);
+  border-color: rgba(75, 85, 99, 0.7);
+  opacity: 0.7;
 }
