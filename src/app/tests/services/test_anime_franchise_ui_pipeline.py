@@ -184,6 +184,195 @@ class AnimeFranchiseUiPipelineTests(TestCase):
             absent_section="spin_offs",
         )
 
+    def _branch_snapshot(self, *, nodes, direct_candidates, all_relations):
+        root = nodes["100"]
+        return SimpleNamespace(
+            root_node=root,
+            nodes_by_media_id=nodes,
+            all_normalized_relations=all_relations,
+            continuity_component=list(nodes.values()),
+            series_line=[root],
+            direct_anchors=[root],
+            direct_candidates=direct_candidates,
+            promoted_continuity_candidates=[],
+            no_series_line_secondary_candidates=[],
+            root_story_parent_candidates=[],
+            has_series_line=True,
+            fallback_anchor_media_id="100",
+            canonical_root_media_id="100",
+        )
+
+    def _branch_entry(self, payload, section_key, media_id):
+        sections = {section["key"]: section for section in payload.sections}
+        return next(
+            entry
+            for entry in sections.get(section_key, {"entries": []})["entries"]
+            if entry["media_id"] == media_id
+        )
+
+    def test_pipeline_compacts_alternative_version_branch(self):
+        nodes = {
+            "100": AnimeNode(
+                "100", "Main TV", "mal", "tv", "img-100", date(2020, 1, 1), []
+            ),
+            "200": AnimeNode(
+                "200", "Alternative TV", "mal", "tv", "img-200", date(2021, 1, 1), []
+            ),
+            "201": AnimeNode(
+                "201", "Alternative S2", "mal", "tv", "img-201", date(2022, 1, 1), []
+            ),
+            "202": AnimeNode(
+                "202", "Alternative S3", "mal", "tv", "img-202", date(2023, 1, 1), []
+            ),
+        }
+        direct_candidates = [
+            AnimeRelation("100", "200", "alternative_version"),
+            AnimeRelation("100", "201", "alternative_version"),
+            AnimeRelation("100", "202", "alternative_version"),
+        ]
+        snapshot = self._branch_snapshot(
+            nodes=nodes,
+            direct_candidates=direct_candidates,
+            all_relations=[
+                *direct_candidates,
+                AnimeRelation("200", "201", "sequel"),
+                AnimeRelation("201", "202", "sequel"),
+            ],
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+        alternative_entries = sections["alternatives"]["entries"]
+
+        self.assertEqual([entry["media_id"] for entry in alternative_entries], ["200"])
+        representative = alternative_entries[0]
+        self.assertTrue(representative["secondary_branch_collapsed"])
+        self.assertEqual(
+            representative["secondary_branch_member_ids"], ["200", "201", "202"]
+        )
+        self.assertEqual(representative["secondary_branch_size"], 3)
+        self.assertEqual(
+            representative["secondary_branch_relation_family"], "alternative_version"
+        )
+
+    def test_pipeline_compacts_spin_off_branch(self):
+        nodes = {
+            "100": AnimeNode(
+                "100", "Main TV", "mal", "tv", "img-100", date(2020, 1, 1), []
+            ),
+            "300": AnimeNode(
+                "300",
+                "Spin-off TV",
+                "mal",
+                "tv",
+                "img-300",
+                date(2021, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+            "301": AnimeNode(
+                "301",
+                "Spin-off S2",
+                "mal",
+                "tv",
+                "img-301",
+                date(2022, 1, 1),
+                [],
+                runtime_minutes=24,
+                episode_count=12,
+            ),
+        }
+        direct_candidates = [
+            AnimeRelation("100", "300", "spin_off"),
+            AnimeRelation("100", "301", "spin_off"),
+        ]
+        snapshot = self._branch_snapshot(
+            nodes=nodes,
+            direct_candidates=direct_candidates,
+            all_relations=[
+                *direct_candidates,
+                AnimeRelation("300", "301", "sequel"),
+            ],
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+        section_key = "spin_offs" if "spin_offs" in sections else "related_series"
+        entries = sections[section_key]["entries"]
+
+        self.assertEqual([entry["media_id"] for entry in entries], ["300"])
+        self.assertTrue(entries[0]["secondary_branch_collapsed"])
+        self.assertEqual(entries[0]["secondary_branch_member_ids"], ["300", "301"])
+        self.assertEqual(entries[0]["secondary_branch_size"], 2)
+        self.assertEqual(entries[0]["secondary_branch_relation_family"], "spin_off")
+
+    def test_pipeline_does_not_compact_cross_section_continuity_relation(self):
+        nodes = {
+            "100": AnimeNode(
+                "100", "Main TV", "mal", "tv", "img-100", date(2020, 1, 1), []
+            ),
+            "200": AnimeNode(
+                "200", "Alternative TV", "mal", "tv", "img-200", date(2021, 1, 1), []
+            ),
+            "201": AnimeNode(
+                "201", "Side Story", "mal", "ova", "img-201", date(2022, 1, 1), []
+            ),
+        }
+        direct_candidates = [
+            AnimeRelation("100", "200", "alternative_version"),
+            AnimeRelation("100", "201", "side_story"),
+        ]
+        snapshot = self._branch_snapshot(
+            nodes=nodes,
+            direct_candidates=direct_candidates,
+            all_relations=[
+                *direct_candidates,
+                AnimeRelation("200", "201", "sequel"),
+            ],
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        sections = {section["key"]: section for section in payload.sections}
+
+        self.assertEqual(
+            [entry["media_id"] for entry in sections["alternatives"]["entries"]],
+            ["200"],
+        )
+        self.assertIn(
+            "201", [entry["media_id"] for entry in sections["specials"]["entries"]]
+        )
+        alternative = self._branch_entry(payload, "alternatives", "200")
+        side_story = self._branch_entry(payload, "specials", "201")
+        self.assertFalse(alternative["secondary_branch_collapsed"])
+        self.assertFalse(side_story["secondary_branch_collapsed"])
+        self.assertEqual(alternative["secondary_branch_member_ids"], [])
+        self.assertEqual(side_story["secondary_branch_member_ids"], [])
+
+    def test_pipeline_leaves_single_secondary_entry_unchanged(self):
+        nodes = {
+            "100": AnimeNode(
+                "100", "Main TV", "mal", "tv", "img-100", date(2020, 1, 1), []
+            ),
+            "200": AnimeNode(
+                "200", "Alternative TV", "mal", "tv", "img-200", date(2021, 1, 1), []
+            ),
+        }
+        direct_candidates = [AnimeRelation("100", "200", "alternative_version")]
+        snapshot = self._branch_snapshot(
+            nodes=nodes,
+            direct_candidates=direct_candidates,
+            all_relations=direct_candidates,
+        )
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+        entry = self._branch_entry(payload, "alternatives", "200")
+
+        self.assertFalse(entry["secondary_branch_collapsed"])
+        self.assertEqual(entry["secondary_branch_member_ids"], [])
+        self.assertEqual(entry["secondary_branch_size"], 1)
+        self.assertEqual(entry["secondary_branch_relation_family"], "")
+
     def test_series_builder_uses_fixed_key_and_title(self):
         snapshot = self._snapshot()
         block = SeriesBuilder().build(snapshot)
