@@ -76,6 +76,33 @@ class DetailMediaCardSourceTests(SimpleTestCase):
 
         self.assert_detail_card_css_rules(source)
 
+
+    def assert_franchise_footer_badge_css_rules(self, source):
+        for expected in (
+            ".franchise-footer-badges",
+            ".franchise-footer-badge",
+            ".franchise-footer-badge-format",
+            ".franchise-footer-badge-relation",
+            ".franchise-footer-badge-relation-active",
+            ".franchise-footer-badge-relation-inactive",
+            "border-radius: 9999px",
+            "font-weight: 600",
+            "letter-spacing: 0.01em",
+            "rgba(79, 70, 229, 0.95)",
+            "rgba(31, 41, 55, 0.45)",
+        ):
+            self.assertIn(expected, source)
+
+    def test_franchise_footer_badge_source_css_defines_static_badges(self):
+        source = (ROOT / "static/css/input.css").read_text()
+
+        self.assert_franchise_footer_badge_css_rules(source)
+
+    def test_franchise_footer_badge_served_css_defines_static_badges(self):
+        source = (ROOT / "static/css/main.css").read_text()
+
+        self.assert_franchise_footer_badge_css_rules(source)
+
     def test_media_details_uses_detail_layout_and_firstof_fallbacks(self):
         source = (ROOT / "templates/app/media_details.html").read_text()
 
@@ -111,6 +138,17 @@ class DetailMediaCardSourceTests(SimpleTestCase):
         self.assertIn(media_title_firstof, source)
         self.assertIn("{{ media_display_title }}", source)
         self.assertIn("media-detail-original-title", source)
+        self.assertNotIn("footer_relation_tooltip", source)
+        self.assertNotIn("franchise-relation-tooltip-active", source)
+        self.assertNotIn("franchise-relation-tooltip-inactive", source)
+        self.assertNotIn("group-hover:visible", source)
+        self.assertNotIn("group-focus:visible", source)
+        self.assertNotIn('class="relative inline-flex group"', source)
+        self.assertIn("franchise-footer-badge", source)
+        self.assertIn("franchise-footer-badge-format", source)
+        self.assertIn("franchise-footer-badge-relation", source)
+        self.assertIn("franchise-footer-badge-relation-active", source)
+        self.assertIn("franchise-footer-badge-relation-inactive", source)
         self.assertIn(
             "media.alternative_title_en and media.alternative_title_en != media.title",
             source,

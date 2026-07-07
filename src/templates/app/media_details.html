@@ -571,10 +571,11 @@
                     {% firstof result.item.alternative_title_en result.item.title as display_title %}
                     {% include "app/components/media_card.html" with item=result.item title=display_title media=result.media active=media.media_id|str_equals:result.item.media_id detail_card_layout=True %}
                     {% if result.item.footer_format or result.item.footer_relation_value %}
-                      <div class="mt-2 flex items-center justify-between text-xs text-gray-400 px-1">
+                      <div class="franchise-footer-badges">
                         <span>
                           {% if result.item.footer_format %}
-                            <span data-franchise-badge="true"
+                            <span class="franchise-footer-badge franchise-footer-badge-format"
+                                  data-franchise-badge="true"
                                   data-franchise-badge-type="format"
                                   data-franchise-badge-value="{{ result.item.footer_format_value }}"
                                   data-franchise-badge-active="false">{{ result.item.footer_format }}</span>
@@ -582,20 +583,11 @@
                         </span>
                         <span>
                           {% if result.item.footer_relation_value %}
-                            {% if result.item.footer_relation_tooltip %}
-                              <span class="relative inline-flex group" tabindex="0">
-                            {% endif %}
-                            <span class="px-2 py-0.5 rounded-full {% if result.item.footer_relation_active %}franchise-relation-badge-active{% else %}franchise-relation-badge-inactive{% endif %}"
+                            <span class="franchise-footer-badge franchise-footer-badge-relation {% if result.item.footer_relation_active %}franchise-footer-badge-relation-active{% else %}franchise-footer-badge-relation-inactive{% endif %}"
                                   data-franchise-badge="true"
                                   data-franchise-badge-type="relation"
                                   data-franchise-badge-value="{{ result.item.footer_relation_value }}"
                                   data-franchise-badge-active="{% if result.item.footer_relation_active %}true{% else %}false{% endif %}">{{ result.item.footer_relation_label }}</span>
-                            {% if result.item.footer_relation_tooltip %}
-                                <span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 z-20 mt-2 invisible opacity-0 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs shadow-xl transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 {% if result.item.footer_relation_active %}franchise-relation-tooltip-active{% else %}franchise-relation-tooltip-inactive{% endif %}">
-                                  {{ result.item.footer_relation_tooltip }}
-                                </span>
-                              </span>
-                            {% endif %}
                           {% endif %}
                         </span>
                       </div>
