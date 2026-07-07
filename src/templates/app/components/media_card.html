@@ -5,7 +5,7 @@
   <div class="relative">
     <a href="{{ item|media_url }}">
       <img alt="{{ title }}"
-           class="lazyload w-full {% if from_grid %}aspect-2/3{% else %}h-48{% endif %} bg-[#3e454d] {% if item.image != IMG_NONE %}object-cover{% endif %}"
+           class="lazyload w-full {% if detail_card_layout %}media-card-detail-image{% elif from_grid %}aspect-2/3{% else %}h-48{% endif %} bg-[#3e454d] {% if detail_card_layout or item.image != IMG_NONE %}object-cover{% endif %}"
            data-src="{{ item.image }}"
            src="{{ IMG_NONE }}">
     </a>
@@ -119,11 +119,25 @@
     {% endwith %}
   </div>
 
-  <div class="p-3">
-    <a href="{{ item|media_url }}"
-       class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
-       title="{{ title }}">{{ title }}</a>
-  </div>
+  {% if detail_card_layout %}
+    <div class="media-card-detail-title">
+      <a href="{{ item|media_url }}"
+         class="media-card-detail-title-link">{{ title }}</a>
+      {% with user=target_user|default:user %}
+        {% if media.status and user.progress_bar %}
+          <div class="media-card-detail-progress">
+            {% include "app/components/progress_bar.html" with media=media user=user only %}
+          </div>
+        {% endif %}
+      {% endwith %}
+    </div>
+  {% else %}
+    <div class="p-3">
+      <a href="{{ item|media_url }}"
+         class="text-sm font-semibold text-white hover:text-indigo-400 transition duration-300 line-clamp-1"
+         title="{{ title }}">{{ title }}</a>
+    </div>
+  {% endif %}
 
   {% if item.media_type == MediaTypes.EPISODE.value %}
     {% include "app/components/fill_track_episode.html" with request=request media=item episode=item episode_title=title csrf_token=csrf_token TRACK_TIME=TRACK_TIME only %}
@@ -158,7 +172,9 @@
       <div id="{% component_id 'history-card' item media.id %}"></div>
     </div>
   </div>
-  {% with user=target_user|default:user %}
-    {% include "app/components/progress_bar.html" with media=media user=user only %}
-  {% endwith %}
+  {% if not detail_card_layout %}
+    {% with user=target_user|default:user %}
+      {% include "app/components/progress_bar.html" with media=media user=user only %}
+    {% endwith %}
+  {% endif %}
 </div>

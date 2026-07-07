@@ -322,6 +322,27 @@ class MALAnimeStaleCacheTests(TestCase):
 
 
 class MALAnimeAlternativeTitleTests(TestCase):
+    def test_get_alternative_title_en_normalizes_supported_shapes(self):
+        self.assertEqual(
+            mal._get_alternative_title_en(
+                {"alternative_titles": {"en": "  English Title  "}}
+            ),
+            "English Title",
+        )
+        self.assertEqual(
+            mal._get_alternative_title_en({"alternative_titles": {"ja": "日本語"}}),
+            "",
+        )
+        self.assertEqual(mal._get_alternative_title_en({}), "")
+        self.assertEqual(
+            mal._get_alternative_title_en({"alternative_titles": "invalid"}),
+            "",
+        )
+        self.assertEqual(
+            mal._get_alternative_title_en({"alternative_titles": {"en": None}}),
+            "",
+        )
+
     @patch("app.providers.mal.services.api_request")
     def test_anime_normalizes_english_alternative_title(self, mock_api_request):
         response = dict(API_RESPONSE)
@@ -363,3 +384,68 @@ class MALAnimeAlternativeTitleTests(TestCase):
             result = mal.anime("38002", refresh_cache=True)
 
             self.assertEqual(result["alternative_title_en"], "")
+
+    def test_get_related_propagates_alternative_title_en_when_present(self):
+        related = mal.get_related(
+            [
+                {
+                    "node": {
+                        "id": 1,
+                        "title": "Related",
+                        "alternative_titles": {"en": " Related English "},
+                    },
+                    "relation_type": "sequel",
+                },
+                {
+                    "node": {"id": 2, "title": "Missing English"},
+                    "relation_type": "other",
+                },
+            ],
+            MediaTypes.ANIME.value,
+        )
+
+        self.assertEqual(related[0]["alternative_title_en"], "Related English")
+        self.assertEqual(related[1]["alternative_title_en"], "")
+
+    @patch("app.providers.mal.services.api_request")
+    def test_anime_related_and_recommendations_include_alternative_title_en(
+        self, mock_api_request
+    ):
+        response = dict(API_RESPONSE)
+        response["related_anime"] = [
+            {
+                "node": {
+                    "id": 10,
+                    "title": "Related",
+                    "alternative_titles": {"en": "Related English"},
+                },
+                "relation_type": "sequel",
+            }
+        ]
+        response["recommendations"] = [
+            {
+                "node": {
+                    "id": 20,
+                    "title": "Recommendation",
+                    "alternative_titles": {"en": "Recommendation English"},
+                }
+            }
+        ]
+        mock_api_request.return_value = response
+
+        result = mal.anime("38004", refresh_cache=True)
+
+        self.assertEqual(
+            result["related"]["related_anime"][0]["alternative_title_en"],
+            "Related English",
+        )
+        self.assertEqual(
+            result["related"]["recommendations"][0]["alternative_title_en"],
+            "Recommendation English",
+        )
+        self.assertEqual(
+            mal.anime_related_details("38004", refresh_cache=False)[0][
+                "alternative_title_en"
+            ],
+            "Related English",
+        )

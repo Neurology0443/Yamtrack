@@ -193,6 +193,25 @@ class AnimeFranchiseUiPipelineTests(TestCase):
         self.assertEqual([entry.media_id for entry in block.entries], ["100", "200"])
         self.assertTrue(block.entries[1].is_current)
 
+    def test_pipeline_propagates_alternative_title_en_to_series_and_sections(self):
+        snapshot = self._snapshot()
+        snapshot.nodes_by_media_id["100"].alternative_title_en = "English Season 1"
+        snapshot.nodes_by_media_id["300"].alternative_title_en = "English Movie"
+
+        payload = AnimeFranchiseUiPipeline().run(snapshot)
+
+        self.assertEqual(
+            payload.series["entries"][0]["alternative_title_en"],
+            "English Season 1",
+        )
+        section_entries = [
+            entry
+            for section in payload.sections
+            for entry in section["entries"]
+            if entry["media_id"] == "300"
+        ]
+        self.assertEqual(section_entries[0]["alternative_title_en"], "English Movie")
+
     def test_candidate_assembler_excludes_series_and_deduplicates(self):
         snapshot = self._snapshot()
         candidates = UiCandidateAssembler().build(snapshot)
