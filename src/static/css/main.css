@@ -3606,12 +3606,11 @@
 
 .franchise-footer-badges {
   margin-top: 0.5rem;
-  padding-inline: 0.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   line-height: 1rem;
   color: rgb(156, 163, 175);
 }
@@ -3629,9 +3628,6 @@
 
 .franchise-footer-badge-format {
   color: rgb(209, 213, 219);
-  background: rgba(55, 65, 81, 0.35);
-  border: 1px solid rgba(107, 114, 128, 0.45);
-  opacity: 0.75;
 }
 
 .franchise-footer-badge-relation {
