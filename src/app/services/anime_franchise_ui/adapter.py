@@ -63,7 +63,7 @@ class ViewModelAdapter:
                         "is_current": entry.is_current,
                     }
                     for entry in series_block.entries
-                ],
+                ]
             },
             sections=[
                 {
@@ -96,24 +96,6 @@ class ViewModelAdapter:
                             ),
                             "is_current": candidate.is_current,
                             "badges": list(candidate.badges),
-                            "secondary_branch_collapsed": bool(
-                                candidate.metadata.get(
-                                    "secondary_branch_collapsed", False
-                                )
-                            ),
-                            "secondary_branch_member_ids": list(
-                                candidate.metadata.get(
-                                    "secondary_branch_member_ids", []
-                                )
-                            ),
-                            "secondary_branch_size": candidate.metadata.get(
-                                "secondary_branch_size", 1
-                            ),
-                            "secondary_branch_relation_family": (
-                                candidate.metadata.get(
-                                    "secondary_branch_relation_family", ""
-                                )
-                            ),
                         }
                         for candidate in section.entries
                     ],
