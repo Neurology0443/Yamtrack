@@ -150,6 +150,7 @@ class AnimeFranchiseMaintenanceService:
                     seed_mal_id,
                     snapshot=snapshot,
                     graph_builder=snapshot_service.graph_builder,
+                    refresh_cache=refresh_cache,
                     force_cache_rebuild=True,
                 )
                 result.cache_built = bool(cache_result.get("built"))
