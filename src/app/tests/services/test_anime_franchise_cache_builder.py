@@ -220,7 +220,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             truncated=False,
         )
         mock_cache.load_payload.assert_not_called()
-        mock_cache.delete_direct_payload.assert_called_once_with("58567")
+        mock_cache.delete_direct_payload.assert_not_called()
         self.assertNotIn(
             ("58567",),
             [call.args[:1] for call in mock_cache.save_payload.call_args_list],
@@ -356,7 +356,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
             fresh_canonical_payload,
             truncated=False,
         )
-        mock_cache.delete_direct_payload.assert_called_once_with("58567")
+        mock_cache.delete_direct_payload.assert_not_called()
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
     @patch(
@@ -940,7 +940,7 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
             "100", existing_payload, truncated=False
         )
         mock_cache.save_payload.assert_not_called()
-        mock_cache.delete_direct_payload.assert_called_once_with("200")
+        mock_cache.delete_direct_payload.assert_not_called()
 
     @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
     @patch(
@@ -1237,7 +1237,7 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
         )
 
         self.assertTrue(result["built"])
-        mock_cache.delete_direct_payload.assert_called_once_with("200")
+        mock_cache.delete_direct_payload.assert_not_called()
         mock_scoped.assert_not_called()
         save_calls = [call.args[0] for call in mock_cache.save_payload.call_args_list]
         self.assertEqual(save_calls, ["100"])
@@ -1391,6 +1391,7 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
             {"100"},
         )
         mock_cache.extract_payload_media_ids.return_value = {"200"}
+
         def replace_aliases_side_effect(*_args, **_kwargs):
             events.append("replace")
             return 1
@@ -1550,3 +1551,189 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
             final_saves, [("100", canonical_payload), ("200", scoped_payload)]
         )
         self.assertGreaterEqual(mock_cache.replace_aliases.call_count, 2)
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonforced_scoped_prepare_error_happens_before_cache_mutation(
+        self,
+        mock_cache,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        existing_payload = {"aliasable_media_ids": ["100"]}
+        mock_cache.load_valid_alias_payload_for_media.return_value = None
+        mock_cache.load_payload.return_value = (existing_payload, {"meta": True})
+        mock_scoped.side_effect = RuntimeError("scoped prepare boom")
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=False,
+        )
+
+        self.assertFalse(result["built"])
+        self.assertEqual(result["error"], "scoped prepare boom")
+        mock_cache.replace_aliases.assert_not_called()
+        mock_cache.save_payload.assert_not_called()
+        mock_cache.delete_direct_payload.assert_not_called()
+        mock_cache.maybe_schedule_build.assert_not_called()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonforced_scoped_prepared_before_replace_aliases_and_save_scoped(
+        self,
+        mock_cache,
+        mock_scoped,
+    ):
+        events = []
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        existing_payload = {"aliasable_media_ids": ["100"]}
+        scoped_payload = {"root_media_id": "200", "aliasable_media_ids": ["200"]}
+        mock_cache.load_valid_alias_payload_for_media.return_value = None
+        mock_cache.load_payload.return_value = (existing_payload, {"meta": True})
+        mock_cache.extract_payload_media_ids.return_value = {"200"}
+
+        def scoped_side_effect(*_args, **_kwargs):
+            events.append("scoped_prepare")
+            return scoped_payload
+
+        def replace_side_effect(*_args, **_kwargs):
+            events.append("replace_aliases")
+            return 1
+
+        def save_side_effect(media_id, *_args, **_kwargs):
+            events.append(f"save:{media_id}")
+
+        mock_scoped.side_effect = scoped_side_effect
+        mock_cache.replace_aliases.side_effect = replace_side_effect
+        mock_cache.save_payload.side_effect = save_side_effect
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=False,
+        )
+
+        self.assertTrue(result["built"])
+        self.assertEqual(events, ["scoped_prepare", "replace_aliases", "save:200"])
+        self.assertEqual(
+            mock_cache.save_payload.call_args.args[:2], ("200", scoped_payload)
+        )
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonforced_aliasable_seed_relies_on_replace_aliases_for_direct_delete(
+        self,
+        mock_cache,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        existing_payload = {"aliasable_media_ids": ["100", "200"]}
+        mock_cache.load_valid_alias_payload_for_media.return_value = None
+        mock_cache.load_payload.return_value = (existing_payload, {"meta": True})
+        mock_cache.replace_aliases.return_value = 1
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=False,
+        )
+
+        self.assertTrue(result["built"])
+        mock_scoped.assert_not_called()
+        mock_cache.replace_aliases.assert_called_once_with(
+            "100", existing_payload, truncated=False
+        )
+        mock_cache.delete_direct_payload.assert_not_called()
+        mock_cache.save_payload.assert_not_called()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonforced_missing_canonical_prepares_scoped_before_scheduling(
+        self,
+        mock_cache,
+        mock_scoped,
+    ):
+        events = []
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        scoped_payload = {"root_media_id": "200", "aliasable_media_ids": ["200"]}
+        mock_cache.load_valid_alias_payload_for_media.return_value = None
+        mock_cache.load_payload.return_value = (None, {"meta": True})
+        mock_cache.extract_payload_media_ids.return_value = {"200"}
+
+        def scoped_side_effect(*_args, **_kwargs):
+            events.append("scoped_prepare")
+            return scoped_payload
+
+        def schedule_side_effect(*_args, **_kwargs):
+            events.append("maybe_schedule_build")
+
+        def save_side_effect(media_id, *_args, **_kwargs):
+            events.append(f"save:{media_id}")
+
+        mock_scoped.side_effect = scoped_side_effect
+        mock_cache.maybe_schedule_build.side_effect = schedule_side_effect
+        mock_cache.save_payload.side_effect = save_side_effect
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=False,
+        )
+
+        self.assertTrue(result["built"])
+        self.assertEqual(events, ["scoped_prepare", "maybe_schedule_build", "save:200"])
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonforced_missing_canonical_scoped_error_skips_schedule_and_writes(
+        self,
+        mock_cache,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        mock_cache.load_valid_alias_payload_for_media.return_value = None
+        mock_cache.load_payload.return_value = (None, {"meta": True})
+        mock_scoped.side_effect = RuntimeError("scoped prepare boom")
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=False,
+        )
+
+        self.assertFalse(result["built"])
+        self.assertEqual(result["error"], "scoped prepare boom")
+        mock_cache.maybe_schedule_build.assert_not_called()
+        mock_cache.save_payload.assert_not_called()
+        mock_cache.replace_aliases.assert_not_called()

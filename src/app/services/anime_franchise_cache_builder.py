@@ -366,15 +366,12 @@ class AnimeFranchiseCacheBuildService:
             aliases_enabled=aliases_enabled,
             truncated=canonical_context.truncated,
         )
-        if not source_is_canonical:
-            if source_is_aliasable:
-                anime_franchise_cache.delete_direct_payload(source_context.media_id)
-            else:
-                self._publish_prepared_scoped_payload(
-                    source_context,
-                    prepared_scoped_payload,
-                    elapsed=elapsed,
-                )
+        if not source_is_canonical and not source_is_aliasable:
+            self._publish_prepared_scoped_payload(
+                source_context,
+                prepared_scoped_payload,
+                elapsed=elapsed,
+            )
         return {
             "media_id": source_context.media_id,
             "canonical_media_id": canonical_media_id,
@@ -396,6 +393,19 @@ class AnimeFranchiseCacheBuildService:
         canonical_payload, existing_canonical_meta = anime_franchise_cache.load_payload(
             source_context.canonical_media_id
         )
+        canonical_aliasable_ids = {
+            str(aliasable_media_id)
+            for aliasable_media_id in (canonical_payload or {}).get(
+                "aliasable_media_ids",
+                [],
+            )
+        }
+        prepared_scoped_payload = self._prepare_scoped_payload(
+            source_context,
+            canonical_media_id=source_context.canonical_media_id,
+            canonical_aliasable_ids=canonical_aliasable_ids,
+        )
+
         if canonical_payload:
             alias_count = self._replace_aliases_if_allowed(
                 source_context.canonical_media_id,
@@ -410,21 +420,7 @@ class AnimeFranchiseCacheBuildService:
                 existing_canonical_meta,
                 has_payload=False,
             )
-        canonical_aliasable_ids = {
-            str(aliasable_media_id)
-            for aliasable_media_id in (canonical_payload or {}).get(
-                "aliasable_media_ids",
-                [],
-            )
-        }
-        prepared_scoped_payload = self._prepare_scoped_payload(
-            source_context,
-            canonical_media_id=source_context.canonical_media_id,
-            canonical_aliasable_ids=canonical_aliasable_ids,
-        )
-        if source_context.media_id in canonical_aliasable_ids:
-            anime_franchise_cache.delete_direct_payload(source_context.media_id)
-        else:
+        if source_context.media_id not in canonical_aliasable_ids:
             self._publish_prepared_scoped_payload(
                 source_context,
                 prepared_scoped_payload,
