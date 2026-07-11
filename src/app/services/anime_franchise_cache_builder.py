@@ -63,7 +63,26 @@ class AnimeFranchiseCacheBuildService:
             )
             return {"media_id": media_id, "built": False, "error": error_message[:250]}
 
-    def build_and_save_from_snapshot(  # noqa: C901
+    def _resolve_canonical_ui_snapshot(
+        self,
+        *,
+        media_id: str,
+        canonical_media_id: str,
+        snapshot,
+        graph_builder,
+    ):
+        """Return the snapshot/graph builder that must produce shared UI cache."""
+        if media_id == canonical_media_id or graph_builder.truncated:
+            return snapshot, graph_builder
+
+        canonical_snapshot_service = self.build_session.snapshot_service()
+        canonical_snapshot = canonical_snapshot_service.build(
+            canonical_media_id,
+            refresh_cache=self.build_session.refresh_cache,
+        )
+        return canonical_snapshot, canonical_snapshot_service.graph_builder
+
+    def build_and_save_from_snapshot(  # noqa: C901,PLR0915
         self,
         media_id,
         *,
@@ -84,25 +103,14 @@ class AnimeFranchiseCacheBuildService:
                     "graph_builder is required when saving a prebuilt snapshot"
                 )
                 raise ValueError(error_message)  # noqa: TRY301
-            franchise_payload = AnimeFranchiseUiPipeline().run(snapshot)
-            truncated = bool(graph_builder.truncated)
+            source_snapshot = snapshot
+            source_graph_builder = graph_builder
+            source_truncated = bool(source_graph_builder.truncated)
+            source_truncation_reason = source_graph_builder.truncation_reason or ""
+            source_node_count = source_graph_builder.node_count
+            canonical_media_id = str(source_snapshot.canonical_root_media_id)
             aliases_enabled = settings.ANIME_FRANCHISE_CACHE_ALIASES_ENABLED
-            can_use_aliases = aliases_enabled and not truncated
-            truncation_reason = graph_builder.truncation_reason or ""
-            node_count = graph_builder.node_count
-            serialized_payload = serialize_franchise_payload(
-                franchise_payload,
-                root_media_id=media_id,
-            )
-            canonical_payload, canonical_media_id, _aliasable_media_ids = (
-                anime_franchise_cache.prepare_payload_for_aliasing(
-                    serialized_payload,
-                    build_seed_media_id=media_id,
-                    truncated=truncated,
-                    aliases_enabled=aliases_enabled,
-                )
-            )
-            is_canonical_build = media_id == canonical_media_id
+            can_use_aliases = aliases_enabled and not source_truncated
             duration = time.monotonic() - started_at
             existing_alias_lookup = (
                 None
@@ -117,12 +125,39 @@ class AnimeFranchiseCacheBuildService:
                     "built": True,
                     "skipped_direct_write": True,
                     "reason": "valid_alias_exists",
-                    "node_count": node_count,
+                    "node_count": source_node_count,
                     "duration": duration,
-                    "truncated": truncated,
-                    "truncation_reason": truncation_reason,
+                    "truncated": source_truncated,
+                    "truncation_reason": source_truncation_reason,
                     "alias_count": 0,
                 }
+
+            canonical_snapshot, canonical_graph_builder = (
+                self._resolve_canonical_ui_snapshot(
+                    media_id=media_id,
+                    canonical_media_id=canonical_media_id,
+                    snapshot=source_snapshot,
+                    graph_builder=source_graph_builder,
+                )
+            )
+            franchise_payload = AnimeFranchiseUiPipeline().run(canonical_snapshot)
+            truncated = bool(canonical_graph_builder.truncated)
+            can_use_aliases = aliases_enabled and not truncated
+            truncation_reason = canonical_graph_builder.truncation_reason or ""
+            node_count = canonical_graph_builder.node_count
+            serialized_payload = serialize_franchise_payload(
+                franchise_payload,
+                root_media_id=canonical_media_id,
+            )
+            canonical_payload, canonical_media_id, _aliasable_media_ids = (
+                anime_franchise_cache.prepare_payload_for_aliasing(
+                    serialized_payload,
+                    build_seed_media_id=media_id,
+                    truncated=truncated,
+                    aliases_enabled=aliases_enabled,
+                )
+            )
+            is_canonical_build = media_id == canonical_media_id
 
             alias_count = 0
             canonical_payload_for_aliases = None
@@ -168,7 +203,7 @@ class AnimeFranchiseCacheBuildService:
             seed_is_aliasable_in_canonical = media_id in canonical_aliasable_ids
 
             scoped_payload = build_scoped_seed_payload_from_snapshot(
-                snapshot,
+                source_snapshot,
                 seed_media_id=media_id,
             )
             if not is_canonical_build and seed_is_aliasable_in_canonical:
