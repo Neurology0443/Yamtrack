@@ -34,8 +34,8 @@ class AnimeFranchiseScopedPayloadTests(SimpleTestCase):
             image,
             start_date,
             relations or [],
-            runtime_minutes,
-            episode_count,
+            runtime_minutes=runtime_minutes,
+            episode_count=episode_count,
         )
 
     def _snapshot(self, *, seed=None, nodes=None, relations=None, canonical="11757"):
