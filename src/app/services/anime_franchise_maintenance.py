@@ -111,6 +111,8 @@ class AnimeFranchiseMaintenanceService:
         )
         build_session = AnimeFranchiseBuildSession(refresh_cache=refresh_cache)
         snapshot_service = build_session.snapshot_service()
+        # Measure maintenance-side cache preparation, including the source snapshot,
+        # pre-publication maintenance work, optional canonical rebuild, and publish.
         cache_build_started_at = time.monotonic()
         snapshot = snapshot_service.build(seed_mal_id, refresh_cache=refresh_cache)
         result.snapshot_built = True

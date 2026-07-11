@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class _SnapshotContext:
     snapshot: Any
-    graph_builder: Any
     media_id: str
     canonical_media_id: str
     truncated: bool
@@ -88,7 +87,11 @@ class AnimeFranchiseCacheBuildService:
         started_at=None,
         mark_attempt=True,
     ) -> dict:
-        """Save UI cache payloads from an already-built franchise snapshot."""
+        """Save UI cache payloads from an already-built franchise snapshot.
+
+        started_at may be supplied by an orchestrator that performed source
+        snapshot preparation before entering the cache publication phase.
+        """
         media_id = str(media_id)
         started_at = started_at if started_at is not None else time.monotonic()
 
@@ -176,7 +179,6 @@ class AnimeFranchiseCacheBuildService:
     def _snapshot_context(self, *, snapshot, graph_builder, media_id: str):
         return _SnapshotContext(
             snapshot=snapshot,
-            graph_builder=graph_builder,
             media_id=str(media_id),
             canonical_media_id=str(snapshot.canonical_root_media_id),
             truncated=bool(graph_builder.truncated),
@@ -237,9 +239,11 @@ class AnimeFranchiseCacheBuildService:
         )
         if canonical_context.truncated:
             reason = canonical_context.truncation_reason or "unknown"
-            self._raise_build_error(f"canonical_snapshot_truncated:{reason}")
+            error_message = f"canonical_snapshot_truncated:{reason}"
+            raise RuntimeError(error_message)
         if canonical_context.canonical_media_id != source_context.canonical_media_id:
-            self._raise_build_error("canonical_root_changed")
+            error_message = "canonical_root_changed"
+            raise RuntimeError(error_message)
         return canonical_context
 
     def _build_serialized_payload(
@@ -332,7 +336,20 @@ class AnimeFranchiseCacheBuildService:
             )
         )
         if canonical_media_id != source_context.canonical_media_id:
-            self._raise_build_error("canonical_payload_root_mismatch")
+            error_message = "canonical_payload_root_mismatch"
+            raise RuntimeError(error_message)
+        canonical_aliasable_ids = {
+            str(aliasable_media_id)
+            for aliasable_media_id in canonical_payload.get("aliasable_media_ids", [])
+        }
+        source_is_canonical = source_context.media_id == canonical_media_id
+        source_is_aliasable = source_context.media_id in canonical_aliasable_ids
+        prepared_scoped_payload = self._prepare_scoped_payload(
+            source_context,
+            canonical_media_id=canonical_media_id,
+            canonical_aliasable_ids=canonical_aliasable_ids,
+        )
+
         save_duration = elapsed()
         anime_franchise_cache.save_payload(
             canonical_media_id,
@@ -349,12 +366,15 @@ class AnimeFranchiseCacheBuildService:
             aliases_enabled=aliases_enabled,
             truncated=canonical_context.truncated,
         )
-        self._save_scoped_payload_if_needed(
-            source_context,
-            canonical_payload,
-            canonical_media_id=canonical_media_id,
-            elapsed=elapsed,
-        )
+        if not source_is_canonical:
+            if source_is_aliasable:
+                anime_franchise_cache.delete_direct_payload(source_context.media_id)
+            else:
+                self._publish_prepared_scoped_payload(
+                    source_context,
+                    prepared_scoped_payload,
+                    elapsed=elapsed,
+                )
         return {
             "media_id": source_context.media_id,
             "canonical_media_id": canonical_media_id,
@@ -390,12 +410,26 @@ class AnimeFranchiseCacheBuildService:
                 existing_canonical_meta,
                 has_payload=False,
             )
-        self._save_scoped_payload_if_needed(
+        canonical_aliasable_ids = {
+            str(aliasable_media_id)
+            for aliasable_media_id in (canonical_payload or {}).get(
+                "aliasable_media_ids",
+                [],
+            )
+        }
+        prepared_scoped_payload = self._prepare_scoped_payload(
             source_context,
-            canonical_payload,
             canonical_media_id=source_context.canonical_media_id,
-            elapsed=elapsed,
+            canonical_aliasable_ids=canonical_aliasable_ids,
         )
+        if source_context.media_id in canonical_aliasable_ids:
+            anime_franchise_cache.delete_direct_payload(source_context.media_id)
+        else:
+            self._publish_prepared_scoped_payload(
+                source_context,
+                prepared_scoped_payload,
+                elapsed=elapsed,
+            )
         return {
             "media_id": source_context.media_id,
             "canonical_media_id": source_context.canonical_media_id,
@@ -423,36 +457,39 @@ class AnimeFranchiseCacheBuildService:
             truncated=False,
         )
 
-    def _save_scoped_payload_if_needed(
+    def _prepare_scoped_payload(
         self,
         source_context,
-        canonical_payload,
         *,
         canonical_media_id: str,
-        elapsed,
+        canonical_aliasable_ids: set[str],
     ):
-        canonical_aliasable_ids = {
-            str(aliasable_media_id)
-            for aliasable_media_id in (canonical_payload or {}).get(
-                "aliasable_media_ids",
-                [],
-            )
-        }
         if source_context.media_id == canonical_media_id:
-            return
+            return None
         if source_context.media_id in canonical_aliasable_ids:
-            anime_franchise_cache.delete_direct_payload(source_context.media_id)
-            return
+            return None
 
         scoped_payload = build_scoped_seed_payload_from_snapshot(
             source_context.snapshot,
             seed_media_id=source_context.media_id,
         )
         if scoped_payload is None:
-            return
+            return None
         scoped_node_count = len(
             anime_franchise_cache.extract_payload_media_ids(scoped_payload),
         )
+        return scoped_payload, scoped_node_count
+
+    def _publish_prepared_scoped_payload(
+        self,
+        source_context,
+        prepared_scoped_payload,
+        *,
+        elapsed,
+    ):
+        if prepared_scoped_payload is None:
+            return
+        scoped_payload, scoped_node_count = prepared_scoped_payload
         anime_franchise_cache.save_payload(
             source_context.media_id,
             scoped_payload,
@@ -462,6 +499,3 @@ class AnimeFranchiseCacheBuildService:
             truncated=False,
             truncation_reason="",
         )
-
-    def _raise_build_error(self, message: str):
-        raise RuntimeError(message)

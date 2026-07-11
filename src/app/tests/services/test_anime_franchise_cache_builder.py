@@ -1304,3 +1304,249 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
                 mock_cache.reset_mock()
                 mock_scoped.reset_mock()
                 mock_pipeline_class.return_value.run.reset_mock()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_scoped_construction_error_happens_before_any_cache_write(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        canonical_service = Mock()
+        canonical_service.build.return_value = SimpleNamespace(
+            canonical_root_media_id="100"
+        )
+        canonical_service.graph_builder = SimpleNamespace(
+            truncated=False, truncation_reason="", node_count=4
+        )
+        build_session = Mock()
+        build_session.refresh_cache = False
+        build_session.snapshot_service.return_value = canonical_service
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {"root_media_id": "100", "aliasable_media_ids": ["100"]}
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100"},
+        )
+        mock_scoped.side_effect = RuntimeError("scoped prepare boom")
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=build_session
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertFalse(result["built"])
+        self.assertEqual(result["error"], "scoped prepare boom")
+        mock_cache.save_payload.assert_not_called()
+        mock_cache.replace_aliases.assert_not_called()
+        mock_cache.delete_direct_payload.assert_not_called()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonaliasable_scoped_is_prepared_before_canonical_publish_then_saved(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        events = []
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        canonical_service = Mock()
+        canonical_service.build.return_value = SimpleNamespace(
+            canonical_root_media_id="100"
+        )
+        canonical_service.graph_builder = SimpleNamespace(
+            truncated=False, truncation_reason="", node_count=4
+        )
+        build_session = Mock()
+        build_session.refresh_cache = False
+        build_session.snapshot_service.return_value = canonical_service
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {"root_media_id": "100", "aliasable_media_ids": ["100"]}
+        scoped_payload = {"root_media_id": "200", "aliasable_media_ids": ["200"]}
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100"},
+        )
+        mock_cache.extract_payload_media_ids.return_value = {"200"}
+        def replace_aliases_side_effect(*_args, **_kwargs):
+            events.append("replace")
+            return 1
+
+        def scoped_side_effect(*_args, **_kwargs):
+            events.append("scoped_prepare")
+            return scoped_payload
+
+        def save_side_effect(media_id, *_args, **_kwargs):
+            events.append(f"save:{media_id}")
+
+        mock_cache.replace_aliases.side_effect = replace_aliases_side_effect
+
+        mock_scoped.side_effect = scoped_side_effect
+        mock_cache.save_payload.side_effect = save_side_effect
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=build_session
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertTrue(result["built"])
+        self.assertEqual(events, ["scoped_prepare", "save:100", "replace", "save:200"])
+        self.assertEqual(
+            mock_cache.save_payload.call_args_list[0].args[:2],
+            ("100", canonical_payload),
+        )
+        self.assertEqual(
+            mock_cache.save_payload.call_args_list[1].args[:2], ("200", scoped_payload)
+        )
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_nonaliasable_without_scoped_publishes_only_canonical_payload(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        canonical_service = Mock()
+        canonical_service.build.return_value = SimpleNamespace(
+            canonical_root_media_id="100"
+        )
+        canonical_service.graph_builder = SimpleNamespace(
+            truncated=False, truncation_reason="", node_count=4
+        )
+        build_session = Mock()
+        build_session.refresh_cache = False
+        build_session.snapshot_service.return_value = canonical_service
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {"root_media_id": "100", "aliasable_media_ids": ["100"]}
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100"},
+        )
+        mock_scoped.return_value = None
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=build_session
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertTrue(result["built"])
+        mock_cache.save_payload.assert_called_once()
+        self.assertEqual(
+            mock_cache.save_payload.call_args.args[:2], ("100", canonical_payload)
+        )
+        mock_cache.delete_direct_payload.assert_not_called()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_scoped_write_failure_is_best_effort_and_retry_converges(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        canonical_service = Mock()
+        canonical_service.build.return_value = SimpleNamespace(
+            canonical_root_media_id="100"
+        )
+        canonical_service.graph_builder = SimpleNamespace(
+            truncated=False, truncation_reason="", node_count=4
+        )
+        build_session = Mock()
+        build_session.refresh_cache = False
+        build_session.snapshot_service.return_value = canonical_service
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {"root_media_id": "100", "aliasable_media_ids": ["100"]}
+        scoped_payload = {"root_media_id": "200", "aliasable_media_ids": ["200"]}
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100"},
+        )
+        mock_cache.extract_payload_media_ids.return_value = {"200"}
+        mock_scoped.return_value = scoped_payload
+        save_attempts = []
+
+        scoped_save_attempt = 2
+
+        def save_side_effect(media_id, *_args, **_kwargs):
+            save_attempts.append(media_id)
+            if len(save_attempts) == scoped_save_attempt:
+                error_message = "scoped write boom"
+                raise RuntimeError(error_message)
+
+        mock_cache.save_payload.side_effect = save_side_effect
+
+        service = AnimeFranchiseCacheBuildService(build_session=build_session)
+        first_result = service.build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+        mock_cache.save_payload.side_effect = None
+        second_result = service.build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertFalse(first_result["built"])
+        self.assertEqual(first_result["error"], "scoped write boom")
+        self.assertTrue(second_result["built"])
+        final_saves = [
+            call.args[:2] for call in mock_cache.save_payload.call_args_list[-2:]
+        ]
+        self.assertEqual(
+            final_saves, [("100", canonical_payload), ("200", scoped_payload)]
+        )
+        self.assertGreaterEqual(mock_cache.replace_aliases.call_count, 2)
