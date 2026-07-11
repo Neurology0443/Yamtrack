@@ -448,10 +448,7 @@ class AnimeFranchiseCacheBuildServiceTests(SimpleTestCase):
         mock_serialize.assert_called_once_with(
             canonical_ui_payload, root_media_id="38000"
         )
-        mock_build_scoped_payload.assert_called_once_with(
-            source_snapshot,
-            seed_media_id="62546",
-        )
+        mock_build_scoped_payload.assert_not_called()
         mock_cache.save_payload.assert_called_once()
         self.assertEqual(
             mock_cache.save_payload.call_args.args[:2], ("38000", canonical_payload)
@@ -602,16 +599,19 @@ class AnimeFranchiseMaintenanceCanonicalCacheTests(SimpleTestCase):
     )
     @patch.object(AnimeFranchiseMaintenanceService, "_sync_snapshot_images_if_fresh")
     @patch("app.services.anime_franchise_maintenance.summarize_franchise_activity")
+    @patch("app.services.anime_franchise_maintenance.time.monotonic")
     @patch("app.services.anime_franchise_maintenance.AnimeFranchiseBuildSession")
     def test_process_seed_passes_refresh_policy_to_cache_builder(
         self,
         mock_build_session_class,
+        mock_monotonic,
         mock_summarize,
         _mock_sync_images,
         _mock_tracked_ids,
     ):
         for refresh_cache in (True, False):
             with self.subTest(refresh_cache=refresh_cache):
+                mock_monotonic.return_value = 123.45
                 source_snapshot = SimpleNamespace(canonical_root_media_id="38000")
                 source_graph_builder = SimpleNamespace(
                     truncated=False, truncation_reason="", node_count=5
@@ -660,8 +660,11 @@ class AnimeFranchiseMaintenanceCanonicalCacheTests(SimpleTestCase):
                     graph_builder=source_graph_builder,
                     refresh_cache=refresh_cache,
                     force_cache_rebuild=True,
+                    started_at=123.45,
                 )
+                mock_monotonic.assert_called_once_with()
                 mock_build_session_class.reset_mock()
+                mock_monotonic.reset_mock()
 
 
 class AnimeFranchiseCacheBuilderRealPipelineTests(SimpleTestCase):
@@ -1147,3 +1150,157 @@ class AnimeFranchiseCacheBuilderRobustnessTests(SimpleTestCase):
         self.assertEqual(
             mock_cache.save_payload.call_args.kwargs["build_duration_seconds"], 5
         )
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_scoped_builder_not_called_for_canonical_seed(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {"root_media_id": "100", "aliasable_media_ids": ["100"]}
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100"},
+        )
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=Mock()
+        ).build_and_save_from_snapshot(
+            "100",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertTrue(result["built"])
+        mock_scoped.assert_not_called()
+        mock_cache.save_payload.assert_called_once()
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_scoped_builder_not_called_for_aliasable_seed_even_if_it_would_fail(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        source_snapshot, source_graph_builder = self._source(canonical="100")
+        canonical_snapshot = SimpleNamespace(canonical_root_media_id="100")
+        canonical_service = Mock()
+        canonical_service.build.return_value = canonical_snapshot
+        canonical_service.graph_builder = SimpleNamespace(
+            truncated=False,
+            truncation_reason="",
+            node_count=4,
+        )
+        build_session = Mock()
+        build_session.refresh_cache = False
+        build_session.snapshot_service.return_value = canonical_service
+        mock_pipeline_class.return_value.run.return_value = {"entries": []}
+        mock_serialize.return_value = {"root_media_id": "100"}
+        canonical_payload = {
+            "root_media_id": "100",
+            "aliasable_media_ids": ["100", "200"],
+        }
+        mock_cache.prepare_payload_for_aliasing.return_value = (
+            canonical_payload,
+            "100",
+            {"100", "200"},
+        )
+        mock_scoped.side_effect = RuntimeError("scoped boom")
+
+        result = AnimeFranchiseCacheBuildService(
+            build_session=build_session
+        ).build_and_save_from_snapshot(
+            "200",
+            snapshot=source_snapshot,
+            graph_builder=source_graph_builder,
+            force_cache_rebuild=True,
+        )
+
+        self.assertTrue(result["built"])
+        mock_cache.delete_direct_payload.assert_called_once_with("200")
+        mock_scoped.assert_not_called()
+        save_calls = [call.args[0] for call in mock_cache.save_payload.call_args_list]
+        self.assertEqual(save_calls, ["100"])
+
+    @override_settings(ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True)
+    @patch(
+        "app.services.anime_franchise_cache_builder.build_scoped_seed_payload_from_snapshot"
+    )
+    @patch("app.services.anime_franchise_cache_builder.AnimeFranchiseUiPipeline")
+    @patch("app.services.anime_franchise_cache_builder.serialize_franchise_payload")
+    @patch("app.services.anime_franchise_cache_builder.anime_franchise_cache")
+    def test_explicit_refresh_cache_passed_to_second_canonical_build(
+        self,
+        mock_cache,
+        mock_serialize,
+        mock_pipeline_class,
+        mock_scoped,
+    ):
+        for session_default, explicit_refresh in ((False, True), (True, False)):
+            with self.subTest(
+                session_default=session_default,
+                explicit_refresh=explicit_refresh,
+            ):
+                source_snapshot, source_graph_builder = self._source(canonical="100")
+                canonical_snapshot = SimpleNamespace(canonical_root_media_id="100")
+                canonical_service = Mock()
+                canonical_service.build.return_value = canonical_snapshot
+                canonical_service.graph_builder = SimpleNamespace(
+                    truncated=False,
+                    truncation_reason="",
+                    node_count=4,
+                )
+                build_session = Mock()
+                build_session.refresh_cache = session_default
+                build_session.snapshot_service.return_value = canonical_service
+                mock_pipeline_class.return_value.run.return_value = {"entries": []}
+                mock_serialize.return_value = {"root_media_id": "100"}
+                canonical_payload = {
+                    "root_media_id": "100",
+                    "aliasable_media_ids": ["100", "200"],
+                }
+                mock_cache.prepare_payload_for_aliasing.return_value = (
+                    canonical_payload,
+                    "100",
+                    {"100", "200"},
+                )
+                mock_scoped.return_value = None
+
+                result = AnimeFranchiseCacheBuildService(
+                    build_session=build_session
+                ).build_and_save_from_snapshot(
+                    "200",
+                    snapshot=source_snapshot,
+                    graph_builder=source_graph_builder,
+                    refresh_cache=explicit_refresh,
+                    force_cache_rebuild=True,
+                )
+
+                self.assertTrue(result["built"])
+                canonical_service.build.assert_called_once_with(
+                    "100",
+                    refresh_cache=explicit_refresh,
+                )
+                mock_cache.reset_mock()
+                mock_scoped.reset_mock()
+                mock_pipeline_class.return_value.run.reset_mock()

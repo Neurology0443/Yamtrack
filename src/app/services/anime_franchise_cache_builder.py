@@ -438,19 +438,17 @@ class AnimeFranchiseCacheBuildService:
                 [],
             )
         }
-        seed_is_aliasable = source_context.media_id in canonical_aliasable_ids
+        if source_context.media_id == canonical_media_id:
+            return
+        if source_context.media_id in canonical_aliasable_ids:
+            anime_franchise_cache.delete_direct_payload(source_context.media_id)
+            return
+
         scoped_payload = build_scoped_seed_payload_from_snapshot(
             source_context.snapshot,
             seed_media_id=source_context.media_id,
         )
-        if source_context.media_id != canonical_media_id and seed_is_aliasable:
-            anime_franchise_cache.delete_direct_payload(source_context.media_id)
-            return
-        if (
-            scoped_payload is None
-            or source_context.media_id == canonical_media_id
-            or seed_is_aliasable
-        ):
+        if scoped_payload is None:
             return
         scoped_node_count = len(
             anime_franchise_cache.extract_payload_media_ids(scoped_payload),

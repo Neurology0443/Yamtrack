@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 
 from django.utils import timezone
@@ -110,6 +111,7 @@ class AnimeFranchiseMaintenanceService:
         )
         build_session = AnimeFranchiseBuildSession(refresh_cache=refresh_cache)
         snapshot_service = build_session.snapshot_service()
+        cache_build_started_at = time.monotonic()
         snapshot = snapshot_service.build(seed_mal_id, refresh_cache=refresh_cache)
         result.snapshot_built = True
         result.component_root_mal_id = str(snapshot.canonical_root_media_id)
@@ -152,6 +154,7 @@ class AnimeFranchiseMaintenanceService:
                     graph_builder=snapshot_service.graph_builder,
                     refresh_cache=refresh_cache,
                     force_cache_rebuild=True,
+                    started_at=cache_build_started_at,
                 )
                 result.cache_built = bool(cache_result.get("built"))
                 if not result.cache_built:
