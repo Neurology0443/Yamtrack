@@ -9,7 +9,9 @@ services:
       args:
         VERSION: yamtrack-dev
     image: yamtrack-dev:local
+    # image: ghcr.io/fuzzygrim/yamtrack
     restart: unless-stopped
+
     depends_on:
       yamtrack-dev-postgres:
         condition: service_healthy
@@ -33,30 +35,62 @@ services:
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_PORT=5432
 
-      # Anime franchise import automation
-      - ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED=true
-      # Pour test rapide uniquement, on pourra décommenter plus tard si besoin :
-      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES=1
 
-      # MyAnimeList API
-      - MAL_API=${MAL_API}
-      - MAL_RATE_LIMIT_PER_MINUTE=100
+      #  MyAnimeList API + MAL anime metadata cache
+      - MAL_API=${MAL_API}                                                          #Personal Mal API key 
+      - MAL_RATE_LIMIT_PER_MINUTE=50                                                #default 100
+      # - MAL_CACHE_FRESH_DAYS=7                                                    #default 7
+      # - MAL_CACHE_KEEP_DAYS=365                                                   #default 365
+      # - MAL_CACHE_RETRY_AFTER_ERROR_HOURS=12                                      #default 12
+      # - MAL_CACHE_REFRESH_MIN_INTERVAL_HOURS=24                                   #default 24
 
-      # Option utile pendant les tests si on veut plus de logs Celery
-      # - ENV_DEBUG=True
+      # MAL anime franchise import automation
+      - ANIME_FRANCHISE_IMPORT_AUTOMATION_ENABLED=True                              #default false
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_INTERVAL_MINUTES=1440                   #default 1440 (24h)
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_PROFILE=continuity                      #default continuity (continuity, satellites, complete)
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_REFRESH_CACHE=False                     #default false
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_FULL_RESCAN=False                       #default false
+      # - ANIME_FRANCHISE_IMPORT_AUTOMATION_LIMIT=10                                #default None
 
-      # Optional admin
-      # - ADMIN_ENABLED=True
+      # MAL anime franchise payload cache
+      - ANIME_FRANCHISE_GROUPING_ENABLED=True                                       #default true
+      # - ANIME_FRANCHISE_CACHE_TTL_DAYS=365                                        #default 365
+      # - ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True                                #default true
+      # - ANIME_FRANCHISE_CACHE_FRESH_DAYS=30                                       #default 30
+      # - ANIME_FRANCHISE_BUILD_COOLDOWN_HOURS=24                                   #default 24
+      # - ANIME_FRANCHISE_RETRY_AFTER_ERROR_HOURS=12                                #default 12
+      # - ANIME_FRANCHISE_QUEUE_LOCK_MINUTES=30                                     #default 30
+      # - ANIME_FRANCHISE_TASK_LOCK_MINUTES=60                                      #default 60
+      # - ANIME_FRANCHISE_MAX_NODES=50                                              #default 50
+      # - ANIME_FRANCHISE_PAYLOAD_SCHEMA_VERSION=1                                  #default 1
 
-      - ANIME_FRANCHISE_GROUPING_ENABLED=True
-      - ANIME_FRANCHISE_CACHE_ALIASES_ENABLED=True
-      - ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=True
+      # Anime Franchise Maintenance
+      - ANIME_FRANCHISE_MAINTENANCE_SCAN_ENABLED=True                               #default false
+      # - ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES=60                      #default 60
+      # - ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE=10                            #default 10
+      # - ANIME_FRANCHISE_MAINTENANCE_INITIAL_SPREAD_HOURS=24                       #default 24
+      # - ANIME_FRANCHISE_MAINTENANCE_REFRESH_CACHE=True                            #default true
+      # - ANIME_FRANCHISE_MAINTENANCE_LOCK_MINUTES=360                              #default 360
+      # - ANIME_FRANCHISE_MAINTENANCE_ERROR_RETRY_HOURS=12                          #default 12
+      # - ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_CHANGE=True            #default true
+      # - ANIME_FRANCHISE_MAINTENANCE_REFRESH_SERIES_VIEW_ON_SUCCESS=False          #default false
+      # - ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_AGE_YEARS=15                    #default 15
+      # - ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_STABLE_SCANS=8                  #default 8
+      # - ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_CHANGE_AGE_DAYS=180             #default 180
+      # - ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MIN_DAYS=21                         #default 21
+      # - ANIME_FRANCHISE_MAINTENANCE_DEEP_COLD_MAX_DAYS=30                         #default 30
+
+      # MAL anime release-date notifications
+      - ANIME_RELEASE_DATE_NOTIFICATIONS_ENABLED=True                               #default true
+      # - ANIME_RELEASE_DATE_SCAN_INTERVAL_HOURS=12                                 #default 12
+      # - ANIME_RELEASE_DATE_SCAN_BATCH_SIZE=25                                     #default 25
+      # - ANIME_RELEASE_DATE_SCAN_MIN_REFRESH_HOURS=24                              #default 24
+      # - ANIME_RELEASE_DATE_SCAN_ERROR_RETRY_HOURS=12                              #default 12
+      # - ANIME_RELEASE_DATE_SCAN_MAX_BACKOFF_DAYS=7                                #default 7
+      # - ANIME_RELEASE_DATE_SCAN_LOCK_MINUTES=360                                  #default 360
 
 
-      - ANIME_FRANCHISE_MAINTENANCE_SCAN_INTERVAL_MINUTES=60
-      - ANIME_FRANCHISE_MAINTENANCE_SCAN_BATCH_SIZE=10
-      - ANIME_FRANCHISE_MAINTENANCE_TARGET_SWEEP_HOURS=24
-
+      # - ANIME_FRANCHISE_CONTEXT_LOOKUP_ENABLED=True ????
 
 
     labels:
@@ -117,18 +151,18 @@ networks:
     name: yamtrack-dev-backend
 
 volumes:
-  #yamtrack_dev_redis:
-    #name: yamtrack_dev_redis
-    #driver: local
-  #yamtrack_dev_database:
-    #name: yamtrack_dev_database
-    #driver: local
-
-
   yamtrack_dev_redis:
-    external: true
     name: yamtrack_dev_redis
-
+    driver: local
   yamtrack_dev_database:
-    external: true
     name: yamtrack_dev_database
+    driver: local
+
+
+  #yamtrack_dev_redis:
+    #external: true
+    #name: yamtrack_dev_redis
+
+  #yamtrack_dev_database:
+    #external: true
+    #name: yamtrack_dev_database
