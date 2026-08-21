@@ -1,7 +1,8 @@
 # ruff: noqa: EM101, EM102, TRY003
 
 import logging
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import requests
@@ -9,6 +10,7 @@ from django.conf import settings
 from django.db import OperationalError, transaction
 from django.db.models import Q
 from django.utils import timezone
+from redis.exceptions import RedisError
 
 from anime.metadata import (
     AnimeMetadataSnapshot,
@@ -34,6 +36,7 @@ MAX_ERROR_MESSAGE_LENGTH = 2000
 EXPECTED_PROVIDER_EXCEPTIONS = (
     requests.exceptions.RequestException,
     services.ProviderAPIError,
+    RedisError,
 )
 logger = logging.getLogger(__name__)
 
@@ -238,10 +241,10 @@ class MalAnimeMetadataStore:
             "media_type": self._optional_string(
                 payload.get("media_type"), field="media_type"
             ),
-            "start_date": self._optional_string(
+            "start_date": self._optional_partial_date(
                 payload.get("start_date"), field="start_date"
             ),
-            "end_date": self._optional_string(
+            "end_date": self._optional_partial_date(
                 payload.get("end_date"), field="end_date"
             ),
             "status": self._optional_string(payload.get("status"), field="status"),
@@ -353,16 +356,44 @@ class MalAnimeMetadataStore:
 
     @staticmethod
     def _required_string(value: Any, *, field: str) -> str:
-        if not isinstance(value, str) or not value:
+        if not isinstance(value, str) or not value.strip():
             raise InvalidAnimeMetadataPayload(f"{field} must be a non-empty string")
         return value
 
     @staticmethod
     def _optional_string(value: Any, *, field: str) -> str | None:
-        if value is None or value == "":
+        if value is None or (isinstance(value, str) and not value.strip()):
             return None
         if not isinstance(value, str):
             raise InvalidAnimeMetadataPayload(f"{field} must be a string or null")
+        return value
+
+    @staticmethod
+    def _optional_partial_date(value: Any, *, field: str) -> str | None:
+        if value is None or value == "":
+            return None
+        if not isinstance(value, str):
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a partial ISO date or null"
+            )
+        match = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", value)
+        if match is None:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a valid partial ISO date"
+            )
+        year, month, day = (
+            int(part) if part is not None else None for part in match.groups()
+        )
+        try:
+            date(
+                year,
+                month if month is not None else 1,
+                day if day is not None else 1,
+            )
+        except ValueError as exc:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a valid partial ISO date"
+            ) from exc
         return value
 
     @staticmethod
@@ -373,7 +404,9 @@ class MalAnimeMetadataStore:
 
     @classmethod
     def _optional_positive_int(cls, value: Any, *, field: str) -> int | None:
-        if value in (None, 0):
+        if value is None:
+            return None
+        if type(value) is int and value == 0:
             return None
         return cls._positive_int(value, field=field)
 

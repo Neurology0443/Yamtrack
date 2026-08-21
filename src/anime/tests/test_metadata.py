@@ -5,10 +5,12 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import requests
+from django.conf import settings
 from django.db import IntegrityError, OperationalError, transaction
 from django.test import TestCase
 from django.utils import timezone
 from kombu.exceptions import OperationalError as BrokerOperationalError
+from redis.exceptions import RedisError
 
 from anime.metadata import AnimeMetadataUnavailable, InvalidAnimeMetadataPayload
 from anime.models import AnimeMetadataRecord
@@ -94,6 +96,60 @@ class AnimeMetadataTestCase(TestCase):
         self.assertIsNone(snapshot.episode_count)
         self.assertIsNone(snapshot.runtime)
         self.assertEqual((snapshot.start_date, snapshot.end_date), ("2026", "2026-08"))
+
+    def test_optional_positive_integer_rejects_bool_and_invalid_types(self):
+        store = MalAnimeMetadataStore()
+        self.assertIsNone(store._optional_positive_int(None, field="episodes"))
+        self.assertIsNone(store._optional_positive_int(0, field="episodes"))
+        self.assertEqual(store._optional_positive_int(1, field="episodes"), 1)
+        for value in (False, True, -1, "1", 1.0):
+            with (
+                self.subTest(value=value),
+                self.assertRaises(InvalidAnimeMetadataPayload),
+            ):
+                store._optional_positive_int(value, field="episodes")
+
+        payload = mal_payload()
+        payload["num_episodes"] = False
+        with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "num_episodes"):
+            store._normalize(1, payload)
+
+    def test_partial_dates_are_validated_and_preserved(self):
+        store = MalAnimeMetadataStore()
+        for value in ("2026", "2026-08", "2026-08-21"):
+            with self.subTest(valid=value):
+                self.assertEqual(
+                    store._optional_partial_date(value, field="start_date"),
+                    value,
+                )
+        for value in (
+            "0000",
+            "2026-00",
+            "2026-13",
+            "2026-02-30",
+            "2026-8",
+            "not-a-date",
+            "2026-08-21-extra",
+        ):
+            with (
+                self.subTest(invalid=value),
+                self.assertRaisesRegex(
+                    InvalidAnimeMetadataPayload,
+                    "start_date",
+                ),
+            ):
+                store._optional_partial_date(value, field="start_date")
+
+    def test_normalized_strings_handle_whitespace_strictly(self):
+        store = MalAnimeMetadataStore()
+        self.assertIsNone(store._optional_string("   ", field="synopsis"))
+        payload = mal_payload()
+        payload["related_anime"][0]["relation_type"] = "   "
+        with self.assertRaisesRegex(
+            InvalidAnimeMetadataPayload,
+            r"related_anime\[0\]\.relation_type",
+        ):
+            store._normalize(1, payload)
 
     def test_invalid_ids_do_not_touch_database_provider_or_queue(self):
         for media_id in (0, -1, True, False, "1", None):
@@ -253,6 +309,70 @@ class AnimeMetadataTestCase(TestCase):
         self.record.refresh_from_db()
         self.assertEqual(MalAnimeMetadataStore().to_snapshot(self.record), original)
         self.assertIn("Timeout", self.record.last_error_message)
+
+    def test_redis_failure_creates_failure_state_without_last_known_good(self):
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(
+                store,
+                "_fetch_provider_payload",
+                side_effect=RedisError("rate limiter unavailable"),
+            ),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(77)
+
+        failure = AnimeMetadataRecord.objects.get(media_id=77)
+        self.assertIsNone(failure.fetched_at)
+        self.assertIsNotNone(failure.last_refresh_error_at)
+        self.assertIn("RedisError", failure.last_error_message)
+
+    def test_redis_failure_preserves_last_known_good(self):
+        original = MalAnimeMetadataStore().to_snapshot(self.record)
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(
+                store,
+                "_fetch_provider_payload",
+                side_effect=RedisError("rate limiter unavailable"),
+            ),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(self.record.media_id)
+
+        self.record.refresh_from_db()
+        self.assertEqual(store.to_snapshot(self.record), original)
+        self.assertIsNotNone(self.record.last_refresh_error_at)
+        self.assertIn("RedisError", self.record.last_error_message)
+
+    @patch("anime.store.services.api_request")
+    def test_provider_fetch_uses_direct_mal_network_contract(self, api_request):
+        api_request.return_value = {"title": "Anime"}
+        store = MalAnimeMetadataStore()
+        self.assertEqual(store._fetch_provider_payload(42), {"title": "Anime"})
+
+        api_request.assert_called_once()
+        provider, method, url = api_request.call_args.args
+        self.assertEqual((provider, method), ("mal", "GET"))
+        self.assertEqual(url, "https://api.myanimelist.net/v2/anime/42")
+        self.assertEqual(
+            api_request.call_args.kwargs["headers"],
+            {"X-MAL-CLIENT-ID": settings.MAL_API},
+        )
+        fields = set(api_request.call_args.kwargs["params"]["fields"].split(","))
+        self.assertTrue(
+            {
+                "title",
+                "alternative_titles",
+                "main_picture",
+                "num_episodes",
+                "average_episode_duration",
+                "start_season",
+                "broadcast",
+                "related_anime",
+                "recommendations",
+            }.issubset(fields)
+        )
 
     def test_invalid_payload_failure_preserves_last_known_good(self):
         original = MalAnimeMetadataStore().to_snapshot(self.record)
