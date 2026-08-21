@@ -3,6 +3,11 @@
 GitHub Actions is the integration authority. Codex Cloud is a targeted development
 loop and must not attempt to reproduce the complete GitHub CI.
 
+SQLite and PostgreSQL are supported database backends. Keep application and Anime
+code backend-agnostic and use the Django ORM. Do not introduce backend-specific SQL
+or behavior unless explicitly required and covered by both-backend integration
+tests. GitHub Fork App Tests is the authority for SQLite/PostgreSQL compatibility.
+
 ## Targeted validation
 
 - Prepare the minimal required environment once before using `uv run --no-sync`:

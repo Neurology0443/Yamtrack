@@ -18,8 +18,39 @@ permissions:
 
 jobs:
   test:
+    name: Tests (${{ matrix.database }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: sqlite
+            postgres_image: ""
+            db_host: ""
+          - database: postgresql
+            postgres_image: postgres:17-alpine
+            db_host: 127.0.0.1
+    services:
+      postgres:
+        image: ${{ matrix.postgres_image }}
+        env:
+          POSTGRES_DB: yamtrack
+          POSTGRES_USER: yamtrack
+          POSTGRES_PASSWORD: yamtrack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U yamtrack -d yamtrack"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: ${{ matrix.db_host }}
+      DB_NAME: yamtrack
+      DB_USER: yamtrack
+      DB_PASSWORD: yamtrack
+      DB_PORT: "5432"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
