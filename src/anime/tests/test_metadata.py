@@ -140,6 +140,21 @@ class AnimeMetadataTestCase(TestCase):
         with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "score_count"):
             store._optional_nonnegative_int(maximum + 1, field="score_count")
 
+    def test_optional_float_accepts_only_finite_numeric_values(self):
+        store = MalAnimeMetadataStore()
+        self.assertIsNone(store._optional_float(None, field="mean"))
+        self.assertEqual(store._optional_float(9.1, field="mean"), 9.1)
+        self.assertEqual(store._optional_float(9, field="mean"), 9.0)
+        for value in (True, "9.1", float("nan"), float("inf"), float("-inf"), 10**1000):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(
+                    InvalidAnimeMetadataPayload,
+                    "mean",
+                ),
+            ):
+                store._optional_float(value, field="mean")
+
     def test_media_id_enforces_positive_big_integer_range(self):
         self.assertEqual(validate_media_id(1), 1)
         self.assertEqual(validate_media_id(MAX_MEDIA_ID), MAX_MEDIA_ID)
@@ -191,15 +206,21 @@ class AnimeMetadataTestCase(TestCase):
         ):
             store._normalize(1, payload)
 
-    def test_normalized_strings_respect_persistence_lengths(self):
+    def test_long_titles_are_persisted_and_other_string_limits_remain(self):
         store = MalAnimeMetadataStore()
-        payload = mal_payload()
-        payload["title"] = "t" * 255
-        self.assertEqual(store._normalize(1, payload)["canonical_title"], "t" * 255)
+        payload = mal_payload(2)
+        canonical_title = "t" * 512
+        alternative_title = "e" * 512
+        payload["title"] = canonical_title
+        payload["alternative_titles"]["en"] = alternative_title
+        with patch.object(store, "_fetch_provider_payload", return_value=payload):
+            snapshot = store.refresh(2)
 
-        payload["title"] = "t" * 256
-        with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "title"):
-            store._normalize(1, payload)
+        record = AnimeMetadataRecord.objects.get(media_id=2)
+        self.assertEqual(record.canonical_title, canonical_title)
+        self.assertEqual(record.alternative_title_en, alternative_title)
+        self.assertEqual(snapshot.canonical_title, canonical_title)
+        self.assertEqual(snapshot.alternative_title_en, alternative_title)
 
         payload = mal_payload()
         payload["broadcast"]["start_time"] = "t" * 8
@@ -524,6 +545,23 @@ class AnimeMetadataTestCase(TestCase):
         self.assertEqual(store.to_snapshot(self.record), original)
         self.assertIsNotNone(self.record.last_refresh_error_at)
         self.assertIn("num_scoring_users", self.record.last_error_message)
+
+    def test_nonfinite_score_preserves_last_known_good(self):
+        original = MalAnimeMetadataStore().to_snapshot(self.record)
+        payload = mal_payload()
+        payload["mean"] = float("nan")
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(store, "_fetch_provider_payload", return_value=payload),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(self.record.media_id)
+
+        self.record.refresh_from_db()
+        self.assertEqual(store.to_snapshot(self.record), original)
+        self.assertEqual(self.record.score, original.score)
+        self.assertIsNotNone(self.record.last_refresh_error_at)
+        self.assertIn("mean", self.record.last_error_message)
 
     def test_first_failure_cooldown_expires_and_allows_retry(self):
         store = MalAnimeMetadataStore()

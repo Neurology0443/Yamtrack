@@ -1,6 +1,7 @@
 # ruff: noqa: EM101, EM102, TRY003
 
 import logging
+import math
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -169,7 +170,6 @@ class MalAnimeMetadataStore:
         title = self._required_string(
             payload.get("title"),
             field="title",
-            max_length=255,
         )
 
         relations = []
@@ -225,7 +225,6 @@ class MalAnimeMetadataStore:
                     field="alternative_titles",
                 ).get("en"),
                 field="alternative_titles.en",
-                max_length=255,
             ),
             "image": self._optional_string(
                 picture.get("large") or picture.get("medium"),
@@ -478,4 +477,14 @@ class MalAnimeMetadataStore:
             return None
         if not isinstance(value, (int, float)) or isinstance(value, bool):
             raise InvalidAnimeMetadataPayload(f"{field} must be numeric or null")
-        return float(value)
+        try:
+            normalized = float(value)
+        except OverflowError as exc:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a finite numeric value or null"
+            ) from exc
+        if not math.isfinite(normalized):
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a finite numeric value or null"
+            )
+        return normalized

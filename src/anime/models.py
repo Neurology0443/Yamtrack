@@ -6,8 +6,8 @@ class AnimeMetadataRecord(models.Model):  # noqa: DJ008
 
     media_id = models.PositiveBigIntegerField()
     source = models.CharField(max_length=16, default="mal")
-    canonical_title = models.CharField(max_length=255, null=True)  # noqa: DJ001
-    alternative_title_en = models.CharField(max_length=255, null=True)  # noqa: DJ001
+    canonical_title = models.TextField(null=True)  # noqa: DJ001
+    alternative_title_en = models.TextField(null=True)  # noqa: DJ001
     image = models.URLField(max_length=500, null=True)  # noqa: DJ001
     synopsis = models.TextField(null=True)  # noqa: DJ001
     genres = models.JSONField(default=list)
