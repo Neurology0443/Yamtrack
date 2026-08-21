@@ -1,4 +1,4 @@
-name: App Tests
+name: Fork App Tests
 
 on:
   pull_request:
@@ -19,6 +19,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

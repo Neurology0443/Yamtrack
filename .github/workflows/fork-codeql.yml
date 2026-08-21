@@ -1,4 +1,4 @@
-name: CodeQL
+name: Fork CodeQL
 
 on:
   pull_request:

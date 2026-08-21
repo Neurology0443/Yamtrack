@@ -5,6 +5,21 @@ loop and must not attempt to reproduce the complete GitHub CI.
 
 ## Targeted validation
 
+- Prepare the minimal required environment once before using `uv run --no-sync`:
+
+  ```bash
+  # tests
+  uv sync --locked --no-default-groups --group test
+
+  # lint
+  uv sync --locked --only-group lint
+
+  # tests + lint when both are needed
+  uv sync --locked --no-default-groups --group test --group lint
+  ```
+
+  Use `uv run --no-sync` for the following commands and reruns. Never use
+  `--no-sync` as an implicit assumption that a suitable environment already exists.
 - Start with the existing tests closest to the changed files or behavior. Prefer
   deterministic, hermetic tests and a specific test or file over a whole app suite.
 - For targeted Django tests that need a database, use `--nomigrations` when applying
@@ -25,6 +40,9 @@ loop and must not attempt to reproduce the complete GitHub CI.
 - Run `uv run --no-sync python src/manage.py check`. When models or migrations are
   involved, also run `uv run --no-sync python src/manage.py makemigrations --check`.
 - Run targeted Ruff and djLint checks when the changed files warrant them.
+- For template validation, use `djlint --lint` on the relevant scope. Do not
+  introduce a repository-wide `djlint --check src/templates` gate without an
+  explicit template-format baseline migration.
 - Network-mocked provider or integration tests remain eligible; decide from their
   actual dependencies, not their directory name.
 
