@@ -30,8 +30,9 @@ stable shape before the rest of the Anime code uses it.
 
 ## Local-first reads
 
-`GetAnimeMetadata` looks for a valid local copy first. If there is none, it tries
-to fetch the required metadata from MAL. If a valid copy exists, Anime can return
+`GetAnimeMetadata` looks for a valid local copy first. If one is not available,
+Anime can fetch the required metadata from MAL. Recent provider failures may
+temporarily delay another fetch attempt. If a valid copy exists, Anime can return
 it immediately.
 
 When that copy is due for a refresh, Anime continues to return it and may request
