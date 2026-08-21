@@ -1,0 +1,46 @@
+name: Fork Lint
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install lint dependencies
+        run: uv sync --locked --only-group lint
+
+      - name: Ruff check
+        run: uv run --no-sync ruff check --output-format=github src
+
+      - name: Ruff format
+        run: uv run --no-sync ruff format --check src
+
+      # Repository-wide djLint formatting is intentionally not enforced here.
+      # Upstream's template baseline was formatted with older djLint versions and
+      # newer formatter versions produce different output. Formatting of touched
+      # templates remains handled by the existing pre-commit reformat hook.
+      - name: djLint lint
+        run: uv run --no-sync djlint --lint src/templates

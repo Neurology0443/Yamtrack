@@ -1,19 +1,56 @@
-name: App Tests
+name: Fork App Tests
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-      - dev
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   test:
+    name: Tests (${{ matrix.database }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: sqlite
+            postgres_image: ""
+            db_host: ""
+          - database: postgresql
+            postgres_image: postgres:17-alpine
+            db_host: 127.0.0.1
+    services:
+      postgres:
+        image: ${{ matrix.postgres_image }}
+        env:
+          POSTGRES_DB: yamtrack
+          POSTGRES_USER: yamtrack
+          POSTGRES_PASSWORD: yamtrack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U yamtrack -d yamtrack"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: ${{ matrix.db_host }}
+      DB_NAME: yamtrack
+      DB_USER: yamtrack
+      DB_PASSWORD: yamtrack
+      DB_PORT: "5432"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -26,7 +63,7 @@ jobs:
       - name: Install Dependencies
         run: |
           uv sync --locked --no-default-groups --group test
-          uv run playwright install
+          uv run --no-sync playwright install chromium
 
       - name: Set environment variables from secrets
         run: |
@@ -40,10 +77,12 @@ jobs:
 
       - name: Run Tests
         run: |
-          uv run coverage run src/manage.py test \
+          uv run --no-sync python src/manage.py check
+          uv run --no-sync python src/manage.py makemigrations --check
+          uv run --no-sync coverage run src/manage.py test \
             app anime users integrations lists events --parallel
 
       - name: Build Coverage Report
         run: |
-          uv run coverage combine
-          uv run coverage report
+          uv run --no-sync coverage combine
+          uv run --no-sync coverage report
