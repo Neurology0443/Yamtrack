@@ -55,3 +55,15 @@ class AnimeMetadataUnavailable(Exception):  # noqa: N818
     def __init__(self, media_id: int) -> None:
         """Build an error identifying the unavailable MAL anime."""
         super().__init__(f"Anime metadata is unavailable for MAL anime {media_id}")
+
+
+class InvalidAnimeMetadataPayload(ValueError):  # noqa: N818
+    """Raised when MAL returns a payload that cannot be normalized safely."""
+
+
+def validate_media_id(media_id: int) -> int:
+    """Return a positive integer media ID or fail before any external access."""
+    if type(media_id) is not int or media_id <= 0:
+        msg = "media_id must be a positive integer"
+        raise ValueError(msg)
+    return media_id

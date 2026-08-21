@@ -61,6 +61,14 @@ class Migration(migrations.Migration):
                         condition=models.Q(("media_id__gt", 0)),
                         name="anime_metadata_positive_media_id",
                     ),
+                    models.CheckConstraint(
+                        condition=models.Q(
+                            ("fetched_at__isnull", True),
+                            ("refresh_after__isnull", False),
+                            _connector="OR",
+                        ),
+                        name="anime_metadata_valid_fetch_has_refresh_after",
+                    ),
                 ],
             },
         ),
