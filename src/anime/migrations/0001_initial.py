@@ -69,6 +69,14 @@ class Migration(migrations.Migration):
                         ),
                         name="anime_metadata_valid_fetch_has_refresh_after",
                     ),
+                    models.CheckConstraint(
+                        condition=models.Q(
+                            ("fetched_at__isnull", True),
+                            ("canonical_title__isnull", False),
+                            _connector="OR",
+                        ),
+                        name="anime_metadata_valid_fetch_has_title",
+                    ),
                 ],
             },
         ),

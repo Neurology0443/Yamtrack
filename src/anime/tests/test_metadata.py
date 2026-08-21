@@ -276,6 +276,27 @@ class AnimeMetadataTestCase(TestCase):
                 refresh_after=None,
             )
 
+    def test_valid_fetch_requires_title_but_failure_state_does_not(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            AnimeMetadataRecord.objects.create(
+                media_id=99,
+                canonical_title=None,
+                fetched_at=timezone.now(),
+                refresh_after=timezone.now() + timedelta(hours=24),
+            )
+
+        failure = AnimeMetadataRecord.objects.create(
+            media_id=100,
+            canonical_title=None,
+            fetched_at=None,
+            refresh_after=None,
+            last_refresh_error_at=timezone.now(),
+        )
+        store = MalAnimeMetadataStore()
+        self.assertIsNone(store.get_local(failure.media_id))
+        with self.assertRaisesRegex(ValueError, "valid persisted fetch"):
+            store.to_snapshot(failure)
+
     def test_two_successful_refreshes_update_one_row_and_clear_error(self):
         old_pk = self.record.pk
         AnimeMetadataRecord.objects.filter(pk=old_pk).update(

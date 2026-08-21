@@ -52,4 +52,11 @@ class AnimeMetadataRecord(models.Model):  # noqa: DJ008
                 ),
                 name="anime_metadata_valid_fetch_has_refresh_after",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(fetched_at__isnull=True)
+                    | models.Q(canonical_title__isnull=False)
+                ),
+                name="anime_metadata_valid_fetch_has_title",
+            ),
         ]
