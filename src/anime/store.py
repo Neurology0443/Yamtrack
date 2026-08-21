@@ -24,7 +24,7 @@ from anime.models import AnimeMetadataRecord
 from app.providers import services
 
 MAL_METADATA_FIELDS = (
-    "title,alternative_titles,main_picture,media_type,start_date,end_date,"
+    "id,title,alternative_titles,main_picture,media_type,start_date,end_date,"
     "synopsis,status,genres,mean,num_scoring_users,num_episodes,"
     "average_episode_duration,studios,start_season,broadcast,source,"
     "related_anime,recommendations"
@@ -159,6 +159,12 @@ class MalAnimeMetadataStore:
         validate_media_id(media_id)
         if not isinstance(payload, dict):
             raise InvalidAnimeMetadataPayload("MAL metadata response must be an object")
+        payload_media_id = self._positive_int(payload.get("id"), field="id")
+        if payload_media_id != media_id:
+            raise InvalidAnimeMetadataPayload(
+                f"MAL metadata id {payload_media_id} does not match requested id "
+                f"{media_id}"
+            )
         title = payload.get("title")
         if not isinstance(title, str) or not title.strip():
             raise InvalidAnimeMetadataPayload(
@@ -376,7 +382,10 @@ class MalAnimeMetadataStore:
             raise InvalidAnimeMetadataPayload(
                 f"{field} must be a partial ISO date or null"
             )
-        match = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", value)
+        match = re.fullmatch(
+            r"([0-9]{4})(?:-([0-9]{2})(?:-([0-9]{2}))?)?",
+            value,
+        )
         if match is None:
             raise InvalidAnimeMetadataPayload(
                 f"{field} must be a valid partial ISO date"

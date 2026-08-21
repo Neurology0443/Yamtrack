@@ -18,9 +18,10 @@ from anime.store import MalAnimeMetadataStore
 from anime.use_cases import GetAnimeMetadata, RefreshAnimeMetadata
 
 
-def mal_payload():
+def mal_payload(media_id=1):
     """Return representative raw MAL anime metadata."""
     return {
+        "id": media_id,
         "title": "Fullmetal Alchemist: Brotherhood",
         "alternative_titles": {"en": "Fullmetal Alchemist Brotherhood"},
         "main_picture": {
@@ -62,7 +63,9 @@ class AnimeMetadataTestCase(TestCase):
 
     def test_refresh_normalizes_and_persists_complete_payload(self):
         store = MalAnimeMetadataStore()
-        with patch.object(store, "_fetch_provider_payload", return_value=mal_payload()):
+        with patch.object(
+            store, "_fetch_provider_payload", return_value=mal_payload(5114)
+        ):
             snapshot = store.refresh(5114)
 
         record = AnimeMetadataRecord.objects.get(media_id=5114)
@@ -76,7 +79,7 @@ class AnimeMetadataTestCase(TestCase):
             snapshot.canonical_title = "Changed"
 
     def test_normalization_preserves_optional_absence_and_date_precision(self):
-        payload = mal_payload()
+        payload = mal_payload(2)
         payload.update(
             alternative_titles={},
             main_picture=None,
@@ -130,6 +133,7 @@ class AnimeMetadataTestCase(TestCase):
             "2026-8",
             "not-a-date",
             "2026-08-21-extra",
+            "٢٠٢٦",
         ):
             with (
                 self.subTest(invalid=value),
@@ -150,6 +154,34 @@ class AnimeMetadataTestCase(TestCase):
             r"related_anime\[0\]\.relation_type",
         ):
             store._normalize(1, payload)
+
+    def test_payload_identity_must_match_requested_media(self):
+        store = MalAnimeMetadataStore()
+        self.assertEqual(
+            store._normalize(1, mal_payload())["canonical_title"],
+            mal_payload()["title"],
+        )
+
+        for invalid_id in (None, True, "1", 0, -1):
+            payload = mal_payload()
+            if invalid_id is None:
+                payload.pop("id")
+            else:
+                payload["id"] = invalid_id
+            with (
+                self.subTest(payload_id=invalid_id),
+                self.assertRaisesRegex(
+                    InvalidAnimeMetadataPayload,
+                    "id",
+                ),
+            ):
+                store._normalize(1, payload)
+
+        with self.assertRaisesRegex(
+            InvalidAnimeMetadataPayload,
+            "does not match requested id",
+        ):
+            store._normalize(1, mal_payload(2))
 
     def test_invalid_ids_do_not_touch_database_provider_or_queue(self):
         for media_id in (0, -1, True, False, "1", None):
@@ -363,6 +395,7 @@ class AnimeMetadataTestCase(TestCase):
         self.assertTrue(
             {
                 "title",
+                "id",
                 "alternative_titles",
                 "main_picture",
                 "num_episodes",
@@ -378,13 +411,31 @@ class AnimeMetadataTestCase(TestCase):
         original = MalAnimeMetadataStore().to_snapshot(self.record)
         store = MalAnimeMetadataStore()
         with (
-            patch.object(store, "_fetch_provider_payload", return_value={}),
+            patch.object(store, "_fetch_provider_payload", return_value={"id": 1}),
             self.assertRaises(AnimeMetadataUnavailable),
         ):
             store.refresh(self.record.media_id)
         self.record.refresh_from_db()
         self.assertEqual(MalAnimeMetadataStore().to_snapshot(self.record), original)
         self.assertIn("title", self.record.last_error_message)
+
+    def test_mismatched_payload_identity_preserves_last_known_good(self):
+        original = MalAnimeMetadataStore().to_snapshot(self.record)
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(
+                store,
+                "_fetch_provider_payload",
+                return_value=mal_payload(999),
+            ),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(self.record.media_id)
+
+        self.record.refresh_from_db()
+        self.assertEqual(store.to_snapshot(self.record), original)
+        self.assertIsNotNone(self.record.last_refresh_error_at)
+        self.assertIn("does not match requested id", self.record.last_error_message)
 
     def test_first_failure_cooldown_expires_and_allows_retry(self):
         store = MalAnimeMetadataStore()
@@ -399,14 +450,16 @@ class AnimeMetadataTestCase(TestCase):
         AnimeMetadataRecord.objects.filter(media_id=7).update(
             last_refresh_error_at=timezone.now() - timedelta(hours=2)
         )
-        with patch.object(store, "_fetch_provider_payload", return_value=mal_payload()):
+        with patch.object(
+            store, "_fetch_provider_payload", return_value=mal_payload(7)
+        ):
             snapshot = GetAnimeMetadata(store).execute(7)
         self.assertEqual(snapshot.media_id, 7)
 
     def test_unexpected_persistence_bug_is_not_converted(self):
         store = MalAnimeMetadataStore()
         with (
-            patch.object(store, "_fetch_provider_payload", return_value=mal_payload()),
+            patch.object(store, "_fetch_provider_payload", return_value=mal_payload(8)),
             patch.object(
                 AnimeMetadataRecord.objects,
                 "update_or_create",
