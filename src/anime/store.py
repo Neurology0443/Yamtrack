@@ -33,6 +33,7 @@ REFRESH_INTERVAL = timedelta(hours=24)
 ERROR_COOLDOWN = timedelta(hours=1)
 ENQUEUE_THROTTLE = timedelta(minutes=5)
 MAX_ERROR_MESSAGE_LENGTH = 2000
+MAX_POSITIVE_INTEGER = 2_147_483_647
 EXPECTED_PROVIDER_EXCEPTIONS = (
     requests.exceptions.RequestException,
     services.ProviderAPIError,
@@ -159,7 +160,7 @@ class MalAnimeMetadataStore:
         validate_media_id(media_id)
         if not isinstance(payload, dict):
             raise InvalidAnimeMetadataPayload("MAL metadata response must be an object")
-        payload_media_id = self._positive_int(payload.get("id"), field="id")
+        payload_media_id = self._media_id(payload.get("id"), field="id")
         if payload_media_id != media_id:
             raise InvalidAnimeMetadataPayload(
                 f"MAL metadata id {payload_media_id} does not match requested id "
@@ -182,7 +183,7 @@ class MalAnimeMetadataStore:
             )
             relations.append(
                 {
-                    "media_id": self._positive_int(
+                    "media_id": self._media_id(
                         node.get("id"),
                         field=f"related_anime[{index}].node.id",
                     ),
@@ -203,7 +204,7 @@ class MalAnimeMetadataStore:
             )
             recommendations.append(
                 {
-                    "media_id": self._positive_int(
+                    "media_id": self._media_id(
                         node.get("id"),
                         field=f"recommendations[{index}].node.id",
                     ),
@@ -433,9 +434,20 @@ class MalAnimeMetadataStore:
         return value
 
     @staticmethod
+    def _media_id(value: Any, *, field: str) -> int:
+        try:
+            return validate_media_id(value)
+        except ValueError as exc:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a persistable positive media ID"
+            ) from exc
+
+    @staticmethod
     def _positive_int(value: Any, *, field: str) -> int:
-        if type(value) is not int or value <= 0:
-            raise InvalidAnimeMetadataPayload(f"{field} must be a positive integer")
+        if type(value) is not int or not 1 <= value <= MAX_POSITIVE_INTEGER:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a persistable positive integer"
+            )
         return value
 
     @classmethod
@@ -448,8 +460,10 @@ class MalAnimeMetadataStore:
 
     @staticmethod
     def _nonnegative_int(value: Any, *, field: str) -> int:
-        if type(value) is not int or value < 0:
-            raise InvalidAnimeMetadataPayload(f"{field} must be a non-negative integer")
+        if type(value) is not int or not 0 <= value <= MAX_POSITIVE_INTEGER:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must be a persistable non-negative integer"
+            )
         return value
 
     @classmethod

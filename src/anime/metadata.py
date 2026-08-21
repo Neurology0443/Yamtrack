@@ -61,9 +61,12 @@ class InvalidAnimeMetadataPayload(ValueError):  # noqa: N818
     """Raised when MAL returns a payload that cannot be normalized safely."""
 
 
+MAX_MEDIA_ID = 9_223_372_036_854_775_807
+
+
 def validate_media_id(media_id: int) -> int:
     """Return a positive integer media ID or fail before any external access."""
-    if type(media_id) is not int or media_id <= 0:
-        msg = "media_id must be a positive integer"
+    if type(media_id) is not int or not 1 <= media_id <= MAX_MEDIA_ID:
+        msg = "media_id must be a positive integer within range"
         raise ValueError(msg)
     return media_id

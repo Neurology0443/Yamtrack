@@ -12,7 +12,12 @@ from django.utils import timezone
 from kombu.exceptions import OperationalError as BrokerOperationalError
 from redis.exceptions import RedisError
 
-from anime.metadata import AnimeMetadataUnavailable, InvalidAnimeMetadataPayload
+from anime.metadata import (
+    MAX_MEDIA_ID,
+    AnimeMetadataUnavailable,
+    InvalidAnimeMetadataPayload,
+    validate_media_id,
+)
 from anime.models import AnimeMetadataRecord
 from anime.store import MalAnimeMetadataStore
 from anime.use_cases import GetAnimeMetadata, RefreshAnimeMetadata
@@ -117,6 +122,37 @@ class AnimeMetadataTestCase(TestCase):
         with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "num_episodes"):
             store._normalize(1, payload)
 
+    def test_integer_helpers_enforce_django_persistence_range(self):
+        store = MalAnimeMetadataStore()
+        maximum = 2_147_483_647
+        self.assertEqual(
+            store._optional_positive_int(maximum, field="episode_count"),
+            maximum,
+        )
+        with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "episode_count"):
+            store._optional_positive_int(maximum + 1, field="episode_count")
+
+        self.assertEqual(store._nonnegative_int(0, field="score_count"), 0)
+        self.assertEqual(
+            store._optional_nonnegative_int(maximum, field="score_count"),
+            maximum,
+        )
+        with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "score_count"):
+            store._optional_nonnegative_int(maximum + 1, field="score_count")
+
+    def test_media_id_enforces_positive_big_integer_range(self):
+        self.assertEqual(validate_media_id(1), 1)
+        self.assertEqual(validate_media_id(MAX_MEDIA_ID), MAX_MEDIA_ID)
+        for media_id in (MAX_MEDIA_ID + 1, 10**100):
+            with (
+                self.subTest(media_id=media_id),
+                self.assertRaisesRegex(
+                    ValueError,
+                    "media_id must be a positive integer",
+                ),
+            ):
+                validate_media_id(media_id)
+
     def test_partial_dates_are_validated_and_preserved(self):
         store = MalAnimeMetadataStore()
         for value in ("2026", "2026-08", "2026-08-21"):
@@ -204,7 +240,7 @@ class AnimeMetadataTestCase(TestCase):
             store._normalize(1, mal_payload(2))
 
     def test_invalid_ids_do_not_touch_database_provider_or_queue(self):
-        for media_id in (0, -1, True, False, "1", None):
+        for media_id in (0, -1, True, False, "1", None, MAX_MEDIA_ID + 1, 10**100):
             store = Mock(spec=MalAnimeMetadataStore)
             enqueue = Mock()
             with (
@@ -472,6 +508,22 @@ class AnimeMetadataTestCase(TestCase):
         self.assertEqual(store.to_snapshot(self.record), original)
         self.assertIsNotNone(self.record.last_refresh_error_at)
         self.assertIn("status", self.record.last_error_message)
+
+    def test_oversized_provider_integer_preserves_last_known_good(self):
+        original = MalAnimeMetadataStore().to_snapshot(self.record)
+        payload = mal_payload()
+        payload["num_scoring_users"] = 2_147_483_648
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(store, "_fetch_provider_payload", return_value=payload),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(self.record.media_id)
+
+        self.record.refresh_from_db()
+        self.assertEqual(store.to_snapshot(self.record), original)
+        self.assertIsNotNone(self.record.last_refresh_error_at)
+        self.assertIn("num_scoring_users", self.record.last_error_message)
 
     def test_first_failure_cooldown_expires_and_allows_retry(self):
         store = MalAnimeMetadataStore()
