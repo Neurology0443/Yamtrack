@@ -1,6 +1,7 @@
 import csv
 from datetime import UTC, datetime
 from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -25,7 +26,17 @@ from app.models import (
 class ExportCSVTest(TestCase):
     """Test exporting media to CSV."""
 
-    def setUp(self):
+    @patch(
+        "app.providers.services.get_media_metadata",
+        return_value={
+            "title": "Friends",
+            "image": "https://image.url",
+            "details": {"seasons": 1},
+            "max_progress": None,
+            "season/1": {"episodes": [{}, {}]},
+        },
+    )
+    def setUp(self, _mock_get_media_metadata):
         """Create necessary data for the tests."""
         self.credentials = {"username": "test", "password": "12345"}
         self.user = get_user_model().objects.create_superuser(**self.credentials)

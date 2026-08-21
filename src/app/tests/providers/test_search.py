@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, tag
 
 from app.models import MediaTypes, Sources
 from app.providers import (
@@ -20,6 +20,7 @@ mock_path = Path(__file__).resolve().parent.parent / "mock_data"
 class Search(TestCase):
     """Test the external API calls for media search."""
 
+    @tag("live_provider")
     def test_anime(self):
         """Test the search method for anime.
 
@@ -32,12 +33,14 @@ class Search(TestCase):
         for anime in response["results"]:
             self.assertTrue(all(key in anime for key in required_keys))
 
+    @tag("live_provider")
     def test_anime_not_found(self):
         """Test the search method for anime with no results."""
         response = mal.search(MediaTypes.ANIME.value, "q", 1)
 
         self.assertEqual(response["results"], [])
 
+    @tag("live_provider")
     def test_mangaupdates(self):
         """Test the search method for manga.
 
@@ -49,12 +52,14 @@ class Search(TestCase):
         for manga in response["results"]:
             self.assertTrue(all(key in manga for key in required_keys))
 
+    @tag("live_provider")
     def test_manga_not_found(self):
         """Test the search method for manga with no results."""
         response = mangaupdates.search("", 1)
 
         self.assertEqual(response["results"], [])
 
+    @tag("live_provider")
     def test_tv(self):
         """Test the search method for TV shows.
 
@@ -66,6 +71,7 @@ class Search(TestCase):
         for tv in response["results"]:
             self.assertTrue(all(key in tv for key in required_keys))
 
+    @tag("live_provider")
     def test_games(self):
         """Test the search method for games.
 
@@ -77,6 +83,7 @@ class Search(TestCase):
         for game in response["results"]:
             self.assertTrue(all(key in game for key in required_keys))
 
+    @tag("live_provider")
     def test_books(self):
         """Test the search method for books.
 
@@ -88,6 +95,7 @@ class Search(TestCase):
         for book in response["results"]:
             self.assertTrue(all(key in book for key in required_keys))
 
+    @tag("live_provider")
     def test_comics(self):
         """Test the search method for comics.
 
@@ -99,6 +107,7 @@ class Search(TestCase):
         for comic in response["results"]:
             self.assertTrue(all(key in comic for key in required_keys))
 
+    @tag("live_provider")
     def test_hardcover(self):
         """Test the search method for books from Hardcover.
 
@@ -112,6 +121,7 @@ class Search(TestCase):
         for book in response["results"]:
             self.assertTrue(all(key in book for key in required_keys))
 
+    @tag("live_provider")
     def test_hardcover_not_found(self):
         """Test the search method for books from Hardcover with no results."""
         response = hardcover.search("xjkqzptmvnsieurytowahdbfglc", 1)

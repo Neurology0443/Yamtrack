@@ -80,9 +80,47 @@ jobs:
           uv run --no-sync python src/manage.py check
           uv run --no-sync python src/manage.py makemigrations --check
           uv run --no-sync coverage run src/manage.py test \
-            app anime users integrations lists events --parallel
+            app anime users integrations lists events \
+            --exclude-tag=live_provider \
+            --parallel
 
       - name: Build Coverage Report
         run: |
           uv run --no-sync coverage combine
           uv run --no-sync coverage report
+
+  provider-live:
+    name: Provider Live Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --locked --no-default-groups --group test
+
+      - name: Set environment variables from secrets
+        run: |
+          if [ -n "${{ secrets.SECRET }}" ]; then echo "SECRET=${{ secrets.SECRET }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.TMDB_API }}" ]; then echo "TMDB_API=${{ secrets.TMDB_API }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.MAL_API }}" ]; then echo "MAL_API=${{ secrets.MAL_API }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.IGDB_ID }}" ]; then echo "IGDB_ID=${{ secrets.IGDB_ID }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.IGDB_SECRET }}" ]; then echo "IGDB_SECRET=${{ secrets.IGDB_SECRET }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.HARDCOVER_API }}" ]; then echo "HARDCOVER_API=${{ secrets.HARDCOVER_API }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.COMICVINE_API }}" ]; then echo "COMICVINE_API=${{ secrets.COMICVINE_API }}" >> $GITHUB_ENV; fi
+
+      - name: Run live provider tests
+        run: |
+          uv run --no-sync python src/manage.py test \
+            app.tests.providers.test_metadata \
+            app.tests.providers.test_search \
+            --tag=live_provider
