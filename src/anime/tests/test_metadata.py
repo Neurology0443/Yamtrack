@@ -155,6 +155,26 @@ class AnimeMetadataTestCase(TestCase):
         ):
             store._normalize(1, payload)
 
+    def test_normalized_strings_respect_persistence_lengths(self):
+        store = MalAnimeMetadataStore()
+        payload = mal_payload()
+        payload["title"] = "t" * 255
+        self.assertEqual(store._normalize(1, payload)["canonical_title"], "t" * 255)
+
+        payload["title"] = "t" * 256
+        with self.assertRaisesRegex(InvalidAnimeMetadataPayload, "title"):
+            store._normalize(1, payload)
+
+        payload = mal_payload()
+        payload["broadcast"]["start_time"] = "t" * 8
+        self.assertEqual(store._normalize(1, payload)["broadcast_time"], "t" * 8)
+        payload["broadcast"]["start_time"] = "t" * 9
+        with self.assertRaisesRegex(
+            InvalidAnimeMetadataPayload,
+            "broadcast.start_time",
+        ):
+            store._normalize(1, payload)
+
     def test_payload_identity_must_match_requested_media(self):
         store = MalAnimeMetadataStore()
         self.assertEqual(
@@ -436,6 +456,22 @@ class AnimeMetadataTestCase(TestCase):
         self.assertEqual(store.to_snapshot(self.record), original)
         self.assertIsNotNone(self.record.last_refresh_error_at)
         self.assertIn("does not match requested id", self.record.last_error_message)
+
+    def test_oversized_payload_string_preserves_last_known_good(self):
+        original = MalAnimeMetadataStore().to_snapshot(self.record)
+        payload = mal_payload()
+        payload["status"] = "s" * 65
+        store = MalAnimeMetadataStore()
+        with (
+            patch.object(store, "_fetch_provider_payload", return_value=payload),
+            self.assertRaises(AnimeMetadataUnavailable),
+        ):
+            store.refresh(self.record.media_id)
+
+        self.record.refresh_from_db()
+        self.assertEqual(store.to_snapshot(self.record), original)
+        self.assertIsNotNone(self.record.last_refresh_error_at)
+        self.assertIn("status", self.record.last_error_message)
 
     def test_first_failure_cooldown_expires_and_allows_retry(self):
         store = MalAnimeMetadataStore()

@@ -165,11 +165,11 @@ class MalAnimeMetadataStore:
                 f"MAL metadata id {payload_media_id} does not match requested id "
                 f"{media_id}"
             )
-        title = payload.get("title")
-        if not isinstance(title, str) or not title.strip():
-            raise InvalidAnimeMetadataPayload(
-                "MAL metadata response has no valid title"
-            )
+        title = self._required_string(
+            payload.get("title"),
+            field="title",
+            max_length=255,
+        )
 
         relations = []
         for index, item in enumerate(
@@ -224,9 +224,12 @@ class MalAnimeMetadataStore:
                     field="alternative_titles",
                 ).get("en"),
                 field="alternative_titles.en",
+                max_length=255,
             ),
             "image": self._optional_string(
-                picture.get("large") or picture.get("medium"), field="main_picture"
+                picture.get("large") or picture.get("medium"),
+                field="main_picture",
+                max_length=500,
             ),
             "synopsis": self._optional_string(
                 payload.get("synopsis"), field="synopsis"
@@ -245,7 +248,7 @@ class MalAnimeMetadataStore:
                 payload.get("num_episodes"), field="num_episodes"
             ),
             "media_type": self._optional_string(
-                payload.get("media_type"), field="media_type"
+                payload.get("media_type"), field="media_type", max_length=32
             ),
             "start_date": self._optional_partial_date(
                 payload.get("start_date"), field="start_date"
@@ -253,7 +256,9 @@ class MalAnimeMetadataStore:
             "end_date": self._optional_partial_date(
                 payload.get("end_date"), field="end_date"
             ),
-            "status": self._optional_string(payload.get("status"), field="status"),
+            "status": self._optional_string(
+                payload.get("status"), field="status", max_length=64
+            ),
             "runtime": self._optional_positive_int(
                 payload.get("average_episode_duration"),
                 field="average_episode_duration",
@@ -268,16 +273,20 @@ class MalAnimeMetadataStore:
                 season.get("year"), field="start_season.year"
             ),
             "season_name": self._optional_string(
-                season.get("season"), field="start_season.season"
+                season.get("season"), field="start_season.season", max_length=16
             ),
             "broadcast_day": self._optional_string(
-                broadcast.get("day_of_the_week"), field="broadcast.day_of_the_week"
+                broadcast.get("day_of_the_week"),
+                field="broadcast.day_of_the_week",
+                max_length=32,
             ),
             "broadcast_time": self._optional_string(
-                broadcast.get("start_time"), field="broadcast.start_time"
+                broadcast.get("start_time"),
+                field="broadcast.start_time",
+                max_length=8,
             ),
             "source_material": self._optional_string(
-                payload.get("source"), field="source"
+                payload.get("source"), field="source", max_length=64
             ),
             "relations": relations,
             "recommendations": recommendations,
@@ -361,17 +370,35 @@ class MalAnimeMetadataStore:
         return value
 
     @staticmethod
-    def _required_string(value: Any, *, field: str) -> str:
+    def _required_string(
+        value: Any,
+        *,
+        field: str,
+        max_length: int | None = None,
+    ) -> str:
         if not isinstance(value, str) or not value.strip():
             raise InvalidAnimeMetadataPayload(f"{field} must be a non-empty string")
+        if max_length is not None and len(value) > max_length:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must not exceed {max_length} characters"
+            )
         return value
 
     @staticmethod
-    def _optional_string(value: Any, *, field: str) -> str | None:
+    def _optional_string(
+        value: Any,
+        *,
+        field: str,
+        max_length: int | None = None,
+    ) -> str | None:
         if value is None or (isinstance(value, str) and not value.strip()):
             return None
         if not isinstance(value, str):
             raise InvalidAnimeMetadataPayload(f"{field} must be a string or null")
+        if max_length is not None and len(value) > max_length:
+            raise InvalidAnimeMetadataPayload(
+                f"{field} must not exceed {max_length} characters"
+            )
         return value
 
     @staticmethod
