@@ -1,5 +1,3 @@
-import logging
-
 from django.utils import timezone
 
 from anime.enqueue import enqueue_anime_metadata_refresh
@@ -9,8 +7,6 @@ from anime.metadata import (
     validate_media_id,
 )
 from anime.store import MalAnimeMetadataStore
-
-logger = logging.getLogger(__name__)
 
 
 class GetAnimeMetadata:
@@ -36,17 +32,9 @@ class GetAnimeMetadata:
             return self.store.refresh(media_id)
 
         snapshot = self.store.to_snapshot(record)
-        if self.store.refresh_is_due(
-            record,
-            now=now,
-        ) and self.store.claim_async_refresh(record, now=now):
-            try:
+        if self.store.refresh_is_due(record, now=now):  # noqa: SIM102
+            if self.store.claim_async_refresh(record, now=now):
                 self.enqueue_refresh(record.media_id)
-            except Exception:  # Celery is optional to the local-first read path.
-                logger.exception(
-                    "Could not enqueue MAL metadata refresh for anime %s",
-                    record.media_id,
-                )
         return snapshot
 
 

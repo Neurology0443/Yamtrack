@@ -5,9 +5,10 @@ from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import requests
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.test import TestCase
 from django.utils import timezone
+from kombu.exceptions import OperationalError as BrokerOperationalError
 
 from anime.metadata import AnimeMetadataUnavailable, InvalidAnimeMetadataPayload
 from anime.models import AnimeMetadataRecord
@@ -146,6 +147,59 @@ class AnimeMetadataTestCase(TestCase):
         self.assertEqual(first, second)
         enqueue.assert_called_once_with(self.record.media_id)
 
+    def test_operational_claim_failure_does_not_break_stale_read(self):
+        stale_at = timezone.now() - timedelta(seconds=1)
+        AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
+            refresh_after=stale_at,
+            last_refresh_attempt_at=None,
+        )
+        store = MalAnimeMetadataStore()
+        enqueue = Mock()
+        with patch(
+            "django.db.models.query.QuerySet.update",
+            side_effect=OperationalError("database unavailable"),
+        ):
+            self.assertFalse(store.claim_async_refresh(self.record, now=timezone.now()))
+            snapshot = GetAnimeMetadata(store, enqueue).execute(self.record.media_id)
+
+        self.assertEqual(snapshot.canonical_title, self.record.canonical_title)
+        enqueue.assert_not_called()
+        self.record.refresh_from_db()
+        self.assertIsNone(self.record.last_refresh_attempt_at)
+
+    def test_unexpected_claim_error_remains_visible(self):
+        store = MalAnimeMetadataStore()
+        with (
+            patch(
+                "django.db.models.query.QuerySet.update",
+                side_effect=IntegrityError("broken invariant"),
+            ),
+            self.assertRaisesRegex(IntegrityError, "broken invariant"),
+        ):
+            store.claim_async_refresh(self.record, now=timezone.now())
+
+    def test_stale_python_record_cannot_claim_fresh_database_row(self):
+        stale_at = timezone.now() - timedelta(seconds=1)
+        AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
+            refresh_after=stale_at,
+            last_refresh_attempt_at=None,
+        )
+        stale_record = AnimeMetadataRecord.objects.get(pk=self.record.pk)
+        future = timezone.now() + timedelta(hours=24)
+        AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
+            refresh_after=future,
+        )
+
+        claimed = MalAnimeMetadataStore().claim_async_refresh(
+            stale_record,
+            now=timezone.now(),
+        )
+
+        self.assertFalse(claimed)
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.refresh_after, future)
+        self.assertIsNone(self.record.last_refresh_attempt_at)
+
     def test_stale_read_during_error_cooldown_does_not_enqueue(self):
         AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
             refresh_after=timezone.now() - timedelta(seconds=1),
@@ -159,16 +213,30 @@ class AnimeMetadataTestCase(TestCase):
         self.assertEqual(snapshot.canonical_title, self.record.canonical_title)
         enqueue.assert_not_called()
 
-    def test_enqueue_failure_does_not_break_or_change_stale_read(self):
+    def test_unexpected_enqueue_failure_remains_visible(self):
         stale_at = timezone.now() - timedelta(seconds=1)
         AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
             refresh_after=stale_at,
             last_refresh_attempt_at=None,
         )
-        enqueue = Mock(side_effect=ConnectionError)
-        snapshot = GetAnimeMetadata(enqueue_refresh=enqueue).execute(
-            self.record.media_id
+        enqueue = Mock(side_effect=RuntimeError("programming bug"))
+        with self.assertRaisesRegex(RuntimeError, "programming bug"):
+            GetAnimeMetadata(enqueue_refresh=enqueue).execute(self.record.media_id)
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.refresh_after, stale_at)
+
+    def test_broker_failure_does_not_break_stale_read(self):
+        stale_at = timezone.now() - timedelta(seconds=1)
+        AnimeMetadataRecord.objects.filter(pk=self.record.pk).update(
+            refresh_after=stale_at,
+            last_refresh_attempt_at=None,
         )
+        with patch(
+            "anime.tasks.refresh_anime_metadata.apply_async",
+            side_effect=BrokerOperationalError("broker unavailable"),
+        ):
+            snapshot = GetAnimeMetadata().execute(self.record.media_id)
+
         self.record.refresh_from_db()
         self.assertEqual(snapshot.canonical_title, self.record.canonical_title)
         self.assertEqual(self.record.refresh_after, stale_at)

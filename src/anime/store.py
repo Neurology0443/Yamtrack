@@ -1,11 +1,12 @@
 # ruff: noqa: EM101, EM102, TRY003
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
 import requests
 from django.conf import settings
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -34,6 +35,7 @@ EXPECTED_PROVIDER_EXCEPTIONS = (
     requests.exceptions.RequestException,
     services.ProviderAPIError,
 )
+logger = logging.getLogger(__name__)
 
 
 class MalAnimeMetadataStore:
@@ -117,21 +119,28 @@ class MalAnimeMetadataStore:
         """Atomically claim one stale refresh without relying on the queue."""
         validate_media_id(record.media_id)
         cutoff = now - ENQUEUE_THROTTLE
-        claimed = (
-            AnimeMetadataRecord.objects.filter(
-                pk=record.pk,
-                refresh_after__lte=now,
+        try:
+            claimed = (
+                AnimeMetadataRecord.objects.filter(
+                    pk=record.pk,
+                    refresh_after__lte=now,
+                )
+                .filter(
+                    Q(last_refresh_attempt_at__isnull=True)
+                    | Q(last_refresh_attempt_at__lte=cutoff),
+                )
+                .filter(
+                    Q(last_refresh_error_at__isnull=True)
+                    | Q(last_refresh_error_at__lte=now - ERROR_COOLDOWN),
+                )
+                .update(last_refresh_attempt_at=now)
             )
-            .filter(
-                Q(last_refresh_attempt_at__isnull=True)
-                | Q(last_refresh_attempt_at__lte=cutoff),
+        except OperationalError:
+            logger.exception(
+                "Could not claim MAL metadata refresh for anime %s",
+                record.media_id,
             )
-            .filter(
-                Q(last_refresh_error_at__isnull=True)
-                | Q(last_refresh_error_at__lte=now - ERROR_COOLDOWN),
-            )
-            .update(last_refresh_attempt_at=now)
-        )
+            return False
         return bool(claimed)
 
     def _fetch_provider_payload(self, media_id: int) -> dict[str, Any]:

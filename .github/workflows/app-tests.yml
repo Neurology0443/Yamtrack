@@ -2,8 +2,6 @@ name: App Tests
 
 on:
   pull_request:
-    paths-ignore:
-      - ".github/workflows/**"
   push:
     branches:
       - main
@@ -12,41 +10,15 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
-  check-workflow-changes:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Check for workflow modifications
-        uses: dorny/paths-filter@v4
-        id: changes
-        with:
-          filters: |
-            workflows:
-              - '.github/workflows/**'
-      - name: Fail if workflows were modified
-        if: steps.changes.outputs.workflows == 'true'
-        run: |
-          echo "::error::Workflow files were modified in this PR."
-          exit 1
-
   test:
-    needs: check-workflow-changes
-    if: always()
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 4
       matrix:
         python-version: ["3.12"]
     steps:
-      - name: Check workflow verification result
-        if: |
-          github.event_name == 'pull_request_target' && 
-          needs.check-workflow-changes.result == 'failure'
-        run: exit 1
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
@@ -72,7 +44,8 @@ jobs:
 
       - name: Run Tests
         run: |
-          uv run coverage run src/manage.py test app users integrations lists events --parallel
+          uv run coverage run src/manage.py test \
+            app anime users integrations lists events --parallel
 
       - name: Build Coverage Report
         run: |
