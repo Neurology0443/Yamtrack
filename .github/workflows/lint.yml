@@ -2,11 +2,16 @@ name: Lint
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-      - dev
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -31,3 +36,9 @@ jobs:
 
       - name: Ruff format
         run: uv run --no-sync ruff format --check src
+
+      - name: djLint check
+        run: uv run --no-sync djlint --lint src/templates
+
+      - name: djLint format
+        run: uv run --no-sync djlint --check src/templates

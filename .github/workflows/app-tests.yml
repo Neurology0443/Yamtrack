@@ -2,11 +2,16 @@ name: App Tests
 
 on:
   pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-      - dev
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -26,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           uv sync --locked --no-default-groups --group test
-          uv run playwright install
+          uv run --no-sync playwright install chromium
 
       - name: Set environment variables from secrets
         run: |
@@ -40,10 +45,12 @@ jobs:
 
       - name: Run Tests
         run: |
-          uv run coverage run src/manage.py test \
+          uv run --no-sync python src/manage.py check
+          uv run --no-sync python src/manage.py makemigrations --check
+          uv run --no-sync coverage run src/manage.py test \
             app anime users integrations lists events --parallel
 
       - name: Build Coverage Report
         run: |
-          uv run coverage combine
-          uv run coverage report
+          uv run --no-sync coverage combine
+          uv run --no-sync coverage report

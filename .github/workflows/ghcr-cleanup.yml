@@ -1,0 +1,32 @@
+name: GHCR Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report images that would be deleted"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  packages: write
+  contents: read
+
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up Yamtrack images
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: yamtrack
+          dry-run: ${{ inputs.dry_run }}
+          keep-n-untagged: 15
+          delete-ghost-images: true
+          delete-orphaned-images: true
+          validate: true

@@ -1,15 +1,25 @@
 name: Docker Image
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - "dev"
-    tags:
-      - "v*"
   pull_request:
     branches:
-      - "dev"
+      - main
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the image (main or v* refs only)"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 env:
   REGISTRY: ghcr.io
@@ -18,30 +28,39 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     permissions:
       contents: read
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Setup Docker buildx
+      - name: Set test version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          else
+            VERSION="main-${GITHUB_SHA::7}"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # Single platform, loaded locally so the image can actually be run
       - name: Build image for testing
         uses: docker/build-push-action@v7
         with:
           context: .
           load: true
+          push: false
           tags: yamtrack:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
           platforms: linux/amd64
           build-args: |
-            VERSION=test
+            VERSION=${{ steps.version.outputs.value }}
 
       - name: Start container
         run: |
@@ -54,7 +73,6 @@ jobs:
             -p 8000:8000 \
             yamtrack:test
 
-      # The image HEALTHCHECK covers database, cache, redis and celery
       - name: Wait for container to become healthy
         run: |
           for _ in $(seq 1 60); do
@@ -73,8 +91,7 @@ jobs:
           exit 1
 
       - name: Check health endpoint
-        run: |
-          curl --fail --silent --show-error http://127.0.0.1:8000/health/
+        run: curl --fail --silent --show-error http://127.0.0.1:8000/health/
 
       - name: Check login page is served
         run: |
@@ -87,8 +104,7 @@ jobs:
             http://127.0.0.1:8000/static/css/main.css
 
       - name: Check version was baked into the image
-        run: |
-          test "$(docker exec yamtrack printenv VERSION)" = "test"
+        run: test "$(docker exec yamtrack printenv VERSION)" = "${{ steps.version.outputs.value }}"
 
       - name: Dump container logs
         if: failure()
@@ -96,59 +112,50 @@ jobs:
           docker logs yamtrack
           docker logs yamtrack-redis
 
-  build:
+  publish:
     needs: test
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     permissions:
       contents: read
       packages: write
-      id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # This ensures all tags are fetched for git describe
 
-      - name: Get version from git
-        id: get-version
+      - name: Set image version
+        id: version
+        shell: bash
         run: |
-          VERSION=$(git describe --tags 2>/dev/null || echo "dev")
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Using version: $VERSION"
-
-      - name: Setup Docker buildx
-        uses: docker/setup-buildx-action@v4
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          else
+            VERSION="main-${GITHUB_SHA::7}"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
-      - name: Extract Docker metadata tags
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      # Determine if we should push the image
-      - name: Set push flag
-        id: push-flag
-        run: |
-          if [[ "${{ github.event_name }}" != "pull_request" || "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
-            echo "PUSH=true" >> $GITHUB_OUTPUT
-          else
-            echo "PUSH=false" >> $GITHUB_OUTPUT
-          fi
-
-      # Only log in if we're going to push
-      - name: Log into registry ${{ env.REGISTRY }}
-        if: steps.push-flag.outputs.PUSH == 'true'
+      - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -156,11 +163,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        id: build-and-push
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ steps.push-flag.outputs.PUSH }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -168,4 +174,4 @@ jobs:
           provenance: false
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ steps.get-version.outputs.VERSION }}
+            VERSION=${{ steps.version.outputs.value }}
