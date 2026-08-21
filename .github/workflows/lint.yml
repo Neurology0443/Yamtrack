@@ -2,8 +2,6 @@ name: Lint
 
 on:
   pull_request:
-    paths-ignore:
-      - ".github/workflows/**"
   push:
     branches:
       - main
@@ -29,7 +27,7 @@ jobs:
         run: uv sync --locked --only-group lint
 
       - name: Ruff check
-        run: uv run ruff check --output-format=github src
+        run: uv run --no-sync ruff check --output-format=github src
 
       - name: Ruff format
-        run: uv run ruff format --check src
+        run: uv run --no-sync ruff format --check src
