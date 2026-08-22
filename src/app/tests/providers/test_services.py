@@ -40,10 +40,14 @@ class ServicesTests(TestCase):
         self.assertTrue(first.limiter.try_acquire("mal", blocking=False))
         self.assertFalse(second.limiter.try_acquire("mal", blocking=False))
 
-    def test_mal_bucket_is_distinct_from_general_api_bucket(self):
-        """MAL traffic does not consume the general API bucket."""
-        self.assertEqual(services.mal_bucket_key, f"{services.bucket_key}_mal")
-        self.assertNotEqual(services.mal_bucket_key, services.bucket_key)
+    def test_mal_specific_quota_uses_distinct_redis_bucket_from_general_api(self):
+        """The MAL-specific quota uses a Redis bucket distinct from general API."""
+        redis_client = fakeredis.FakeRedis()
+        adapter = services._build_mal_adapter(redis_client)
+
+        self.assertTrue(adapter.limiter.try_acquire("mal", blocking=False))
+        self.assertTrue(redis_client.exists(services.mal_bucket_key))
+        self.assertFalse(redis_client.exists(services.bucket_key))
 
     @patch("app.providers.services.session.get")
     def test_api_request_get(self, mock_get):
