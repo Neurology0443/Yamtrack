@@ -36,6 +36,24 @@ def get_redis_client():
 
 redis_db = get_redis_client()
 bucket_key = f"{settings.REDIS_PREFIX}_api" if settings.REDIS_PREFIX else "api"
+mal_bucket_key = f"{bucket_key}_mal"
+
+
+def _build_mal_adapter(redis_client=None):
+    """Build the Redis-backed limiter shared by all MAL API callers."""
+    client = redis_db if redis_client is None else redis_client
+
+    return LimiterAdapter(
+        per_minute=settings.MAL_RATE_LIMIT_PER_MINUTE,
+        bucket_class=RedisBucket,
+        bucket_kwargs={
+            "redis": client,
+            "bucket_key": mal_bucket_key,
+        },
+        per_host=False,
+        bucket_name="mal",
+    )
+
 
 session = LimiterSession(
     per_second=5,
@@ -48,7 +66,7 @@ session.mount("https://", HTTPAdapter(max_retries=3))
 
 session.mount(
     "https://api.myanimelist.net/v2",
-    LimiterAdapter(per_minute=30),
+    _build_mal_adapter(),
 )
 session.mount(
     "https://graphql.anilist.co",

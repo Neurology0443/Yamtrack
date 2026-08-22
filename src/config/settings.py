@@ -26,6 +26,16 @@ if BASE_URL:
 
 REDIS_PREFIX = config("REDIS_PREFIX", default=None)
 
+MAL_RATE_LIMIT_PER_MINUTE = config(
+    "MAL_RATE_LIMIT_PER_MINUTE",
+    default=60,
+    cast=int,
+)
+
+if MAL_RATE_LIMIT_PER_MINUTE < 1:
+    msg = "MAL_RATE_LIMIT_PER_MINUTE must be greater than 0"
+    raise ValueError(msg)
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 

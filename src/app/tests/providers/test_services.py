@@ -1,8 +1,10 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import fakeredis
 import requests
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from pyrate_limiter import Duration
 
 from app.models import MediaTypes, Sources
 from app.providers import (
@@ -17,6 +19,31 @@ mock_path = Path(__file__).resolve().parent.parent / "mock_data"
 
 class ServicesTests(TestCase):
     """Test the services module functions."""
+
+    @override_settings(MAL_RATE_LIMIT_PER_MINUTE=17)
+    def test_mal_rate_limit_uses_configured_value(self):
+        """The MAL adapter applies the configured instance-wide quota."""
+        adapter = services._build_mal_adapter(fakeredis.FakeRedis())
+
+        rates = adapter.limiter.bucket_factory.rates
+        self.assertEqual(len(rates), 1)
+        self.assertEqual(rates[0].limit, 17)
+        self.assertEqual(rates[0].interval, Duration.MINUTE)
+
+    @override_settings(MAL_RATE_LIMIT_PER_MINUTE=1)
+    def test_mal_rate_limit_is_shared_between_redis_clients(self):
+        """Independent adapters consume capacity from one Redis bucket."""
+        server = fakeredis.FakeServer()
+        first = services._build_mal_adapter(fakeredis.FakeRedis(server=server))
+        second = services._build_mal_adapter(fakeredis.FakeRedis(server=server))
+
+        self.assertTrue(first.limiter.try_acquire("mal", blocking=False))
+        self.assertFalse(second.limiter.try_acquire("mal", blocking=False))
+
+    def test_mal_bucket_is_distinct_from_general_api_bucket(self):
+        """MAL traffic does not consume the general API bucket."""
+        self.assertEqual(services.mal_bucket_key, f"{services.bucket_key}_mal")
+        self.assertNotEqual(services.mal_bucket_key, services.bucket_key)
 
     @patch("app.providers.services.session.get")
     def test_api_request_get(self, mock_get):
